@@ -562,9 +562,6 @@ export default function ArchivePage() {
                   {/* Attendance Deduction Details */}
                   <div className="space-y-4">
                     <h4 className="font-semibold text-lg">Attendance Deductions</h4>
-                    {console.log('🔍 UI DEBUG - Full breakdown:', selectedPayroll.breakdown)}
-                    {console.log('🔍 UI DEBUG - Attendance deduction details:', selectedPayroll.breakdown?.attendanceDeductionDetails)}
-                    {console.log('🔍 UI DEBUG - Total attendance deductions:', selectedPayroll.breakdown?.totalAttendanceDeductions)}
                     {selectedPayroll.breakdown?.attendanceDeductionDetails && selectedPayroll.breakdown.attendanceDeductionDetails.length > 0 ? (
                       <div className="space-y-2">
                         {selectedPayroll.breakdown.attendanceDeductionDetails.map((deduction, index) => (
