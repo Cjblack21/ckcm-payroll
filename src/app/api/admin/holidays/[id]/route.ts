@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,6 +14,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
     const { name, date, type, description } = await request.json()
 
     if (!name || !date || !type) {
@@ -22,7 +23,7 @@ export async function PUT(
 
     // Check if holiday exists
     const existingHoliday = await prisma.holiday.findUnique({
-      where: { holidays_id: params.id }
+      where: { holidays_id: id }
     })
 
     if (!existingHoliday) {
@@ -33,7 +34,7 @@ export async function PUT(
     const duplicateHoliday = await prisma.holiday.findFirst({
       where: { 
         date: new Date(date),
-        holidays_id: { not: params.id }
+        holidays_id: { not: id }
       }
     })
 
@@ -42,7 +43,7 @@ export async function PUT(
     }
 
     const holiday = await prisma.holiday.update({
-      where: { holidays_id: params.id },
+      where: { holidays_id: id },
       data: {
         name,
         date: new Date(date),
@@ -60,7 +61,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -69,9 +70,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
+
     // Check if holiday exists
     const existingHoliday = await prisma.holiday.findUnique({
-      where: { holidays_id: params.id }
+      where: { holidays_id: id }
     })
 
     if (!existingHoliday) {
@@ -79,7 +82,7 @@ export async function DELETE(
     }
 
     await prisma.holiday.delete({
-      where: { holidays_id: params.id }
+      where: { holidays_id: id }
     })
 
     return NextResponse.json({ message: 'Holiday deleted successfully' })
