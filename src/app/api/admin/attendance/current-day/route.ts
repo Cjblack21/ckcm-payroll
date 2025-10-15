@@ -188,7 +188,7 @@ export async function GET() {
           if (isTimeOutWindowPassed()) {
             // Time-out window has passed - treat as absent
             earnings = 0 // No earnings for absent
-            deductions = calculateAbsenceDeduction(basicSalary) // Calculate absence deduction
+            deductions = await calculateAbsenceDeduction(basicSalary) // Calculate absence deduction
             status = 'ABSENT' // Override status to ABSENT
           } else {
             // Pending status - no earnings or deductions until attendance is completed
