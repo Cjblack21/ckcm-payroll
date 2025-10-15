@@ -92,7 +92,7 @@ export async function GET() {
     console.log(`Fetching attendance records for ${uniquePeriods.length} unique periods`)
 
     // Fetch attendance records for all periods
-    let attendanceRecords = []
+    let attendanceRecords: any[] = []
     try {
       attendanceRecords = await prisma.attendance.findMany({
         where: {
@@ -124,7 +124,7 @@ export async function GET() {
     console.log(`Found ${attendanceRecords.length} attendance records`)
 
     // Get loan records for the archived payrolls
-    let loanRecords = []
+    let loanRecords: any[] = []
     try {
       loanRecords = await prisma.loan.findMany({
         where: {
@@ -153,7 +153,7 @@ export async function GET() {
     // Note: We now fetch actual deduction records per user instead of deduction types
 
     // Get attendance settings for accurate deduction calculations
-    let attendanceSettings = null
+    let attendanceSettings: any = null
     try {
       attendanceSettings = await prisma.attendanceSettings.findFirst({
         where: { isActive: true }
@@ -165,8 +165,8 @@ export async function GET() {
     console.log('Processing payroll entries...')
 
     // Pre-fetch ALL data to avoid async issues in reduce function
-    let allDeductionRecords = []
-    let allAttendanceRecords = []
+    let allDeductionRecords: any[] = []
+    let allAttendanceRecords: any[] = []
     
     try {
       if (entries.length > 0) {
