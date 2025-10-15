@@ -185,7 +185,7 @@ export default function HolidaysPage() {
     
     // Handle both string and Date formats for custom holidays
     const customHolidays = holidays.filter(h => {
-      const holidayDate = h.date instanceof Date ? format(h.date, 'yyyy-MM-dd') : h.date
+      const holidayDate = h.date.split('T')[0] // Extract YYYY-MM-DD from ISO string
       return holidayDate === dateStr
     })
     
