@@ -14,7 +14,7 @@ import { formatInTimeZone } from "date-fns-tz"
 import { getCurrentDayAttendance, getPersonnelAttendance, getPersonnelHistory, type AttendanceRecord, type PersonnelAttendance } from "@/lib/actions/attendance"
 import toast from "react-hot-toast"
 
-type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "NON_WORKING" | "PENDING"
+type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "PARTIAL" | "NON_WORKING" | "PENDING"
 
 type ViewMode = "current-day" | "personnel" | "all-attendance"
 
@@ -175,6 +175,7 @@ export default function AttendancePage() {
       PRESENT: "default",
       ABSENT: "destructive",
       LATE: "secondary",
+      PARTIAL: "secondary",
       NON_WORKING: "outline",
       PENDING: "secondary",
     } as const
@@ -183,6 +184,7 @@ export default function AttendancePage() {
       PRESENT: "Present",
       ABSENT: "Absent",
       LATE: "Late",
+      PARTIAL: "Partial",
       NON_WORKING: "Non-Working",
       PENDING: "Pending",
     }
