@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  users_id           String         @id @default(cuid()) @map("users_id")
+  email              String         @unique
+  password           String
+  name               String?
+  role               Role           @default(PERSONNEL)
+  isActive           Boolean        @default(true)
+  personnel_types_id String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  attendances        Attendance[]
+  deductions         Deduction[]
+  loans              Loan[]
+  payrolls           PayrollEntry[]
+  sessions           Session[]
+  personnelType      PersonnelType? @relation(fields: [personnel_types_id], references: [personnel_types_id])
+
+  @@index([personnel_types_id], map: "users_personnel_types_id_fkey")
+  @@map("users")
+}
+
+model Session {
+  sessions_id  String   @id @default(cuid()) @map("sessions_id")
+  sessionToken String   @unique
+  users_id     String
+  expires      DateTime
+  user         User     @relation(fields: [users_id], references: [users_id], onDelete: Cascade)
+
+  @@index([users_id], map: "sessions_users_id_fkey")
+  @@map("sessions")
+}
+
+model Department {
+  departments_id String   @id @default(cuid()) @map("departments_id")
+  name           String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("departments")
+}
+
+model Attendance {
+  attendances_id String           @id @default(cuid()) @map("attendances_id")
+  users_id       String
+  date           DateTime
+  timeIn         DateTime?
+  timeOut        DateTime?
+  status         AttendanceStatus @default(PENDING)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  user           User             @relation(fields: [users_id], references: [users_id])
+
+  @@unique([users_id, date])
+  @@map("attendances")
+}
+
+model Loan {
+  loans_id              String     @id @default(cuid()) @map("loans_id")
+  users_id              String
+  amount                Decimal
+  balance               Decimal
+  monthlyPaymentPercent Decimal    @default(0.000000000000000000000000000000)
+  termMonths            Int
+  status                LoanStatus @default(ACTIVE)
+  startDate             DateTime
+  endDate               DateTime
+  purpose               String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  user                  User       @relation(fields: [users_id], references: [users_id])
+
+  @@index([users_id], map: "loans_users_id_fkey")
+  @@map("loans")
+}
+
+model PayrollEntry {
+  payroll_entries_id String        @id @default(cuid()) @map("payroll_entries_id")
+  users_id           String
+  periodStart        DateTime
+  periodEnd          DateTime
+  basicSalary        Decimal
+  overtime           Decimal       @default(0.000000000000000000000000000000)
+  deductions         Decimal       @default(0.000000000000000000000000000000)
+  netPay             Decimal
+  status             PayrollStatus @default(PENDING)
+  processedAt        DateTime      @default(now())
+  releasedAt         DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  user               User          @relation(fields: [users_id], references: [users_id])
+
+  @@index([users_id], map: "payroll_entries_users_id_fkey")
+  @@map("payroll_entries")
+}
+
+model Holiday {
+  holidays_id String      @id @default(cuid()) @map("holidays_id")
+  name        String
+  date        DateTime
+  type        HolidayType
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("holidays")
+}
+
+model Event {
+  events_id   String    @id @default(cuid()) @map("events_id")
+  title       String
+  description String?
+  date        DateTime
+  type        EventType
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("events")
+}
+
+model DeductionType {
+  deduction_types_id String      @id @default(cuid()) @map("deduction_types_id")
+  name               String      @unique
+  description        String?
+  amount             Decimal     @default(0.000000000000000000000000000000)
+  isActive           Boolean     @default(true)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  deductions         Deduction[]
+
+  @@map("deduction_types")
+}
+
+model Deduction {
+  deductions_id      String        @id @default(cuid()) @map("deductions_id")
+  users_id           String
+  deduction_types_id String
+  amount             Decimal
+  appliedAt          DateTime      @default(now())
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deductionType      DeductionType @relation(fields: [deduction_types_id], references: [deduction_types_id])
+  user               User          @relation(fields: [users_id], references: [users_id])
+
+  @@index([deduction_types_id], map: "deductions_deduction_types_id_fkey")
+  @@index([users_id], map: "deductions_users_id_fkey")
+  @@map("deductions")
+}
+
+model PersonnelType {
+  personnel_types_id String   @id @default(cuid()) @map("personnel_types_id")
+  name               String   @unique
+  basicSalary        Decimal
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  users              User[]
+
+  @@map("personnel_types")
+}
+
+model AttendanceSettings {
+  attendance_settings_id String    @id @default(cuid()) @map("attendance_settings_id")
+  timeInStart            String?
+  timeInEnd              String?
+  noTimeInCutoff         Boolean   @default(false)
+  timeOutStart           String?
+  timeOutEnd             String?
+  noTimeOutCutoff        Boolean   @default(false)
+  lateDeductionEnabled   Boolean   @default(true)
+  lateDeductionRate      Decimal   @default(0.010000000000000000000000000000)
+  maxLateDeduction       Decimal   @default(0.500000000000000000000000000000)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  autoMarkAbsent         Boolean   @default(true)
+  autoMarkLate           Boolean   @default(true)
+  periodEnd              DateTime?
+  periodStart            DateTime?
+
+  @@map("attendance_settings")
+}
+
+model HeaderSettings {
+  id              String   @id @default(cuid())
+  schoolName      String
+  schoolAddress   String
+  systemName      String
+  logoUrl         String   @default("/ckcm.png")
+  showLogo        Boolean  @default(true)
+  headerAlignment String   @default("center")
+  fontSize        String   @default("medium")
+  customText      String?  @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  workingDays     String   @db.LongText
+
+  @@map("header_settings")
+}
+
+model PayrollSchedule {
+  payroll_schedule_id String   @id @default(cuid())
+  scheduledDate       DateTime
+  isActive            Boolean  @default(true)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("payroll_schedules")
+}
+
+model LeaveRequest {
+  leave_requests_id String    @id @default(cuid()) @map("leave_requests_id")
+  users_id          String
+  type              LeaveType
+  startDate         DateTime
+  endDate           DateTime
+  reason            String?   @db.LongText
+  status            LeaveStatus @default(PENDING)
+  admin_id          String?   
+  adminComment      String?   @db.LongText
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [users_id], references: [users_id])
+
+  @@index([users_id], map: "leave_requests_users_id_fkey")
+  @@map("leave_requests")
+}
+
+enum Role {
+  ADMIN
+  PERSONNEL
+}
+
+enum PayrollStatus {
+  PENDING
+  RELEASED
+  ARCHIVED
+}
+
+enum AttendanceStatus {
+  PENDING
+  PRESENT
+  ABSENT
+  LATE
+  PARTIAL
+}
+
+enum LoanStatus {
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  UNPAID
+}
+
+enum HolidayType {
+  NATIONAL
+  RELIGIOUS
+  COMPANY
+}
+
+enum EventType {
+  PAYROLL
+  HR
+  MEETING
+  TRAINING
+  OTHER
+}
