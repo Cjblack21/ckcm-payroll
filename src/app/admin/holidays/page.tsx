@@ -189,7 +189,7 @@ export default function HolidaysPage() {
       return holidayDate === dateStr
     })
     
-    return { customHolidays, phHolidays: [] }
+    return { customHolidays, phHolidays: [] as PhilippinesHoliday[] }
   }
 
   const getCalendarDays = () => {
@@ -223,7 +223,7 @@ export default function HolidaysPage() {
   }
 
   const getSelectedDateHolidays = () => {
-    if (!selectedDate) return { customHolidays: [], phHolidays: [] }
+    if (!selectedDate) return { customHolidays: [] as Holiday[], phHolidays: [] as PhilippinesHoliday[] }
     return getHolidaysForDate(selectedDate)
   }
 
