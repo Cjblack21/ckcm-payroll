@@ -153,22 +153,3 @@ async function processDayAttendance(date: Date, settings: any) {
 
   return result
 }
-
-// Helper function that can be called by cron jobs or manual triggers
-export async function processCurrentDayAttendance() {
-  try {
-    const settings = await prisma.attendanceSettings.findFirst()
-    
-    if (!settings || !settings.autoMarkAbsent) {
-      return { success: false, error: 'Auto-marking not enabled' }
-    }
-
-    const today = getNowInPhilippines()
-    const result = await processDayAttendance(today, settings)
-    
-    return { success: true, result }
-  } catch (error) {
-    console.error('Error processing current day attendance:', error)
-    return { success: false, error: 'Failed to process current day' }
-  }
-}
