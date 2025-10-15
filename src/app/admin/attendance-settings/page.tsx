@@ -238,48 +238,6 @@ export default function AttendanceSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Attendance Duration Period */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Attendance Period Duration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Set the attendance tracking period. Records will be created for all working days (excludes Sundays) in this range.
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="periodStart">Period Start Date</Label>
-              <Input
-                id="periodStart"
-                type="date"
-                value={settings.periodStart ? toPhilippinesDateString(new Date(settings.periodStart)) : ''}
-                onChange={(e) => updateSetting('periodStart', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="periodEnd">Period End Date</Label>
-              <Input
-                id="periodEnd"
-                type="date"
-                value={settings.periodEnd ? toPhilippinesDateString(new Date(settings.periodEnd)) : ''}
-                onChange={(e) => updateSetting('periodEnd', e.target.value)}
-              />
-            </div>
-          </div>
-          {settings.periodStart && settings.periodEnd && (
-            <div className="text-sm text-muted-foreground">
-              <strong>Working Days:</strong> {
-                calculateWorkingDaysInPhilippines(new Date(settings.periodStart!), new Date(settings.periodEnd!))
-              } days (excludes Sundays)
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Automated Marking Settings */}
       <Card>
         <CardHeader>

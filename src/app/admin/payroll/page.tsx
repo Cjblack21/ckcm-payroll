@@ -8,14 +8,16 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Calendar, Clock, DollarSign, FileText, Archive, Printer, Download, Settings } from 'lucide-react'
+import { Calendar, Clock, DollarSign, FileText, Archive, Printer, Download, Settings, Save } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { getPayrollSummary, releasePayrollWithAudit, generatePayslips } from '@/lib/actions/payroll'
 import { 
   toPhilippinesDateString, 
   calculatePeriodDurationInPhilippines,
-  formatDateForDisplay 
+  formatDateForDisplay,
+  calculateWorkingDaysInPhilippines 
 } from '@/lib/timezone'
+import { Label } from '@/components/ui/label'
 
 // Types
 type PayrollEntry = {
@@ -92,6 +94,11 @@ export default function PayrollPage() {
   const [nextPeriodEnd, setNextPeriodEnd] = useState('')
   const [nextPeriodNotes, setNextPeriodNotes] = useState('')
   const [showNextPeriodModal, setShowNextPeriodModal] = useState(false)
+  
+  // Payroll Time Settings state
+  const [payrollPeriodStart, setPayrollPeriodStart] = useState('')
+  const [payrollPeriodEnd, setPayrollPeriodEnd] = useState('')
+  const [savingPeriod, setSavingPeriod] = useState(false)
 
   // Load payroll data
   const loadPayrollData = async () => {
@@ -162,6 +169,9 @@ export default function PayrollPage() {
         periodEnd: result.summary?.settings?.periodEnd || '',
         type: 'Semi-Monthly'
       })
+      // Set payroll period settings
+      setPayrollPeriodStart(result.summary?.settings?.periodStart || '')
+      setPayrollPeriodEnd(result.summary?.settings?.periodEnd || '')
       // Use settings.hasGeneratedForSettings to control Generate button state
       const generatedState = !!result.summary?.settings?.hasGeneratedForSettings
       console.log('🔍 Payroll UI Debug - hasGeneratedForSettings:', generatedState)
@@ -246,6 +256,13 @@ export default function PayrollPage() {
     try {
       setLoading(true)
       toast.loading('Generating payslips for Long Bond Paper...', { id: 'generate-payslips' })
+      
+      console.log('🔍 Generate Payslips Debug:', {
+        currentPeriod,
+        payrollEntries: payrollEntries.length,
+        releasedEntries: payrollEntries.filter(e => e.status === 'Released').length,
+        statuses: payrollEntries.map(e => e.status)
+      })
 
       // Use the screenshot route which has proper layout
       const response = await fetch('/api/admin/payroll/print-screenshot', {
@@ -260,7 +277,9 @@ export default function PayrollPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to generate payslips')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('❌ Payslip generation error:', errorData)
+        throw new Error(errorData.error || errorData.details || 'Failed to generate payslips')
       }
 
       // Get the HTML content from the response
@@ -279,7 +298,7 @@ export default function PayrollPage() {
       }
     } catch (error) {
       console.error('Error generating payslips:', error)
-      toast.error(`Failed to generate payslips: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toast.error(`Failed to generate payslips: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'generate-payslips', duration: 5000 })
     } finally {
       setLoading(false)
     }
@@ -357,6 +376,36 @@ export default function PayrollPage() {
       console.error('Error loading archived payrolls:', error)
       // Set empty array instead of static data
       setArchivedPayrolls([])
+    }
+  }
+
+  // Save payroll period settings
+  const handleSavePayrollPeriod = async () => {
+    try {
+      setSavingPeriod(true)
+      toast.loading('Saving payroll period...', { id: 'save-period' })
+
+      const response = await fetch('/api/admin/attendance-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          periodStart: payrollPeriodStart,
+          periodEnd: payrollPeriodEnd,
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || error.error || 'Failed to save period')
+      }
+
+      toast.success('Payroll period saved successfully!', { id: 'save-period' })
+      await loadPayrollData()
+    } catch (error) {
+      console.error('Error saving payroll period:', error)
+      toast.error(`Failed to save period: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'save-period' })
+    } finally {
+      setSavingPeriod(false)
     }
   }
 
@@ -469,15 +518,24 @@ export default function PayrollPage() {
             <FileText className="h-4 w-4 mr-2" />
             {hasGeneratedForSettings ? 'Payroll Generated' : 'Generate Payroll'}
           </Button>
-          <Button onClick={handleGeneratePayslips} disabled={loading || !payrollEntries.some(e => e.status === 'Released')} aria-disabled>
-            <Printer className="h-4 w-4 mr-2" />
-            Generate Payslips
-          </Button>
-          <Button onClick={handleReleasePayroll} disabled={loading || !currentPeriod || (new Date() <= new Date(currentPeriod.periodEnd)) || currentPeriod.status === 'Released'} aria-disabled>
+          <Button 
+            onClick={handleReleasePayroll} 
+            disabled={loading || !hasGeneratedForSettings || currentPeriod?.status === 'Released'} 
+            aria-disabled
+          >
             <FileText className="h-4 w-4 mr-2" />
             {currentPeriod?.status === 'Released' ? 'Payroll Released' : 'Release Payroll'}
           </Button>
-          <Button onClick={() => { console.log('🔍 Debug State:', { hasGeneratedForSettings, payrollEntriesCount: payrollEntries.length, currentPeriod }); toast.success('Check console for debug info') }} variant="outline" size="sm">
+          <Button 
+            onClick={handleGeneratePayslips} 
+            disabled={loading || currentPeriod?.status !== 'Released' || !payrollEntries.some(e => e.status === 'Released')} 
+            aria-disabled
+            title={currentPeriod?.status !== 'Released' ? 'Release payroll first to generate payslips' : ''}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Generate Payslips
+          </Button>
+          <Button onClick={() => { console.log('🔍 Debug State:', { hasGeneratedForSettings, payrollEntriesCount: payrollEntries.length, currentPeriod, payrollStatuses: payrollEntries.map(e => ({name: e.name, status: e.status})) }); toast.success('Check console for debug info') }} variant="outline" size="sm">
             Debug
           </Button>
         </div>
@@ -925,6 +983,59 @@ export default function PayrollPage() {
 
         {/* Next Period Settings Tab */}
         <TabsContent value="settings" className="space-y-4">
+          {/* Payroll Time Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Payroll Time Settings
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Set the payroll period dates. This will be used to calculate working days and generate payroll.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="payrollPeriodStart">Period Start Date</Label>
+                    <Input
+                      id="payrollPeriodStart"
+                      type="date"
+                      value={payrollPeriodStart ? toPhilippinesDateString(new Date(payrollPeriodStart)) : ''}
+                      onChange={(e) => setPayrollPeriodStart(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="payrollPeriodEnd">Period End Date</Label>
+                    <Input
+                      id="payrollPeriodEnd"
+                      type="date"
+                      value={payrollPeriodEnd ? toPhilippinesDateString(new Date(payrollPeriodEnd)) : ''}
+                      onChange={(e) => setPayrollPeriodEnd(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {payrollPeriodStart && payrollPeriodEnd && (
+                  <div className="text-sm text-muted-foreground">
+                    <strong>Working Days:</strong> {
+                      calculateWorkingDaysInPhilippines(new Date(payrollPeriodStart), new Date(payrollPeriodEnd))
+                    } days (excludes Sundays)
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleSavePayrollPeriod} 
+                    disabled={savingPeriod || !payrollPeriodStart || !payrollPeriodEnd}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {savingPeriod ? 'Saving...' : 'Save Period'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

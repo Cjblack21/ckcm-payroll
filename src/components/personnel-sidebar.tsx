@@ -33,7 +33,7 @@ const getNavData = (user?: { name?: string | null, email?: string }) => ({
   user: {
     name: user?.name || "Personnel User",
     email: user?.email || "personnel@pms.com",
-    avatar: "/avatars/personnel.jpg",
+    avatar: "",
   },
   navMain: [],
   projects: [],
