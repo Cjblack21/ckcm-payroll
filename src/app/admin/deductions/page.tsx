@@ -242,7 +242,7 @@ export default function DeductionsPage() {
       loadAll()
     } catch (error) {
       console.error('Error saving deductions:', error)
-      toast.error(error.message || "Failed to save deductions")
+      toast.error(error instanceof Error ? error.message : "Failed to save deductions")
     }
   }
 
