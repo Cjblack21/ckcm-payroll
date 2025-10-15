@@ -47,7 +47,7 @@ export async function GET(
     const timeInEnd = attendanceSettings?.timeInEnd || '09:00' // Default to 9:00 AM if no settings
 
     // Process attendance records
-    const attendanceData = attendanceRecords.map(record => {
+    const attendanceData = await Promise.all(attendanceRecords.map(async (record) => {
       // Calculate ACTUAL work hours
       let workHours = 0
       if (record.timeIn && record.timeOut) {
@@ -78,7 +78,7 @@ export async function GET(
           const expectedTimeIn = new Date(record.date)
           const [hours, minutes] = timeInEnd.split(':').map(Number)
           expectedTimeIn.setHours(hours, minutes, 0, 0)
-          deductions = calculateLateDeduction(basicSalary, timeIn, expectedTimeIn)
+          deductions = await calculateLateDeduction(basicSalary, timeIn, expectedTimeIn)
         } else {
           earnings = 0
           deductions = 0
@@ -86,7 +86,7 @@ export async function GET(
       } else if (record.status === 'ABSENT') {
         earnings = 0 // No earnings for absent
         // Calculate absence deduction (8 hours worth)
-        deductions = calculateAbsenceDeduction(basicSalary)
+        deductions = await calculateAbsenceDeduction(basicSalary)
       } else if (record.status === 'PARTIAL') {
         // Earnings based on actual seconds worked
         if (record.timeIn) {
@@ -95,7 +95,7 @@ export async function GET(
           earnings = calculateEarnings(basicSalary, timeIn, timeOut)
         }
         // Calculate partial deduction for hours short
-        deductions = calculatePartialDeduction(basicSalary, workHours)
+        deductions = await calculatePartialDeduction(basicSalary, workHours)
       }
 
       return {
@@ -115,7 +115,7 @@ export async function GET(
         earnings,
         deductions
       }
-    })
+    }))
 
     return NextResponse.json({ attendance: attendanceData })
   } catch (error) {
