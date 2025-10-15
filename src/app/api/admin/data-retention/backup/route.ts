@@ -94,26 +94,14 @@ export async function POST(request: NextRequest) {
         // Holidays
         holidays: await prisma.holiday.findMany(),
         
-        // Roles
-        roles: await prisma.role.findMany(),
+        // Events
+        events: await prisma.event.findMany(),
         
         // Departments
         departments: await prisma.department.findMany(),
         
-        // Statuses
-        statuses: await prisma.status.findMany(),
-        
-        // Calendar periods
-        calendarPeriods: await prisma.calendarPeriod.findMany(),
-        
-        // Term types
-        termTypes: await prisma.termType.findMany(),
-        
-        // Leave types
-        leaveTypes: await prisma.leaveType.findMany(),
-        
-        // Leave applications
-        leaveApplications: await prisma.leaveApplication.findMany({
+        // Leave requests
+        leaveRequests: await prisma.leaveRequest.findMany({
           include: {
             user: {
               select: {
@@ -125,60 +113,14 @@ export async function POST(request: NextRequest) {
           }
         }),
         
-        // Travel orders
-        travelOrders: await prisma.travelOrder.findMany({
-          include: {
-            user: {
-              select: {
-                users_id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        }),
+        // Attendance settings
+        attendanceSettings: await prisma.attendanceSettings.findMany(),
         
-        // Leave limits
-        leaveLimits: await prisma.leaveLimit.findMany(),
+        // Header settings
+        headerSettings: await prisma.headerSettings.findMany(),
         
-        // Leave balances
-        leaveBalances: await prisma.leaveBalance.findMany({
-          include: {
-            user: {
-              select: {
-                users_id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        }),
-        
-        // Probation records
-        probations: await prisma.probation.findMany({
-          include: {
-            user: {
-              select: {
-                users_id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        }),
-        
-        // Notifications
-        notifications: await prisma.notification.findMany({
-          include: {
-            user: {
-              select: {
-                users_id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        })
+        // Payroll schedules
+        payrollSchedules: await prisma.payrollSchedule.findMany()
       }
     }
 
@@ -192,9 +134,12 @@ export async function POST(request: NextRequest) {
       deductionTypes: backup.data.deductionTypes.length,
       loans: backup.data.loans.length,
       holidays: backup.data.holidays.length,
-      leaveApplications: backup.data.leaveApplications.length,
-      travelOrders: backup.data.travelOrders.length,
-      notifications: backup.data.notifications.length
+      events: backup.data.events.length,
+      departments: backup.data.departments.length,
+      leaveRequests: backup.data.leaveRequests.length,
+      attendanceSettings: backup.data.attendanceSettings.length,
+      headerSettings: backup.data.headerSettings.length,
+      payrollSchedules: backup.data.payrollSchedules.length
     }
 
     console.log('Backup created successfully:', stats)
