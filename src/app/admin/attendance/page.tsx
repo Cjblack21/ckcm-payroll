@@ -377,7 +377,7 @@ export default function AttendancePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map((record) => (
+                {(filteredData as AttendanceRecord[]).map((record) => (
                   <TableRow key={record.attendances_id}>
                     <TableCell>
                       <Avatar className="h-8 w-8">
@@ -443,7 +443,7 @@ export default function AttendancePage() {
                       </TableCell>
                     </TableRow>
                   )}
-                  {filteredData.map((person) => (
+                  {(filteredData as PersonnelAttendance[]).map((person) => (
                     <TableRow key={person.users_id}>
                       <TableCell>
                         <Avatar className="h-8 w-8">
@@ -551,7 +551,7 @@ export default function AttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredData.map((record) => (
+                  {(filteredData as AttendanceRecord[]).map((record) => (
                     <TableRow key={record.attendances_id}>
                       <TableCell>
                         <Avatar className="h-8 w-8">
