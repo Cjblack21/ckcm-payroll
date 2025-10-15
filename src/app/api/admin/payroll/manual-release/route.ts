@@ -167,6 +167,10 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Get attendance settings once before processing (used for late deduction calculation)
+    const attendanceSettings = await prisma.attendanceSettings.findFirst()
+    const timeInEnd = attendanceSettings?.timeInEnd || '09:00' // Default to 9:00 AM if no settings
+
     // Calculate attendance deductions and work hours (earnings not used for base pay)
     const earningsMap = new Map()
     const attendanceDeductionsMap = new Map()
@@ -197,9 +201,7 @@ export async function POST(request: NextRequest) {
           const timeIn = new Date(record.timeIn)
           const timeOut = record.timeOut ? new Date(record.timeOut) : undefined
           dayEarnings = calculateEarnings(basicSalary, timeIn, timeOut)
-          // Get attendance settings for proper time calculation
-          const attendanceSettings = await prisma.attendanceSettings.findFirst()
-          const timeInEnd = attendanceSettings?.timeInEnd || '09:00' // Default to 9:00 AM if no settings
+          // Use attendance settings fetched before the loop
           const expectedTimeIn = new Date(record.date)
           const [hours, minutes] = timeInEnd.split(':').map(Number)
           expectedTimeIn.setHours(hours, minutes, 0, 0)
