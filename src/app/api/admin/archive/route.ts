@@ -155,9 +155,7 @@ export async function GET() {
     // Get attendance settings for accurate deduction calculations
     let attendanceSettings: any = null
     try {
-      attendanceSettings = await prisma.attendanceSettings.findFirst({
-        where: { isActive: true }
-      })
+      attendanceSettings = await prisma.attendanceSettings.findFirst()
     } catch (error) {
       console.warn('Error fetching attendance settings:', error)
     }
