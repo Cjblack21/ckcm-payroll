@@ -304,7 +304,7 @@ export async function GET() {
         
         console.log(`🔍 DIRECT QUERY - Basic Salary: ₱${basicSalary}, Working Days: ${workingDaysInPeriod}, TimeInEnd: ${timeInEnd}`)
         
-        let attendanceDeductionDetails = []
+        let attendanceDeductionDetails: any[] = []
         let totalAttendanceDeductions = 0
         
         // Process each attendance record
