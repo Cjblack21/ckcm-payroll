@@ -137,11 +137,11 @@ export async function POST(request: NextRequest) {
     console.error('❌ Error updating attendance settings:', error)
     
     if (error instanceof z.ZodError) {
-      console.error('📝 Zod validation errors:', error.errors)
+      console.error('📝 Zod validation errors:', error.issues)
       return NextResponse.json({ 
         error: 'Invalid data', 
-        details: error.errors,
-        message: 'Validation failed: ' + error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+        details: error.issues,
+        message: 'Validation failed: ' + error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
       }, { status: 400 })
     }
     
