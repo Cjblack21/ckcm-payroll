@@ -207,7 +207,7 @@ export async function GET() {
             earnings = calculateEarnings(basicSalary, timeIn, timeOut)
           }
           // Calculate partial deduction for hours short
-          deductions = calculatePartialDeduction(basicSalary, workHours)
+          deductions = await calculatePartialDeduction(basicSalary, workHours)
         }
 
         return {
