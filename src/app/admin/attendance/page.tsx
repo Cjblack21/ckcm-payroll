@@ -16,42 +16,6 @@ import toast from "react-hot-toast"
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "NON_WORKING" | "PENDING"
 
-type AttendanceRecord = {
-  attendances_id: string
-  users_id: string
-  date: string
-  timeIn: string | null
-  timeOut: string | null
-  status: AttendanceStatus
-  user: {
-    users_id: string
-    name: string | null
-    email: string
-    personnelType?: {
-      basicSalary: number
-    }
-  }
-  workHours: number
-  earnings: number
-  deductions: number
-}
-
-type PersonnelAttendance = {
-  users_id: string
-  name: string | null
-  email: string
-  personnelType?: {
-    name: string
-    basicSalary: number
-  }
-  totalDays: number
-  presentDays: number
-  absentDays: number
-  totalHours: number
-  totalEarnings: number
-  totalDeductions: number
-}
-
 type ViewMode = "current-day" | "personnel" | "all-attendance"
 
 export default function AttendancePage() {
