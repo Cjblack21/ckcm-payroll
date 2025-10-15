@@ -48,7 +48,7 @@ export async function GET() {
     const timeInEnd = attendanceSettings?.timeInEnd || '09:00' // Default to 9:00 AM if no settings
 
     // Calculate personnel attendance summary
-    const personnelData = users.map(user => {
+    const personnelData = await Promise.all(users.map(async (user) => {
       const basicSalary = user.personnelType?.basicSalary ? Number(user.personnelType.basicSalary) : 0
       const monthlySalary = basicSalary
       const hourlyRate = monthlySalary / (22 * 8) // 22 working days * 8 hours per day
@@ -71,7 +71,7 @@ export async function GET() {
       }
 
       // Process attendance records
-      user.attendances.forEach(attendance => {
+      for (const attendance of user.attendances) {
         let dayHours = 0
         let dayEarnings = 0
         let dayDeductions = 0
@@ -112,7 +112,7 @@ export async function GET() {
             const expectedTimeIn = new Date(attendance.date)
             const [hours, minutes] = timeInEnd.split(':').map(Number)
             expectedTimeIn.setHours(hours, minutes, 0, 0)
-            dayDeductions = calculateLateDeduction(monthlySalary, timeIn, expectedTimeIn)
+            dayDeductions = await calculateLateDeduction(monthlySalary, timeIn, expectedTimeIn)
           } else {
             dayEarnings = 0
             dayDeductions = 0
@@ -125,7 +125,7 @@ export async function GET() {
           absentDays++
           dayEarnings = 0 // No earnings for absent
           // Calculate absence deduction from attendance record
-          dayDeductions = calculateAbsenceDeduction(monthlySalary)
+          dayDeductions = await calculateAbsenceDeduction(monthlySalary)
         } else if (attendance.status === 'PARTIAL') {
           presentDays++
           // Earnings based on actual seconds worked
@@ -135,19 +135,19 @@ export async function GET() {
             dayEarnings = calculateEarnings(monthlySalary, timeIn, timeOut)
           }
           // Calculate partial deduction from attendance record
-          dayDeductions = calculatePartialDeduction(monthlySalary, dayHours)
+          dayDeductions = await calculatePartialDeduction(monthlySalary, dayHours)
         }
         
         totalEarnings += dayEarnings
         totalDeductions += dayDeductions
-      })
+      }
 
       // Calculate absent days (total working days - present days)
       const actualAbsentDays = totalDays - presentDays
       absentDays += actualAbsentDays
       
       // Add deductions for absent days (no attendance record exists for these days)
-      const absentDayDeductions = actualAbsentDays * calculateAbsenceDeduction(monthlySalary)
+      const absentDayDeductions = actualAbsentDays * await calculateAbsenceDeduction(monthlySalary)
       totalDeductions += absentDayDeductions
 
       return {
@@ -162,7 +162,7 @@ export async function GET() {
         totalEarnings,
         totalDeductions
       }
-    })
+    }))
 
     return NextResponse.json({ personnel: personnelData })
   } catch (error) {
