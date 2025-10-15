@@ -26,7 +26,7 @@ export async function GET() {
           headerAlignment: 'center',
           fontSize: 'medium',
           customText: "",
-          workingDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+          workingDays: JSON.stringify(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
         }
       })
     }
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
           headerAlignment: headerAlignment || 'center',
           fontSize: fontSize || 'medium',
           customText: customText || "",
-          workingDays: workingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+          workingDays: JSON.stringify(workingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
         }
       })
     } else {
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
           headerAlignment: headerAlignment || 'center',
           fontSize: fontSize || 'medium',
           customText: customText || "",
-          workingDays: workingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+          workingDays: JSON.stringify(workingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
         }
       })
     }

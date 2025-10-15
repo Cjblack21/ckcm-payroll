@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     for (const record of attendance) {
       const user = users.find(u => u.users_id === record.users_id)
-      if (!user?.personnelType?.basicSalary) continue
+      if (!user?.personnelType?.basicSalary || !record.timeIn) continue
 
       const monthlySalary = Number(user.personnelType.basicSalary)
       const timeIn = new Date(record.timeIn)
@@ -125,17 +125,17 @@ export async function POST(request: NextRequest) {
         const expectedTimeIn = new Date(record.date)
         const [hours, minutes] = timeInEnd.split(':').map(Number)
         expectedTimeIn.setHours(hours, minutes, 0, 0)
-        const lateDeduction = calculateLateDeduction(monthlySalary, timeIn, expectedTimeIn)
+        const lateDeduction = await calculateLateDeduction(monthlySalary, timeIn, expectedTimeIn)
         
         earningsMap.set(record.users_id, (earningsMap.get(record.users_id) || 0) + earnings)
         workHoursMap.set(record.users_id, (workHoursMap.get(record.users_id) || 0) + workHours)
         attendanceDeductionsMap.set(record.users_id, (attendanceDeductionsMap.get(record.users_id) || 0) + lateDeduction)
       } else if (record.status === 'ABSENT') {
-        const absenceDeduction = calculateAbsenceDeduction(monthlySalary)
+        const absenceDeduction = await calculateAbsenceDeduction(monthlySalary)
         attendanceDeductionsMap.set(record.users_id, (attendanceDeductionsMap.get(record.users_id) || 0) + absenceDeduction)
       } else if (record.status === 'PARTIAL' && timeOut) {
         const workHours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
-        const partialDeduction = calculatePartialDeduction(monthlySalary, workHours)
+        const partialDeduction = await calculatePartialDeduction(monthlySalary, workHours)
         
         earningsMap.set(record.users_id, (earningsMap.get(record.users_id) || 0) + (workHours * (monthlySalary / 30 / 8)))
         workHoursMap.set(record.users_id, (workHoursMap.get(record.users_id) || 0) + workHours)
@@ -386,7 +386,6 @@ export async function POST(request: NextRequest) {
 
     // Generate PDF with exact dimensions
     const pdfBuffer = await page.pdf({
-      format: 'custom',
       width: '8.5in',
       height: '13in',
       margin: {
@@ -403,7 +402,7 @@ export async function POST(request: NextRequest) {
     await browser.close()
 
     // Return PDF as response
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(Buffer.from(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="payslips-${new Date().toISOString().split('T')[0]}.pdf"`,

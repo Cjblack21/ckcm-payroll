@@ -47,8 +47,8 @@ export function calculateEarnings(basicSalary: number, timeIn: Date, timeOut?: D
   // Calculate hours worked
   const hoursWorked = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
   
-  // Calculate daily earnings and hourly rate
-  const dailyEarnings = calculateDailyEarnings(basicSalary)
+  // Calculate daily earnings and hourly rate (using fallback sync calculation)
+  const dailyEarnings = basicSalary / 22 // Fallback to default 22 working days
   const hourlyRate = dailyEarnings / 8 // Assuming 8 hours per day
   
   // Calculate earnings based on hours worked

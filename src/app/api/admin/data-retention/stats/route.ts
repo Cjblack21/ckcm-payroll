@@ -120,71 +120,14 @@ async function runBasicIntegrityChecks() {
   const checks = []
 
   try {
-    // Check for orphaned payroll entries
-    const orphanedPayrolls = await prisma.payrollEntry.count({
-      where: {
-        user: null
-      }
-    })
-    checks.push({
-      check: 'Orphaned Payroll Entries',
-      status: orphanedPayrolls === 0 ? 'PASS' : 'FAIL',
-      message: orphanedPayrolls === 0 
-        ? 'No orphaned payroll entries found' 
-        : `${orphanedPayrolls} payroll entries have no associated user`,
-      count: orphanedPayrolls
-    })
-
-    // Check for orphaned deductions
-    const orphanedDeductions = await prisma.deduction.count({
-      where: {
-        user: null
-      }
-    })
-    checks.push({
-      check: 'Orphaned Deductions',
-      status: orphanedDeductions === 0 ? 'PASS' : 'FAIL',
-      message: orphanedDeductions === 0 
-        ? 'No orphaned deductions found' 
-        : `${orphanedDeductions} deductions have no associated user`,
-      count: orphanedDeductions
-    })
-
-    // Check for orphaned loans
-    const orphanedLoans = await prisma.loan.count({
-      where: {
-        user: null
-      }
-    })
-    checks.push({
-      check: 'Orphaned Loans',
-      status: orphanedLoans === 0 ? 'PASS' : 'FAIL',
-      message: orphanedLoans === 0 
-        ? 'No orphaned loans found' 
-        : `${orphanedLoans} loans have no associated user`,
-      count: orphanedLoans
-    })
-
-    // Check for orphaned attendance records
-    const orphanedAttendance = await prisma.attendance.count({
-      where: {
-        user: null
-      }
-    })
-    checks.push({
-      check: 'Orphaned Attendance Records',
-      status: orphanedAttendance === 0 ? 'PASS' : 'FAIL',
-      message: orphanedAttendance === 0 
-        ? 'No orphaned attendance records found' 
-        : `${orphanedAttendance} attendance records have no associated user`,
-      count: orphanedAttendance
-    })
+    // Note: Orphaned record checks are skipped because all user relations are required
+    // and enforced by foreign key constraints in the database
 
     // Check for users without personnel types
     const usersWithoutTypes = await prisma.user.count({
       where: {
         role: 'PERSONNEL',
-        personnelType: null
+        personnelType: { is: null }
       }
     })
     checks.push({

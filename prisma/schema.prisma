@@ -22,6 +22,7 @@ model User {
   loans              Loan[]
   payrolls           PayrollEntry[]
   sessions           Session[]
+  leaveRequests      LeaveRequest[]
   personnelType      PersonnelType? @relation(fields: [personnel_types_id], references: [personnel_types_id])
 
   @@index([personnel_types_id], map: "users_personnel_types_id_fkey")

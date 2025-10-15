@@ -36,7 +36,19 @@ export interface HeaderSettings {
 export async function getHeaderSettings(): Promise<HeaderSettings | null> {
   try {
     const settings = await prisma.headerSettings.findFirst()
-    return settings
+    if (!settings) return null
+    
+    // Type cast to match interface
+    return {
+      schoolName: settings.schoolName,
+      schoolAddress: settings.schoolAddress,
+      systemName: settings.systemName,
+      logoUrl: settings.logoUrl,
+      showLogo: settings.showLogo,
+      headerAlignment: settings.headerAlignment as 'left' | 'center' | 'right',
+      fontSize: settings.fontSize as 'small' | 'medium' | 'large',
+      customText: settings.customText || undefined
+    }
   } catch (error) {
     console.error('Error fetching header settings:', error)
     return null

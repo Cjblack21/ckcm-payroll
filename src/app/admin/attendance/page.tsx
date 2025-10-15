@@ -196,10 +196,11 @@ export default function AttendancePage() {
     )
   }
 
-  const formatTime = (time: string | null) => {
+  const formatTime = (time: Date | string | null) => {
     if (!time) return "—"
     // Convert to Philippine time and format in 12-hour format
-    return formatInTimeZone(new Date(time), "Asia/Manila", "h:mm a")
+    const date = time instanceof Date ? time : new Date(time)
+    return formatInTimeZone(date, "Asia/Manila", "h:mm a")
   }
 
   const formatWorkHours = (hours: number) => {

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     console.log('✅ Admin session verified - user:', session.user.email)
 
     // Get period dates from request body, fallback to current period
-    let body = {}
+    let body: any = {}
     try {
       body = await request.json()
       console.log('📝 Request body:', body)
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       const workingDaysInPeriod = Math.floor((entry.periodEnd.getTime() - entry.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
       const timeInEnd = attendanceSettings?.timeInEnd || '09:30'
       
-      const attendanceDeductionDetails = []
+      const attendanceDeductionDetails: any[] = []
       let totalAttendanceDeductions = 0
       
       attendanceRecords.forEach(record => {
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
         return {
           type: 'Loan Payment',
           amount: periodPayment,
-          description: `Loan Payment - ${loan.loanType} (${loan.monthlyPaymentPercent}% of ₱${Number(loan.amount).toLocaleString()})`,
+          description: `Loan Payment (${loan.monthlyPaymentPercent}% of ₱${Number(loan.amount).toLocaleString()})`,
           loanId: loan.loans_id
         }
       })
@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
           totalAttendanceDeductions: totalAttendanceDeductions,
           loanDetails: loanDetails,
           otherDeductionDetails: otherDeductionDetails,
-          personnelType: entry.user?.personnelType?.name || 'Unknown',
+          // personnelType name not selected in query
           personnelBasicSalary: Number(entry.user?.personnelType?.basicSalary || 0)
         }
       }
@@ -336,7 +336,7 @@ export async function POST(request: NextRequest) {
             ${breakdown.attendanceDeductionDetails && breakdown.attendanceDeductionDetails.length > 0 ? `
               <div class="deduction-section">
                 <div class="deduction-title">Attendance Deductions:</div>
-                ${breakdown.attendanceDeductionDetails.map(deduction => `
+                ${breakdown.attendanceDeductionDetails.map((deduction: any) => `
                   <div class="detail-row deduction-detail">
                     <span>${deduction.date}: ${deduction.description}</span>
                     <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
@@ -348,7 +348,7 @@ export async function POST(request: NextRequest) {
             ${breakdown.loanDetails && breakdown.loanDetails.length > 0 ? `
               <div class="deduction-section">
                 <div class="deduction-title">Loan Payments:</div>
-                ${breakdown.loanDetails.map(loan => `
+                ${breakdown.loanDetails.map((loan: any) => `
                   <div class="detail-row deduction-detail">
                     <span>${loan.description}</span>
                     <span class="deduction">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
@@ -360,7 +360,7 @@ export async function POST(request: NextRequest) {
             ${breakdown.otherDeductionDetails && breakdown.otherDeductionDetails.length > 0 ? `
               <div class="deduction-section">
                 <div class="deduction-title">Other Deductions:</div>
-                ${breakdown.otherDeductionDetails.map(deduction => `
+                ${breakdown.otherDeductionDetails.map((deduction: any) => `
                   <div class="detail-row deduction-detail">
                     <span>${deduction.description} (${deduction.appliedAt})</span>
                     <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>

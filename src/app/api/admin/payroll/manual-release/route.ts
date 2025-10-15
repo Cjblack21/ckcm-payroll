@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
         endDate: { gte: periodStart }
       },
       select: {
+        loans_id: true,
         users_id: true,
         amount: true,
         balance: true,
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
     const attendanceDeductionsMap = new Map()
     const workHoursMap = new Map()
     
-    attendance.forEach(record => {
+    for (const record of attendance) {
       const userId = record.users_id
       const user = pendingPayrolls.find(p => p.users_id === userId)?.user
       if (!user || !user.personnelType) return
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
           const expectedTimeIn = new Date(record.date)
           const [hours, minutes] = timeInEnd.split(':').map(Number)
           expectedTimeIn.setHours(hours, minutes, 0, 0)
-          dayDeductions = calculateLateDeduction(basicSalary, timeIn, expectedTimeIn)
+          dayDeductions = await calculateLateDeduction(basicSalary, timeIn, expectedTimeIn)
           const endTime = timeOut || new Date()
           dayWorkHours = (endTime.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
         } else {
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
         }
       } else if (record.status === 'ABSENT') {
         dayEarnings = 0
-        dayDeductions = calculateAbsenceDeduction(basicSalary)
+        dayDeductions = await calculateAbsenceDeduction(basicSalary)
         dayWorkHours = 0
       } else if (record.status === 'PARTIAL') {
         if (record.timeIn) {
@@ -223,7 +224,7 @@ export async function POST(request: NextRequest) {
           const timeOut = record.timeOut ? new Date(record.timeOut) : undefined
           dayEarnings = calculateEarnings(basicSalary, timeIn, timeOut)
           const workHours = timeOut ? (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60) : 0
-          dayDeductions = calculatePartialDeduction(basicSalary, workHours)
+          dayDeductions = await calculatePartialDeduction(basicSalary, workHours)
           dayWorkHours = workHours
         }
       }
@@ -234,7 +235,7 @@ export async function POST(request: NextRequest) {
       earningsMap.set(userId, currentEarnings + dayEarnings)
       attendanceDeductionsMap.set(userId, currentDeductions + dayDeductions)
       workHoursMap.set(userId, currentWorkHours + dayWorkHours)
-    })
+    }
     
     // Set 0 for users with no attendance records
     userIds.forEach(userId => {
@@ -268,7 +269,7 @@ export async function POST(request: NextRequest) {
     
     const deductionsMap = new Map()
     deductionsByUser.forEach((userDeductions, userId) => {
-      const totalAmount = userDeductions.reduce((sum, d) => sum + d.amount, 0)
+      const totalAmount = userDeductions.reduce((sum: number, d: any) => sum + d.amount, 0)
       deductionsMap.set(userId, { total: totalAmount, details: userDeductions })
     })
 

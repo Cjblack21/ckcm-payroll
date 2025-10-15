@@ -41,7 +41,7 @@ export function DynamicComponent<T extends Record<string, any>>({
     return <>{fallback}</>
   }
 
-  return <Component {...props} />
+  return <Component {...(props as any)} />
 }
 
 

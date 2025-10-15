@@ -1,3 +1,5 @@
+"use client"
+
 export default function ImageTest() {
   return (
     <div className="p-8 space-y-8">
@@ -27,7 +29,8 @@ export default function ImageTest() {
               onError={(e) => {
                 console.error('CKCM logo failed to load')
                 e.currentTarget.style.display = 'none'
-                e.currentTarget.nextElementSibling.style.display = 'block'
+                const nextEl = e.currentTarget.nextElementSibling as HTMLElement
+                if (nextEl) nextEl.style.display = 'block'
               }}
             />
             <div style={{display: 'none'}} className="text-red-500">
@@ -44,7 +47,8 @@ export default function ImageTest() {
               onError={(e) => {
                 console.error('PMS logo failed to load')
                 e.currentTarget.style.display = 'none'
-                e.currentTarget.nextElementSibling.style.display = 'block'
+                const nextEl = e.currentTarget.nextElementSibling as HTMLElement
+                if (nextEl) nextEl.style.display = 'block'
               }}
             />
             <div style={{display: 'none'}} className="text-red-500">

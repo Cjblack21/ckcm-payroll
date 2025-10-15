@@ -9,11 +9,11 @@ export async function POST(request: NextRequest) {
     
     const session = await getServerSession(authOptions)
     
-    if (!session?.user?.users_id) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = session.user.users_id
+    const userId = session.user.id
     console.log('Creating payroll for user:', userId)
 
     // Get current biweekly period

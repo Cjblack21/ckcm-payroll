@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
           schoolName: 'Default School',
           schoolAddress: 'Default Address',
           systemName: 'Payroll System',
-          customText: `Next Payroll Period: ${nextPeriodStart} to ${nextPeriodEnd} (${type}) - ${notes || 'No notes'}`
+          customText: `Next Payroll Period: ${nextPeriodStart} to ${nextPeriodEnd} (${type}) - ${notes || 'No notes'}`,
+          workingDays: JSON.stringify(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
         }
       })
     }
@@ -59,11 +60,11 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Next payroll period set: ${new Date(nextPeriodStart).toLocaleDateString()} - ${new Date(nextPeriodEnd).toLocaleDateString()}`,
       period: {
-        id: nextPeriod.id,
-        periodStart: nextPeriod.periodStart.toISOString(),
-        periodEnd: nextPeriod.periodEnd.toISOString(),
-        status: nextPeriod.status,
-        notes: nextPeriod.notes
+        id: existingSettings?.id || 'new',
+        periodStart: nextPeriodConfig.periodStart.toISOString(),
+        periodEnd: nextPeriodConfig.periodEnd.toISOString(),
+        status: nextPeriodConfig.status,
+        notes: nextPeriodConfig.notes
       }
     })
 

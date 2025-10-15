@@ -457,7 +457,7 @@ export async function getPayrollSummary(): Promise<{
           absentDays: 0,
           lateDays: 0,
           totalWorkHours,
-          grossSalary: Number(se.user.personnelType.basicSalary),
+          grossSalary: se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary),
           totalDeductions: Number(se.deductions),
           netSalary: Number(se.netPay),
           status: se.status === 'RELEASED' ? 'Released' : se.status === 'ARCHIVED' ? 'Archived' : 'Pending',
@@ -955,8 +955,8 @@ export async function generatePayroll(): Promise<{
 
     // Get current attendance settings to determine the period for new payroll generation
     const attendanceSettings = await prisma.attendanceSettings.findFirst()
-    if (!attendanceSettings) {
-      return { success: false, error: 'Attendance settings not found' }
+    if (!attendanceSettings || !attendanceSettings.periodStart || !attendanceSettings.periodEnd) {
+      return { success: false, error: 'Attendance settings not found or period not set' }
     }
 
     const periodStart = attendanceSettings.periodStart
@@ -1162,9 +1162,9 @@ export async function getPayrollEntries(): Promise<{
     // Serialize Decimal fields
     const serializedEntries = entries.map(entry => ({
       ...entry,
-      grossSalary: Number(entry.grossSalary),
-      totalDeductions: Number(entry.totalDeductions),
-      netSalary: Number(entry.netSalary),
+      basicSalary: Number(entry.basicSalary),
+      deductions: Number(entry.deductions),
+      netPay: Number(entry.netPay),
       user: {
         ...entry.user,
         personnelType: entry.user.personnelType ? {
@@ -1186,6 +1186,7 @@ export async function getPayrollEntries(): Promise<{
 export async function releasePayrollWithAudit(nextPeriodStart?: string, nextPeriodEnd?: string): Promise<{
   success: boolean
   releasedCount?: number
+  message?: string
   error?: string
 }> {
   try {

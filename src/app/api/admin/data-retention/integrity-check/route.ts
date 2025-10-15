@@ -16,71 +16,14 @@ export async function POST(request: NextRequest) {
     const checks = []
 
     try {
-      // 1. Check for orphaned payroll entries
-      const orphanedPayrolls = await prisma.payrollEntry.count({
-        where: {
-          user: null
-        }
-      })
-      checks.push({
-        check: 'Orphaned Payroll Entries',
-        status: orphanedPayrolls === 0 ? 'PASS' : 'FAIL',
-        message: orphanedPayrolls === 0 
-          ? 'No orphaned payroll entries found' 
-          : `${orphanedPayrolls} payroll entries have no associated user`,
-        count: orphanedPayrolls
-      })
-
-      // 2. Check for orphaned deductions
-      const orphanedDeductions = await prisma.deduction.count({
-        where: {
-          user: null
-        }
-      })
-      checks.push({
-        check: 'Orphaned Deductions',
-        status: orphanedDeductions === 0 ? 'PASS' : 'FAIL',
-        message: orphanedDeductions === 0 
-          ? 'No orphaned deductions found' 
-          : `${orphanedDeductions} deductions have no associated user`,
-        count: orphanedDeductions
-      })
-
-      // 3. Check for orphaned loans
-      const orphanedLoans = await prisma.loan.count({
-        where: {
-          user: null
-        }
-      })
-      checks.push({
-        check: 'Orphaned Loans',
-        status: orphanedLoans === 0 ? 'PASS' : 'FAIL',
-        message: orphanedLoans === 0 
-          ? 'No orphaned loans found' 
-          : `${orphanedLoans} loans have no associated user`,
-        count: orphanedLoans
-      })
-
-      // 4. Check for orphaned attendance records
-      const orphanedAttendance = await prisma.attendance.count({
-        where: {
-          user: null
-        }
-      })
-      checks.push({
-        check: 'Orphaned Attendance Records',
-        status: orphanedAttendance === 0 ? 'PASS' : 'FAIL',
-        message: orphanedAttendance === 0 
-          ? 'No orphaned attendance records found' 
-          : `${orphanedAttendance} attendance records have no associated user`,
-        count: orphanedAttendance
-      })
+      // Note: Orphaned record checks are skipped because all user relations are required
+      // and enforced by foreign key constraints in the database
 
       // 5. Check for users without personnel types
       const usersWithoutTypes = await prisma.user.count({
         where: {
           role: 'PERSONNEL',
-          personnelType: null
+          personnelType: { is: null }
         }
       })
       checks.push({
@@ -143,26 +86,11 @@ export async function POST(request: NextRequest) {
         count: duplicatePayrolls.length
       })
 
-      // 9. Check for missing deduction types
-      const deductionsWithoutTypes = await prisma.deduction.count({
-        where: {
-          deductionType: null
-        }
-      })
-      checks.push({
-        check: 'Deductions Without Types',
-        status: deductionsWithoutTypes === 0 ? 'PASS' : 'FAIL',
-        message: deductionsWithoutTypes === 0 
-          ? 'All deductions have valid types' 
-          : `${deductionsWithoutTypes} deductions have no associated type`,
-        count: deductionsWithoutTypes
-      })
-
       // 10. Check for invalid loan statuses
       const invalidLoanStatuses = await prisma.loan.count({
         where: {
           status: {
-            notIn: ['ACTIVE', 'COMPLETED', 'CANCELLED']
+            notIn: ['ACTIVE', 'COMPLETED', 'DEFAULTED']
           }
         }
       })
@@ -179,7 +107,7 @@ export async function POST(request: NextRequest) {
       const invalidAttendanceStatuses = await prisma.attendance.count({
         where: {
           status: {
-            notIn: ['PRESENT', 'LATE', 'ABSENT', 'PARTIAL']
+            notIn: ['PENDING', 'PRESENT', 'LATE', 'ABSENT', 'PARTIAL']
           }
         }
       })
@@ -192,22 +120,26 @@ export async function POST(request: NextRequest) {
         count: invalidAttendanceStatuses
       })
 
-      // 12. Check for missing basic salary data
-      const personnelWithoutSalary = await prisma.user.count({
+      // 12. Check for zero or negative basic salary
+      const personnelWithInvalidSalary = await prisma.user.count({
         where: {
           role: 'PERSONNEL',
           personnelType: {
-            basicSalary: null
+            is: {
+              basicSalary: {
+                lte: 0
+              }
+            }
           }
         }
       })
       checks.push({
-        check: 'Personnel Without Basic Salary',
-        status: personnelWithoutSalary === 0 ? 'PASS' : 'WARN',
-        message: personnelWithoutSalary === 0 
-          ? 'All personnel have basic salary defined' 
-          : `${personnelWithoutSalary} personnel users have no basic salary defined`,
-        count: personnelWithoutSalary
+        check: 'Personnel With Invalid Basic Salary',
+        status: personnelWithInvalidSalary === 0 ? 'PASS' : 'WARN',
+        message: personnelWithInvalidSalary === 0 
+          ? 'All personnel have valid basic salary' 
+          : `${personnelWithInvalidSalary} personnel users have zero or negative basic salary`,
+        count: personnelWithInvalidSalary
       })
 
     } catch (error) {

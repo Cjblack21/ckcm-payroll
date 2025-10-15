@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     
     const deductionsMap = new Map()
     deductionsByUser.forEach((userDeductions, userId) => {
-      const totalAmount = userDeductions.reduce((sum, d) => sum + d.amount, 0)
+      const totalAmount = userDeductions.reduce((sum: number, d: any) => sum + d.amount, 0)
       deductionsMap.set(userId, { total: totalAmount, details: userDeductions })
     })
 
@@ -225,14 +225,15 @@ export async function POST(request: NextRequest) {
         console.log(`Successfully updated ${existingPayrolls.length} existing payroll entries to released`)
       } catch (dbError) {
         console.error('Database error updating payroll entries:', dbError)
-        throw new Error(`Failed to update payroll entries: ${dbError.message}`)
+        const msg = dbError instanceof Error ? dbError.message : String(dbError)
+        throw new Error(`Failed to update payroll entries: ${msg}`)
       }
     } else if (payrollEntries.length > 0) {
       // Create new payroll entries with RELEASED status
       try {
         const entriesToCreate = payrollEntries.map(entry => ({
           ...entry,
-          status: 'RELEASED',
+          status: 'RELEASED' as const,
           releasedAt: now
         }))
         
@@ -244,13 +245,16 @@ export async function POST(request: NextRequest) {
         console.log(`Successfully created ${payrollEntries.length} new payroll entries`)
       } catch (dbError) {
         console.error('Database error creating payroll entries:', dbError)
-        console.error('Error details:', {
-          name: dbError.name,
-          message: dbError.message,
-          code: dbError.code,
-          meta: dbError.meta
-        })
-        throw new Error(`Failed to create payroll entries: ${dbError.message}`)
+        if (dbError && typeof dbError === 'object') {
+          console.error('Error details:', {
+            name: (dbError as any).name,
+            message: (dbError as any).message,
+            code: (dbError as any).code,
+            meta: (dbError as any).meta
+          })
+        }
+        const msg = dbError instanceof Error ? dbError.message : String(dbError)
+        throw new Error(`Failed to create payroll entries: ${msg}`)
       }
     } else {
       console.log('No payroll entries to process')
@@ -285,17 +289,23 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error in auto-release:', error)
-    console.error('Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    })
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })
+      return NextResponse.json(
+        { 
+          error: 'Failed to auto-release payroll',
+          details: error.message,
+          type: error.name
+        },
+        { status: 500 }
+      )
+    }
     return NextResponse.json(
-      { 
-        error: 'Failed to auto-release payroll',
-        details: error.message,
-        type: error.name
-      },
+      { error: 'Failed to auto-release payroll', details: String(error) },
       { status: 500 }
     )
   }

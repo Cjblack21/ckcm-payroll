@@ -79,7 +79,8 @@ export default function DirectTest() {
                     className="w-full h-24 object-contain border"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none'
-                      e.currentTarget.nextElementSibling.style.display = 'block'
+                      const nextEl = e.currentTarget.nextElementSibling as HTMLElement
+                      if (nextEl) nextEl.style.display = 'block'
                     }}
                   />
                   <div style={{display: 'none'}} className="text-red-500 text-center py-4">

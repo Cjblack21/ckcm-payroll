@@ -89,7 +89,8 @@ export const authOptions: NextAuthOptions = {
     async signIn({ account, profile }) {
       if (account?.provider === "google") {
         // Restrict access to @ckcm.edu.ph domain
-        return profile?.email_verified === true && profile?.email?.endsWith("@ckcm.edu.ph") === true
+        const googleProfile = profile as any
+        return googleProfile?.email_verified === true && googleProfile?.email?.endsWith("@ckcm.edu.ph") === true
       }
       return true // Allow other providers (credentials)
     },
@@ -102,13 +103,14 @@ export const authOptions: NextAuthOptions = {
       })
       
       if (account?.provider === "google" && profile) {
-        console.log('Processing Google OAuth user:', profile.email)
+        const googleProfile = profile as any
+        console.log('Processing Google OAuth user:', googleProfile.email)
         
         // Check if user exists in database with timeout
         try {
           const existingUser = await Promise.race([
             prisma.user.findUnique({
-              where: { email: profile.email as string }
+              where: { email: googleProfile.email as string }
             }),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('Database query timeout')), 5000)
@@ -124,17 +126,17 @@ export const authOptions: NextAuthOptions = {
             console.log('New user, setting up for account setup')
             // New user, mark as needing setup
             token.role = "SETUP_REQUIRED"
-            token.email = profile.email
-            token.name = profile.name
-            token.picture = profile.picture
+            token.email = googleProfile.email
+            token.name = googleProfile.name
+            token.picture = googleProfile.picture
           }
         } catch (error) {
           console.error("Error checking user in JWT callback:", error)
           // Fallback to setup required to prevent auth failure
           token.role = "SETUP_REQUIRED"
-          token.email = profile.email
-          token.name = profile.name
-          token.picture = profile.picture
+          token.email = googleProfile.email
+          token.name = googleProfile.name
+          token.picture = googleProfile.picture
         }
       } else if (user) {
         console.log('Processing credentials user:', user.id, user.role)

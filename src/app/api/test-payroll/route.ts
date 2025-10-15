@@ -10,11 +10,11 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions)
     console.log('Session:', session)
     
-    if (!session?.user?.users_id) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'No session or user ID' }, { status: 401 })
     }
 
-    const userId = session.user.users_id
+    const userId = session.user.id
     console.log('User ID:', userId)
 
     // Check if user exists
@@ -67,8 +67,8 @@ export async function GET(request: NextRequest) {
       session: {
         hasSession: !!session,
         hasUser: !!session?.user,
-        hasUserId: !!session?.user?.users_id,
-        userId: session?.user?.users_id
+        hasUserId: !!session?.user?.id,
+        userId: session?.user?.id
       },
       user: user ? {
         name: user.name,

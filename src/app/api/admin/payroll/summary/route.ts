@@ -206,7 +206,7 @@ export async function GET() {
   const attendanceDeductionsMap = new Map()
   const workHoursMap = new Map()
   
-  allAttendanceRecords.forEach(record => {
+  for (const record of allAttendanceRecords) {
     const userId = record.users_id
     const user = users.find(u => u.users_id === userId)
     if (!user || !user.personnelType || !user.personnelType.basicSalary) return
@@ -234,7 +234,7 @@ export async function GET() {
         // Set expected time to 8:00 AM for the same date
         const expectedTime = new Date(record.date)
         expectedTime.setHours(8, 0, 0, 0)
-        dayDeductions = calculateLateDeduction(basicSalary, timeIn, expectedTime)
+        dayDeductions = await calculateLateDeduction(basicSalary, timeIn, expectedTime)
         // Calculate actual work hours
         const endTime = timeOut || new Date()
         dayWorkHours = (endTime.getTime() - timeIn.getTime()) / (1000 * 60 * 60) // Convert to hours
@@ -250,7 +250,7 @@ export async function GET() {
       dayWorkHours = 0
     } else if (record.status === 'ABSENT') {
       dayEarnings = 0
-      dayDeductions = calculateAbsenceDeduction(basicSalary)
+      dayDeductions = await calculateAbsenceDeduction(basicSalary)
       dayWorkHours = 0
     } else if (record.status === 'PARTIAL') {
       if (record.timeIn) {
@@ -259,7 +259,7 @@ export async function GET() {
         dayEarnings = calculateEarnings(basicSalary, timeIn, timeOut)
         // Calculate partial deduction based on hours short
         const workHours = timeOut ? (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60) : 0
-        dayDeductions = calculatePartialDeduction(basicSalary, workHours)
+        dayDeductions = await calculatePartialDeduction(basicSalary, workHours)
         dayWorkHours = workHours
       }
     }
@@ -271,7 +271,7 @@ export async function GET() {
     earningsMap.set(userId, currentEarnings + dayEarnings)
     attendanceDeductionsMap.set(userId, currentDeductions + dayDeductions)
     workHoursMap.set(userId, currentWorkHours + dayWorkHours)
-  })
+  }
   
   // Set 0 for users with no attendance records
   users.forEach(user => {
@@ -322,13 +322,13 @@ export async function GET() {
   
   const actualAttendanceDeductionsMap = new Map() // Actual deduction records from database
   attendanceDeductionsByUser.forEach((userDeductions, userId) => {
-    const totalAmount = userDeductions.reduce((sum, d) => sum + d.amount, 0)
+    const totalAmount = userDeductions.reduce((sum: number, d: any) => sum + d.amount, 0)
     actualAttendanceDeductionsMap.set(userId, { total: totalAmount, details: userDeductions })
   })
 
   const nonAttendanceDeductionsMap = new Map()
   nonAttendanceDeductionsByUser.forEach((userDeductions, userId) => {
-    const totalAmount = userDeductions.reduce((sum, d) => sum + d.amount, 0)
+    const totalAmount = userDeductions.reduce((sum: number, d: any) => sum + d.amount, 0)
     nonAttendanceDeductionsMap.set(userId, { total: totalAmount, details: userDeductions })
   })
   

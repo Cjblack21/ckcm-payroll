@@ -291,7 +291,7 @@ const Payslip: React.FC<PayslipProps> = ({ employee, period, headerSettings }) =
                 <Text style={{ fontSize: 5, fontWeight: 'bold', marginBottom: 1 }}>Deduction Details:</Text>
                 {breakdown.deductionDetails.map((deduction: any, index: number) => (
                   <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 0.5 }}>
-                    <Text style={{ fontSize: 5, maxWidth: '60%' }} numberOfLines={1}>
+                    <Text style={{ fontSize: 5, maxWidth: '60%' }}>
                       {deduction.type}:
                     </Text>
                     <Text style={{ fontSize: 5 }}>

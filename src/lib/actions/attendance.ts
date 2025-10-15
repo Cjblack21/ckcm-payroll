@@ -14,9 +14,9 @@ import { getTodayRangeInPhilippines, getNowInPhilippines, getPhilippinesTimeStri
 export type AttendanceRecord = {
   attendances_id: string
   users_id: string
-  date: string
-  timeIn: string | null
-  timeOut: string | null
+  date: Date | string
+  timeIn: Date | string | null
+  timeOut: Date | string | null
   status: AttendanceStatus
   user: {
     users_id: string
@@ -68,7 +68,7 @@ export async function punchAttendance(): Promise<{
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' }
+      return { success: false, message: '', error: 'Unauthorized' }
     }
 
     const users_id = session.user.id
@@ -227,7 +227,7 @@ export async function punchAttendance(): Promise<{
         console.log(`🔍 DEBUG: No early timeout deduction for user ${users_id} - earlyTimeoutDeduction = ${earlyTimeoutDeduction}`)
       }
     } else {
-      return { success: false, error: 'Already timed in and out today' }
+      return { success: false, message: '', error: 'Already timed in and out today' }
     }
 
     // Revalidate attendance pages
@@ -245,7 +245,7 @@ export async function punchAttendance(): Promise<{
     }
   } catch (error) {
     console.error('Error in punchAttendance:', error)
-    return { success: false, error: 'Failed to record attendance' }
+    return { success: false, message: '', error: 'Failed to record attendance' }
   }
 }
 
@@ -1044,13 +1044,22 @@ export async function getPersonnelHistory(userId: string): Promise<{
         return {
           attendances_id: record.attendances_id,
           users_id: record.users_id,
-          date: record.date,
-          timeIn: record.timeIn,
-          timeOut: record.timeOut,
+          date: record.date.toISOString(),
+          timeIn: record.timeIn?.toISOString() || null,
+          timeOut: record.timeOut?.toISOString() || null,
           status: 'PENDING' as AttendanceStatus,
           workHours: 0,
           earnings: 0,
-          deductions: 0
+          deductions: 0,
+          user: {
+            users_id: user.users_id,
+            name: user.name,
+            email: user.email,
+            personnelType: user.personnelType ? {
+              ...user.personnelType,
+              basicSalary: Number(user.personnelType.basicSalary)
+            } : undefined
+          }
         }
       }
       
@@ -1065,9 +1074,9 @@ export async function getPersonnelHistory(userId: string): Promise<{
         return {
           attendances_id: record.attendances_id,
           users_id: record.users_id,
-          date: record.date,
-          timeIn: record.timeIn,
-          timeOut: record.timeOut,
+          date: record.date.toISOString(),
+          timeIn: null,
+          timeOut: null,
           status: 'ABSENT' as AttendanceStatus,
           user: {
             users_id: user.users_id,

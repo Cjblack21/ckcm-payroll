@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { calculateLateDeduction, calculateAbsenceDeduction, calculatePartialDeduction } from "@/lib/attendance-calculations"
+import { calculateLateDeductionSync, calculateAbsenceDeductionSync, calculatePartialDeduction } from "@/lib/attendance-calculations-sync"
 import { revalidatePath } from "next/cache"
 
 // Types
@@ -158,6 +158,7 @@ export async function getPersonnelDashboard(): Promise<{
     const timeInEnd = attendanceSettings?.timeInEnd || '09:00'
 
     // Calculate real-time attendance deductions from attendance records
+    const workingDaysInPeriod = 22 // Default fallback
     const attendanceDeductions = monthlyAttendance.reduce((total, attendance) => {
       let dayDeductions = 0
       
@@ -167,16 +168,16 @@ export async function getPersonnelDashboard(): Promise<{
         const expectedTimeIn = new Date(attendance.date)
         const [hours, minutes] = timeInEnd.split(':').map(Number)
         expectedTimeIn.setHours(hours, minutes, 0, 0)
-        dayDeductions = calculateLateDeduction(Number(user.personnelType?.basicSalary || 0), timeIn, expectedTimeIn)
+        dayDeductions = calculateLateDeductionSync(Number(user.personnelType?.basicSalary || 0), timeIn, expectedTimeIn, workingDaysInPeriod)
       } else if (attendance.status === 'ABSENT') {
         // Calculate absence deduction
-        dayDeductions = calculateAbsenceDeduction(Number(user.personnelType?.basicSalary || 0))
+        dayDeductions = calculateAbsenceDeductionSync(Number(user.personnelType?.basicSalary || 0), workingDaysInPeriod)
       } else if (attendance.status === 'PARTIAL' && attendance.timeIn) {
         // Calculate partial deduction
         const timeIn = new Date(attendance.timeIn)
         const timeOut = attendance.timeOut ? new Date(attendance.timeOut) : undefined
         const workHours = timeOut ? (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60) : 0
-        dayDeductions = calculatePartialDeduction(Number(user.personnelType?.basicSalary || 0), workHours)
+        dayDeductions = calculatePartialDeduction(Number(user.personnelType?.basicSalary || 0), workHours, 8, workingDaysInPeriod)
       }
       
       return total + dayDeductions
@@ -367,7 +368,7 @@ export async function deletePersonnelType(personnelTypesId: string): Promise<{
     // Check if personnel type is being used by any users
     const usersCount = await prisma.user.count({
       where: {
-        personnel_type_id: personnelTypesId
+        personnel_types_id: personnelTypesId
       }
     })
 
