@@ -19,6 +19,9 @@ export default function AttendancePortalPage() {
   const [attendanceStatus, setAttendanceStatus] = useState<any>(null)
   const [showAlreadyTimedInModal, setShowAlreadyTimedInModal] = useState(false)
 
+  // Use a configurable base path so the app can be deployed under e.g. /attendance-portal
+  const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ""
+
   useEffect(() => {
     setMounted(true)
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -40,7 +43,7 @@ export default function AttendancePortalPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const res = await fetch('/api/attendance/settings')
+        const res = await fetch(`${BASE_PATH}/api/attendance/settings`)
         const data = await res.json()
         setSettings(data.settings || null)
       } catch (e) {}
@@ -78,7 +81,7 @@ export default function AttendancePortalPage() {
 
   const checkAttendanceStatus = async (userId: string) => {
     try {
-      const res = await fetch('/api/attendance/status', {
+      const res = await fetch(`${BASE_PATH}/api/attendance/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ users_id: userId })
@@ -100,7 +103,7 @@ export default function AttendancePortalPage() {
     
     try {
       // Use API route for attendance portal (no authentication required)
-      const response = await fetch('/api/attendance/punch', {
+      const response = await fetch(`${BASE_PATH}/api/attendance/punch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ users_id: schoolId })
