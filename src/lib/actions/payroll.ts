@@ -34,6 +34,7 @@ export type PayrollSummary = {
     periodStart: string
     periodEnd: string
     hasGeneratedForSettings: boolean
+    timeOutEnd?: string | null
   }
 }
 
@@ -947,7 +948,8 @@ export async function getPayrollSummary(): Promise<{
       settings: {
         periodStart: settingsPeriodStart.toISOString(),
         periodEnd: settingsPeriodEnd.toISOString(),
-        hasGeneratedForSettings
+        hasGeneratedForSettings,
+        timeOutEnd: attendanceSettings?.timeOutEnd
       }
     }
 
