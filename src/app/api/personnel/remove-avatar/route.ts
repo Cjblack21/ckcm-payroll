@@ -12,28 +12,8 @@ export async function DELETE() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user's current avatar
-    const user = await prisma.user.findUnique({
-      where: { users_id: session.user.id },
-      select: { avatar: true },
-    })
-
-    // Delete file if exists
-    if (user?.avatar && user.avatar.startsWith("/uploads/")) {
-      try {
-        const filepath = path.join(process.cwd(), "public", user.avatar)
-        await unlink(filepath)
-      } catch (error) {
-        // File might not exist, continue anyway
-        console.warn("Could not delete avatar file:", error)
-      }
-    }
-
-    // Remove avatar from database
-    await prisma.user.update({
-      where: { users_id: session.user.id },
-      data: { avatar: null },
-    })
+    // Note: Avatar functionality not implemented in current schema
+    // This endpoint is a placeholder for future avatar support
 
     return NextResponse.json({ message: "Avatar removed successfully" })
   } catch (error) {
