@@ -159,6 +159,20 @@ export function UserManagement() {
 
   // Handle create user
   const handleCreateUser = async () => {
+    // Validate required fields
+    if (!formData.email || !formData.email.includes('@')) {
+      toast.error('Please enter a valid email address')
+      return
+    }
+    if (!formData.name || formData.name.trim().length === 0) {
+      toast.error('Please enter a full name')
+      return
+    }
+    if (!formData.password || formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+
     try {
       const response = await fetch('/api/admin/users', {
         method: 'POST',
@@ -167,14 +181,22 @@ export function UserManagement() {
       })
 
       if (!response.ok) {
-        let message = 'Failed to update user'
+        let message = 'Failed to create user'
         try {
           const data = await response.json()
-          message = data.error || message
+          console.error('API Error Response:', data)
+          if (data.details && Array.isArray(data.details)) {
+            // Zod validation errors
+            message = data.details.map((d: any) => `${d.path.join('.')}: ${d.message}`).join(', ')
+          } else {
+            message = data.error || message
+          }
         } catch {
           message = await response.text()
         }
-        throw new Error(message)
+        toast.error(message)
+        console.error('Create user error:', message)
+        return
       }
 
       toast.success('User created successfully')
@@ -183,7 +205,7 @@ export function UserManagement() {
       fetchUsers()
     } catch (error) {
       console.error('Error creating user:', error)
-      toast.error('Failed to create user')
+      toast.error(error instanceof Error ? error.message : 'Failed to create user')
     }
   }
 
@@ -341,14 +363,16 @@ export function UserManagement() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="create-password">Password</Label>
+                  <Label htmlFor="create-password">Password *</Label>
                   <Input
                     id="create-password"
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Enter password"
+                    placeholder="Min. 6 characters"
+                    required
                   />
+                  <p className="text-xs text-muted-foreground">Must be at least 6 characters</p>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="create-role">Role</Label>

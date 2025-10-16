@@ -5,6 +5,10 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 
+// Ensure this route is always dynamically rendered
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // Validation schema
 const createUserSchema = z.object({
   email: z.string().email(),

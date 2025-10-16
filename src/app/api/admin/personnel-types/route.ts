@@ -4,6 +4,10 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 
+// Ensure this route is always dynamically rendered
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 const createSchema = z.object({
   name: z.string().min(1),
   basicSalary: z.number().min(0),

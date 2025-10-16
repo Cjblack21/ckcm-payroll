@@ -6,6 +6,10 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 
+// Ensure this route is always dynamically rendered
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 // Validation schema for updates
 const updateUserSchema = z.object({
   email: z.string().email().optional(),

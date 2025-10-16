@@ -99,6 +99,7 @@ export default function PayrollPage() {
   const [payrollPeriodStart, setPayrollPeriodStart] = useState('')
   const [payrollPeriodEnd, setPayrollPeriodEnd] = useState('')
   const [savingPeriod, setSavingPeriod] = useState(false)
+  const [canRelease, setCanRelease] = useState(false)
 
   // Load payroll data
   const loadPayrollData = async () => {
@@ -178,6 +179,20 @@ export default function PayrollPage() {
       console.log('🔍 Payroll UI Debug - Settings period:', result.summary?.settings?.periodStart, 'to', result.summary?.settings?.periodEnd)
       console.log('🔍 Payroll UI Debug - Payroll entries count:', entries.length)
       setHasGeneratedForSettings(generatedState)
+      
+      // Check if current date is on or after period end date
+      if (result.summary?.settings?.periodEnd) {
+        const periodEnd = new Date(result.summary.settings.periodEnd)
+        const today = new Date()
+        // Set time to start of day for fair comparison
+        periodEnd.setHours(0, 0, 0, 0)
+        today.setHours(0, 0, 0, 0)
+        const canReleaseNow = today >= periodEnd
+        setCanRelease(canReleaseNow)
+        console.log('🔍 Release Check - Today:', today.toISOString(), 'Period End:', periodEnd.toISOString(), 'Can Release:', canReleaseNow)
+      } else {
+        setCanRelease(false)
+      }
     } catch (error) {
       console.error('Error loading payroll data:', error)
       toast.error('Failed to load payroll data')
@@ -317,6 +332,18 @@ export default function PayrollPage() {
 
       toast.success(`Payroll released successfully for ${result.releasedCount} employees`, { id: 'release-payroll' })
       setShowNextPeriodModal(false)
+      
+      // Auto-generate payslips after successful release
+      toast.loading('Generating payslips...', { id: 'auto-generate-payslips' })
+      setTimeout(async () => {
+        try {
+          await handleGeneratePayslips()
+          toast.success('Payslips generated successfully!', { id: 'auto-generate-payslips' })
+        } catch (error) {
+          console.error('Error auto-generating payslips:', error)
+          toast.error('Payroll released but failed to auto-generate payslips. Please generate manually.', { id: 'auto-generate-payslips' })
+        }
+      }, 1000)
 
       // Update the status of existing payroll entries to "Released" without reloading new data
       setPayrollEntries(prevEntries => 
@@ -520,11 +547,12 @@ export default function PayrollPage() {
           </Button>
           <Button 
             onClick={handleReleasePayroll} 
-            disabled={loading || !hasGeneratedForSettings || currentPeriod?.status === 'Released'} 
+            disabled={loading || !hasGeneratedForSettings || currentPeriod?.status === 'Released' || !canRelease} 
             aria-disabled
+            title={!canRelease && currentPeriod?.periodEnd ? `Release only available on or after ${formatDateForDisplay(new Date(currentPeriod.periodEnd))}` : ''}
           >
             <FileText className="h-4 w-4 mr-2" />
-            {currentPeriod?.status === 'Released' ? 'Payroll Released' : 'Release Payroll'}
+            {currentPeriod?.status === 'Released' ? 'Payroll Released' : !canRelease ? 'Release (Not Yet Period End)' : 'Release Payroll'}
           </Button>
           <Button 
             onClick={handleGeneratePayslips} 
@@ -551,7 +579,7 @@ export default function PayrollPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-6 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Period Start</p>
                 <p className="font-medium">{formatDateForDisplay(new Date(currentPeriod.periodStart))}</p>
@@ -578,6 +606,20 @@ export default function PayrollPage() {
                   </Badge>
                   {!hasGeneratedForSettings && (
                     <span className="text-xs text-muted-foreground">Ready to generate</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Can Release</p>
+                <div className="flex flex-col gap-1">
+                  <Badge className={canRelease ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                    {canRelease ? 'Yes' : 'No'}
+                  </Badge>
+                  {!canRelease && currentPeriod.status !== 'Released' && (
+                    <span className="text-xs text-red-600">Wait until {formatDateForDisplay(new Date(currentPeriod.periodEnd))}</span>
+                  )}
+                  {canRelease && currentPeriod.status !== 'Released' && (
+                    <span className="text-xs text-green-600">Ready to release</span>
                   )}
                 </div>
               </div>
