@@ -277,9 +277,58 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Get approved unpaid leave requests for this period
+    const unpaidLeaveRequests = await prisma.leaveRequest.findMany({
+      where: {
+        users_id: userId,
+        status: 'APPROVED',
+        isPaid: false,
+        startDate: { lte: effectiveEnd },
+        endDate: { gte: effectiveStart }
+      },
+      orderBy: { startDate: 'asc' }
+    })
+
+    // Calculate unpaid leave deduction
+    let totalUnpaidLeaveDays = 0
+    const leaveDetails: { leaveType: string; startDate: Date; endDate: Date; days: number; amount: number }[] = []
+    
+    for (const leave of unpaidLeaveRequests) {
+      const leaveStart = new Date(leave.startDate) > effectiveStart ? new Date(leave.startDate) : effectiveStart
+      const leaveEnd = new Date(leave.endDate) < effectiveEnd ? new Date(leave.endDate) : effectiveEnd
+      
+      // Count working days only (exclude Sundays)
+      let leaveDays = 0
+      let currentDate = new Date(leaveStart)
+      while (currentDate <= leaveEnd) {
+        if (currentDate.getDay() !== 0) {  // Not Sunday
+          leaveDays++
+        }
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+      
+      totalUnpaidLeaveDays += leaveDays
+      
+      if (leaveDays > 0) {
+        const dailySalary = workingDaysInPeriod > 0 ? basicSalary / workingDaysInPeriod : 0
+        const leaveAmount = leaveDays * dailySalary
+        
+        leaveDetails.push({
+          leaveType: leave.type,
+          startDate: new Date(leave.startDate),
+          endDate: new Date(leave.endDate),
+          days: leaveDays,
+          amount: leaveAmount
+        })
+      }
+    }
+    
+    const totalUnpaidLeaveDeduction = leaveDetails.reduce((sum, leave) => sum + leave.amount, 0)
+
     // Calculate totals only for breakdown display; this does not surface pending payroll
     const totalDatabaseDeductions = otherDeductions.reduce((sum, deduction) => sum + Number(deduction.amount), 0)
     console.log('Database deductions total:', totalDatabaseDeductions)
+    console.log('Unpaid leave deduction total:', totalUnpaidLeaveDeduction)
 
     const periodDays = Math.floor((effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
     const factor = periodDays <= 16 ? 0.5 : 1.0
@@ -333,7 +382,8 @@ export async function GET(request: NextRequest) {
       periodInfo: {
         current: {
           start: effectiveStart,
-          end: effectiveEnd
+          end: effectiveEnd,
+          releaseTime: attendanceSettings?.payrollReleaseTime || '17:00'
         }
       },
       breakdown: {
@@ -342,7 +392,16 @@ export async function GET(request: NextRequest) {
         attendanceDeductionsTotal,
         databaseDeductionsTotal: totalDatabaseDeductions,
         loans: serializedLoans,
-        totalDeductions: totalDatabaseDeductions + attendanceDeductionsTotal + totalLoanPayments,
+        unpaidLeaves: leaveDetails.map(l => ({
+          leaveType: l.leaveType,
+          startDate: l.startDate,
+          endDate: l.endDate,
+          days: l.days,
+          amount: l.amount
+        })),
+        unpaidLeaveDeductionTotal: totalUnpaidLeaveDeduction,
+        unpaidLeaveDays: totalUnpaidLeaveDays,
+        totalDeductions: totalDatabaseDeductions + attendanceDeductionsTotal + totalLoanPayments + totalUnpaidLeaveDeduction,
         totalLoanPayments
       }
     }
@@ -371,13 +430,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       currentPayroll: null,
       archivedPayrolls: [],
-      periodInfo: { current: { start, end } },
+      periodInfo: { current: { start, end, releaseTime: '17:00' } },
       breakdown: {
         otherDeductions: [],
         attendanceDetails: [],
         attendanceDeductionsTotal: 0,
         databaseDeductionsTotal: 0,
         loans: [],
+        unpaidLeaves: [],
+        unpaidLeaveDeductionTotal: 0,
+        unpaidLeaveDays: 0,
         totalDeductions: 0,
         totalLoanPayments: 0
       },

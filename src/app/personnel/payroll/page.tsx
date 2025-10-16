@@ -16,6 +16,7 @@ interface PayrollData {
     current: {
       start: string
       end: string
+      releaseTime?: string
     }
   }
   breakdown: {
@@ -24,6 +25,9 @@ interface PayrollData {
     attendanceDeductionsTotal: number
     databaseDeductionsTotal: number
     loans: any[]
+    unpaidLeaves?: { leaveType: string; startDate: string; endDate: string; days: number; amount: number }[]
+    unpaidLeaveDeductionTotal?: number
+    unpaidLeaveDays?: number
     totalDeductions: number
     totalLoanPayments: number
   }
@@ -35,6 +39,8 @@ export default function PersonnelPayrollPage() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [selectedPayroll, setSelectedPayroll] = useState<any>(null)
+  const [timeUntilRelease, setTimeUntilRelease] = useState('')
+  const [canRelease, setCanRelease] = useState(false)
 
   useEffect(() => {
     loadPayrollData()
@@ -132,6 +138,46 @@ export default function PersonnelPayrollPage() {
     return format(new Date(dateString), 'MMM dd, yyyy')
   }
 
+  // Timer to update countdown every second
+  useEffect(() => {
+    if (!data?.periodInfo?.current?.end || !data?.periodInfo?.current?.releaseTime || canRelease) {
+      setTimeUntilRelease('')
+      return
+    }
+
+    const updateCountdown = () => {
+      const periodEnd = new Date(data.periodInfo.current.end)
+      const releaseTime = data.periodInfo.current.releaseTime || '17:00'
+      const [hours, minutes] = releaseTime.split(':').map(Number)
+      periodEnd.setHours(hours, minutes, 0, 0)
+      
+      const now = new Date()
+      const diff = periodEnd.getTime() - now.getTime()
+      
+      if (diff <= 0) {
+        setTimeUntilRelease('Release available now!')
+        setCanRelease(true)
+        return
+      }
+      
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hrs = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const secs = Math.floor((diff % (1000 * 60)) / 1000)
+      
+      let countdown = ''
+      if (days > 0) countdown += `${days}d `
+      countdown += `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+      
+      setTimeUntilRelease(countdown)
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    
+    return () => clearInterval(interval)
+  }, [data?.periodInfo?.current?.end, data?.periodInfo?.current?.releaseTime, canRelease])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -227,6 +273,44 @@ export default function PersonnelPayrollPage() {
           </Dialog>
         </div>
       </div>
+
+      {/* Release Countdown Timer */}
+      {!canRelease && currentPayroll?.status !== 'RELEASED' && timeUntilRelease && (
+        <Card className="border-2 border-yellow-500 bg-yellow-50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-yellow-800 mb-1">Payroll Release Countdown</p>
+                <p className="text-xs text-yellow-600">
+                  Release available on {formatDate(periodInfo.current.end)}
+                  {periodInfo.current.releaseTime && ` at ${periodInfo.current.releaseTime}`}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-yellow-700 mb-1">Release in:</p>
+                <div className="text-4xl font-bold font-mono text-yellow-900 tracking-wider">
+                  {timeUntilRelease}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Release Ready Banner */}
+      {canRelease && currentPayroll?.status !== 'RELEASED' && (
+        <Card className="border-2 border-green-500 bg-green-50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center gap-3">
+              <div className="text-4xl">✓</div>
+              <div>
+                <p className="text-lg font-bold text-green-800">Payroll Release Available!</p>
+                <p className="text-sm text-green-600">Your payroll will be released soon</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Current Pay Period Info */}
       <Card>
@@ -426,6 +510,21 @@ export default function PersonnelPayrollPage() {
                       </TableRow>
                       ))
                     })()}
+                    {breakdown.unpaidLeaves && breakdown.unpaidLeaves.length > 0 && breakdown.unpaidLeaves.map((leave, index) => (
+                      <TableRow key={`leave-${index}`} className="bg-orange-50">
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">Unpaid Leave - {leave.leaveType}</span>
+                            <span className="text-xs text-gray-600">
+                              {formatDate(leave.startDate)} - {formatDate(leave.endDate)} ({leave.days} {leave.days === 1 ? 'day' : 'days'})
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-orange-600">
+                          {formatCurrency(leave.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                     <TableRow>
                       <TableCell className="font-medium">Total Attendance Deductions</TableCell>
                       <TableCell className="text-right font-medium">
@@ -444,6 +543,16 @@ export default function PersonnelPayrollPage() {
                         {formatCurrency(Number(breakdown.totalLoanPayments))}
                       </TableCell>
                     </TableRow>
+                    {breakdown.unpaidLeaveDeductionTotal && breakdown.unpaidLeaveDeductionTotal > 0 && (
+                      <TableRow className="bg-orange-100">
+                        <TableCell className="font-medium text-orange-900">
+                          Total Unpaid Leave ({breakdown.unpaidLeaveDays} {breakdown.unpaidLeaveDays === 1 ? 'day' : 'days'})
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-orange-900">
+                          {formatCurrency(Number(breakdown.unpaidLeaveDeductionTotal))}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     <TableRow className="font-medium">
                       <TableCell>Total Deductions</TableCell>
                       <TableCell className="text-right">

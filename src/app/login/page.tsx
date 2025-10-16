@@ -1,10 +1,54 @@
+"use client"
+
 import Link from "next/link"
 import Image from "next/image"
+import { useTheme } from "next-themes"
+import { Sun, Moon, Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu"
 import { LoginForm } from "@/components/login-form"
 
 export default function LoginPage() {
+  const { setTheme } = useTheme()
+
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-muted/30 relative">
+      {/* Theme Toggle - Fixed Top Right */}
+      <div className="fixed top-4 right-4 z-50">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="icon"
+              className="h-10 w-10 rounded-full bg-card/80 backdrop-blur-sm shadow-lg border-2 hover:bg-card"
+            >
+              <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              <span className="sr-only">Toggle theme</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[140px]">
+            <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
+              <Sun className="mr-2 h-4 w-4" />
+              Light
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
+              <Moon className="mr-2 h-4 w-4" />
+              Dark
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
+              <Settings className="mr-2 h-4 w-4" />
+              System
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       <div className="grid min-h-screen lg:grid-cols-2">
         {/* Left Panel - Login Section */}
         <div className="flex flex-col justify-center px-6 py-8 lg:px-8 lg:py-12">
@@ -25,8 +69,9 @@ export default function LoginPage() {
                 </div>
               </Link>
               <h1 className="text-xl font-bold text-foreground mb-1">Welcome to CKCM PMS</h1>
-              <p className="text-muted-foreground text-sm">
-                Enter your credentials to access the Payroll Management System
+              <p className="text-muted-foreground text-sm flex items-center justify-center gap-2">
+                <Settings className="h-4 w-4" />
+                Sign in to access CKCM Payroll Management System
               </p>
             </div>
             

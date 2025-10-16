@@ -142,6 +142,14 @@ export async function getNotifications(userId?: string): Promise<Notification[]>
       })
     }
 
+    // Payroll reschedule notifications from global store
+    if (global.notifications) {
+      const userNotifications = global.notifications.filter(n => 
+        n.userId === userId || !n.userId // Include notifications for this user or general notifications
+      )
+      notifications.push(...userNotifications)
+    }
+
     // Sort by time desc
     notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   } catch (err) {
