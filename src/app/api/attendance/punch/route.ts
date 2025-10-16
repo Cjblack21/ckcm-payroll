@@ -4,6 +4,10 @@ import { getStartOfDayInPhilippines, getEndOfDayInPhilippines, getNowInPhilippin
 import { calculateLateDeduction, calculateEarlyTimeoutDeduction, createLateDeduction } from "@/lib/attendance-calculations"
 import { AttendanceStatus } from "@prisma/client"
 
+// Ensure this route is always dynamically rendered
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 function isWithinWindow(nowHHmm: string, start?: string | null, end?: string | null): boolean {
   if (!start || !end) return true
   return start <= nowHHmm && nowHHmm <= end
@@ -21,6 +25,33 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({ where: { users_id } })
     if (!user || !user.isActive) {
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 })
+    }
+
+    // Check if user has approved leave for today
+    const now = getNowInPhilippines()
+    const startToday = getStartOfDayInPhilippines(now)
+    const endToday = getEndOfDayInPhilippines(now)
+    
+    const approvedLeave = await prisma.leaveRequest.findFirst({
+      where: {
+        users_id,
+        status: 'APPROVED',
+        startDate: { lte: endToday },
+        endDate: { gte: startToday }
+      }
+    })
+
+    if (approvedLeave) {
+      const leaveType = approvedLeave.isPaid ? 'paid' : 'unpaid'
+      return NextResponse.json({ 
+        error: `You are on approved ${leaveType} leave from ${new Date(approvedLeave.startDate).toLocaleDateString()} to ${new Date(approvedLeave.endDate).toLocaleDateString()}. Attendance cannot be recorded during leave.`,
+        onLeave: true,
+        leaveDetails: {
+          type: leaveType,
+          startDate: approvedLeave.startDate,
+          endDate: approvedLeave.endDate
+        }
+      }, { status: 403 })
     }
 
     const settings = await prisma.attendanceSettings.findFirst()

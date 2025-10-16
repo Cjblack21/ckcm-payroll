@@ -32,38 +32,42 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          console.log("Attempting to authenticate user:", credentials.email)
-          
-          // Test database connection first
-          await prisma.$connect()
+          const inputEmail = credentials.email.trim().toLowerCase()
+          const inputPassword = credentials.password.trim()
+          console.log("Attempting to authenticate user:", inputEmail)
           
           const user = await prisma.user.findUnique({
             where: {
-              email: credentials.email
+              email: inputEmail
             }
           })
 
           if (!user) {
-            console.log("User not found:", credentials.email)
+            console.log("User not found:", inputEmail)
             return null
           }
 
           if (!user.isActive) {
-            console.log("User account is inactive:", credentials.email)
+            console.log("User account is inactive:", inputEmail)
+            return null
+          }
+
+          if (!user.password) {
+            console.log("No password set for user (OAuth-only account):", inputEmail)
             return null
           }
 
           const isPasswordValid = await bcrypt.compare(
-            credentials.password,
+            inputPassword,
             user.password
           )
 
           if (!isPasswordValid) {
-            console.log("Invalid password for user:", credentials.email)
+            console.log("Invalid password for user:", inputEmail)
             return null
           }
 
-          console.log("Authentication successful for user:", credentials.email)
+          console.log("Authentication successful for user:", inputEmail)
           return {
             id: user.users_id,
             email: user.email,
@@ -74,8 +78,6 @@ export const authOptions: NextAuthOptions = {
           console.error("Auth error:", error)
           // Return null instead of throwing to prevent JSON parsing errors
           return null
-        } finally {
-          await prisma.$disconnect()
         }
       }
     })

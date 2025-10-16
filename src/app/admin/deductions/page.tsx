@@ -192,6 +192,11 @@ export default function DeductionsPage() {
       
       // Add main form data if it has a selected type
       if (selectedTypeId) {
+        // Validate that either selectAll is true or employees are selected
+        if (!selectAll && selectedEmployeeIds.length === 0) {
+          toast.error("Please select at least one employee or enable 'Select All'")
+          return
+        }
         allEntries.push({
           deduction_types_id: selectedTypeId,
           notes: notes,
@@ -202,8 +207,13 @@ export default function DeductionsPage() {
       
       // Add additional entries
       if (entries.length > 0) {
-        entries.forEach(entry => {
+        for (const entry of entries) {
           if (entry.typeId) { // Only add if type is selected
+            // Validate that either selectAll is true or employees are selected
+            if (!entry.selectAll && entry.employeeIds.length === 0) {
+              toast.error("Please select at least one employee for each deduction or enable 'Select All'")
+              return
+            }
             allEntries.push({
               deduction_types_id: entry.typeId,
               notes: entry.notes,
@@ -211,7 +221,7 @@ export default function DeductionsPage() {
               employees: entry.employeeIds
             })
           }
-        })
+        }
       }
       
       // Validate that we have at least one entry

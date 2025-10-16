@@ -14,6 +14,7 @@ const settingsSchema = z.object({
   noTimeOutCutoff: z.boolean().default(false),
   periodStart: z.string().optional().nullable().transform(val => val && val !== '' ? parsePhilippinesLocalDate(val) : undefined),
   periodEnd: z.string().optional().nullable().transform(val => val && val !== '' ? parsePhilippinesLocalDate(val, true) : undefined),
+  payrollReleaseTime: z.string().optional().nullable(),
   autoMarkAbsent: z.boolean().default(true),
   autoMarkLate: z.boolean().default(true),
 })

@@ -31,7 +31,15 @@ export async function GET() {
       })
     }
 
-    return NextResponse.json(settings)
+    // Parse workingDays from JSON string to array
+    const parsedSettings = {
+      ...settings,
+      workingDays: typeof settings.workingDays === 'string' 
+        ? JSON.parse(settings.workingDays) 
+        : settings.workingDays
+    }
+
+    return NextResponse.json(parsedSettings)
 
   } catch (error) {
     console.error('Error fetching header settings:', error)

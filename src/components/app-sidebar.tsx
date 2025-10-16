@@ -36,6 +36,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 
@@ -44,7 +45,7 @@ const getNavData = (user?: { name?: string | null, email?: string }) => ({
   user: {
     name: user?.name || "System Administrator",
     email: user?.email || "admin@pms.com",
-    avatar: "/avatars/admin.jpg",
+    avatar: "",
   },
   navMain: [],
   projects: [],
@@ -56,21 +57,32 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const data = getNavData(user)
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+  if (!mounted) return null
   
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <img 
-            src="/ckcm.png" 
-            alt="CKCM Logo" 
-            className="h-8 w-8 object-contain"
-          />
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">CKCM PMS</span>
-            <span className="text-xs text-muted-foreground">Administrator</span>
-          </div>
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/admin/dashboard">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <img 
+                    src="/ckcm.png" 
+                    alt="CKCM Logo" 
+                    className="h-8 w-8 object-contain"
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold">CKCM PMS</span>
+                  <span className="text-xs">Administrator</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden">
         {/* Main Dashboard */}

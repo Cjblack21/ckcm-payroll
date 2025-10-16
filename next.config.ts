@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
+// Allow hosting the app under a sub-path in production, e.g. /attendance-portal
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH;
+
 const nextConfig: NextConfig = {
+  ...(BASE_PATH ? { basePath: BASE_PATH } : {}),
   eslint: {
     ignoreDuringBuilds: true,
   },

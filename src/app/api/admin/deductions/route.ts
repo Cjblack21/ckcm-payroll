@@ -58,10 +58,13 @@ export async function POST(req: NextRequest) {
       if (entry.selectAll) {
         const activeUsers = await prisma.user.findMany({ where: { isActive: true, role: 'PERSONNEL' }, select: { users_id: true } })
         targetEmployeeIds = activeUsers.map((u) => u.users_id)
+        if (targetEmployeeIds.length === 0) {
+          throw new Error("No active personnel found")
+        }
       } else if (entry.employees && entry.employees.length > 0) {
         targetEmployeeIds = entry.employees
       } else {
-        throw new Error("No employees selected")
+        throw new Error("No employees selected. Please select employees or enable 'Select All'")
       }
 
       // Get the amount from the deduction type
@@ -93,8 +96,12 @@ export async function POST(req: NextRequest) {
     const created = await prisma.$transaction(tx)
     return NextResponse.json({ count: created.length }, { status: 201 })
   } catch (error) {
+    console.error('Error creating deductions:', error)
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Validation failed", details: error.issues }, { status: 400 })
+    }
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
     return NextResponse.json({ error: "Failed to create deductions" }, { status: 500 })
   }

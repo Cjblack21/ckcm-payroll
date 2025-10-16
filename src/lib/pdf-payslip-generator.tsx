@@ -175,6 +175,8 @@ export interface PayslipData {
     overtimePay: number
     attendanceDeductions: number
     nonAttendanceDeductions: number
+    unpaidLeaveDeduction?: number
+    unpaidLeaveDays?: number
     loanPayments: number
     grossPay: number
     totalDeductions: number
@@ -280,6 +282,14 @@ const Payslip: React.FC<PayslipProps> = ({ employee, period, headerSettings }) =
                 -₱{(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </Text>
             </View>
+            {breakdown.unpaidLeaveDeduction && breakdown.unpaidLeaveDeduction > 0 && (
+              <View style={styles.payrollRow}>
+                <Text style={styles.payrollLabel}>Unpaid Leave ({breakdown.unpaidLeaveDays}d):</Text>
+                <Text style={styles.payrollValue}>
+                  -₱{(breakdown.unpaidLeaveDeduction || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </Text>
+              </View>
+            )}
             <View style={styles.payrollRow}>
               <Text style={styles.payrollLabel}>Loans:</Text>
               <Text style={styles.payrollValue}>

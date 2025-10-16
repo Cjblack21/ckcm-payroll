@@ -187,6 +187,7 @@ model AttendanceSettings {
   autoMarkLate           Boolean   @default(true)
   periodEnd              DateTime?
   periodStart            DateTime?
+  payrollReleaseTime     String?   @default("17:00")
 
   @@map("attendance_settings")
 }
@@ -220,17 +221,20 @@ model PayrollSchedule {
 }
 
 model LeaveRequest {
-  leave_requests_id String    @id @default(cuid()) @map("leave_requests_id")
+  leave_requests_id String      @id @default(cuid()) @map("leave_requests_id")
   users_id          String
   type              LeaveType
+  customLeaveType   String?
   startDate         DateTime
   endDate           DateTime
-  reason            String?   @db.LongText
+  days              Int         @default(1)
+  isPaid            Boolean     @default(true)
+  reason            String?     @db.LongText
   status            LeaveStatus @default(PENDING)
-  admin_id          String?   
-  adminComment      String?   @db.LongText
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  admin_id          String?
+  adminComment      String?     @db.LongText
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   user User @relation(fields: [users_id], references: [users_id])
 
@@ -270,9 +274,18 @@ enum LeaveStatus {
 }
 
 enum LeaveType {
-  ANNUAL
+  VACATION
+  FMLA
+  PARENTAL
   SICK
   UNPAID
+  PERSONAL
+  PUBLIC_HOLIDAY
+  RELIGIOUS
+  SABBATICAL
+  BEREAVEMENT
+  COMPENSATORY
+  CUSTOM
 }
 
 enum HolidayType {
