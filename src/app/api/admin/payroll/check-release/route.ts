@@ -21,9 +21,14 @@ export async function POST() {
       return NextResponse.json({ success: false, message: 'No settings configured' })
     }
 
+    // Store non-null values
+    const periodStartDate = settings.periodStart
+    const periodEndDate = settings.periodEnd
+    const timeOutEnd = settings.timeOutEnd
+
     // Calculate release time (period end date at time-out end time)
-    const periodEnd = new Date(settings.periodEnd)
-    const [hours, minutes] = settings.timeOutEnd.split(':').map(Number)
+    const periodEnd = new Date(periodEndDate)
+    const [hours, minutes] = timeOutEnd.split(':').map(Number)
     periodEnd.setHours(hours, minutes, 0, 0)
     
     const now = new Date()
@@ -36,16 +41,16 @@ export async function POST() {
     // Check if payroll exists and is not released
     const pendingPayroll = await prisma.payrollEntry.findFirst({
       where: {
-        periodStart: { gte: new Date(settings.periodStart) },
-        periodEnd: { lte: new Date(settings.periodEnd) },
+        periodStart: { gte: new Date(periodStartDate) },
+        periodEnd: { lte: new Date(periodEndDate) },
         status: 'PENDING'
       }
     })
 
     if (pendingPayroll) {
-      const periodStart = new Date(settings.periodStart).toLocaleDateString()
-      const periodEndStr = new Date(settings.periodEnd).toLocaleDateString()
-      const releaseTimeStr = settings.timeOutEnd
+      const periodStart = new Date(periodStartDate).toLocaleDateString()
+      const periodEndStr = new Date(periodEndDate).toLocaleDateString()
+      const releaseTimeStr = timeOutEnd
       
       // 24 hours before release (between 24h and 23h before)
       if (hoursUntilRelease <= 24 && hoursUntilRelease > 23) {
@@ -74,7 +79,7 @@ export async function POST() {
       success: true, 
       canRelease,
       notificationSent: false,
-      releaseTime: settings.timeOutEnd
+      releaseTime: timeOutEnd
     })
 
   } catch (error) {
