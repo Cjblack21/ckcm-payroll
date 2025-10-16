@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     // Create notification for all users about payroll reschedule
     try {
       // Get all active users
-      const activeUsers = await prisma.users.findMany({
+      const activeUsers = await prisma.user.findMany({
         where: { 
           status: 'ACTIVE',
           role: { not: 'ADMIN' } // Don't notify admins, they already know
