@@ -35,20 +35,21 @@ export function LoginForm({
 
     try {
       const result = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
+        email: data.email.trim().toLowerCase(),
+        password: data.password.trim(),
         redirect: false,
       })
-
-      if (result?.error) {
-        console.error("SignIn error:", result.error)
-        if (result.error === "CredentialsSignin") {
+      const err = result?.error
+      if (err) {
+        console.warn("SignIn error:", err)
+        if (err === "CredentialsSignin") {
           toast.error("Invalid email or password")
-        } else if (result.error === "CLIENT_FETCH_ERROR") {
+        } else if (err === "CLIENT_FETCH_ERROR") {
           toast.error("Connection error. Please check your network and try again.")
         } else {
-          toast.error(`Login failed: ${result.error}`)
+          toast.error(`Login failed: ${err}`)
         }
+      } else if (result?.ok) {
       } else if (result?.ok) {
         toast.success("Logged in successfully!")
         router.push("/dashboard")
@@ -70,9 +71,10 @@ export function LoginForm({
         redirect: false 
       })
       
-      if (result?.error) {
-        console.error("Google sign in error:", result.error)
-        toast.error(`Google sign in failed: ${result.error}`)
+      const err = result?.error
+      if (err) {
+        console.error("Google sign in error:", err)
+        toast.error(`Google sign in failed: ${err}`)
       } else if (result?.ok) {
         toast.success("Google sign in successful!")
         router.push("/dashboard")

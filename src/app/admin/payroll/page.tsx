@@ -124,40 +124,50 @@ export default function PayrollPage() {
           !d.type.includes('Tardiness') &&
           !d.type.includes('Partial')
         ).map((d: any) => `${d.type}: ₱${d.amount}`))
+
+        // Coerce numeric fields and compute a reliable net pay fallback
+        const basicSalary = Number(entry?.personnelType?.basicSalary ?? entry?.grossSalary ?? 0)
+        const attendanceDeductions = Number(entry?.attendanceDeductions ?? 0)
+        const loanDeductions = Number(entry?.loanPayments ?? 0)
+        const otherDeductions = Number(entry?.databaseDeductions ?? 0)
+        const computedNet = basicSalary - (attendanceDeductions + loanDeductions + otherDeductions)
+        const netFromServer = Number(entry?.netSalary ?? entry?.netPay ?? NaN)
+        const finalNet = Number.isFinite(netFromServer) ? netFromServer : computedNet
+
         return {
-        users_id: entry.users_id,
-        name: entry.name,
-        email: entry.email,
-        totalWorkHours: entry.totalWorkHours || 0,
-        finalNetPay: entry.netSalary || 0,
-        status: entry.status || 'Pending',
-        breakdown: {
-          basicSalary: entry.personnelType?.basicSalary || 0,
-          attendanceDeductions: entry.attendanceDeductions || 0, // Real-time calculated attendance deductions
-          loanDeductions: entry.loanPayments || 0,
-          otherDeductions: entry.databaseDeductions || 0, // Database deductions (Philhealth, SSS, etc.)
-          attendanceDetails: entry.attendanceRecords?.map((record: any) => ({
-            date: record.date,
-            timeIn: record.timeIn,
-            timeOut: record.timeOut,
-            workHours: record.workHours || 0,
-            status: record.status,
-            deduction: record.deductions || 0
-          })) || [],
-          loanDetails: [], // Would be populated from loan data
-          otherDeductionDetails: entry.deductionDetails?.filter((deduction: any) => {
-            // Only include non-attendance deductions (like Philhealth, SSS, etc.)
-            return !deduction.type.includes('Late') && 
-                   !deduction.type.includes('Absent') &&
-                   !deduction.type.includes('Early') &&
-                   !deduction.type.includes('Tardiness') &&
-                   !deduction.type.includes('Partial')
-          }).map((deduction: any) => ({
-            type: deduction.type,
-            amount: deduction.amount,
-            description: deduction.description || ''
-          })) || []
-        }
+          users_id: entry.users_id,
+          name: entry.name,
+          email: entry.email,
+          totalWorkHours: Number(entry.totalWorkHours ?? 0),
+          finalNetPay: finalNet,
+          status: entry.status || 'Pending',
+          breakdown: {
+            basicSalary,
+            attendanceDeductions, // Real-time calculated attendance deductions
+            loanDeductions,
+            otherDeductions, // Database deductions (Philhealth, SSS, etc.)
+            attendanceDetails: entry.attendanceRecords?.map((record: any) => ({
+              date: record.date,
+              timeIn: record.timeIn,
+              timeOut: record.timeOut,
+              workHours: Number(record.workHours ?? 0),
+              status: record.status,
+              deduction: Number(record.deductions ?? 0)
+            })) || [],
+            loanDetails: [], // Would be populated from loan data
+            otherDeductionDetails: entry.deductionDetails?.filter((deduction: any) => {
+              // Only include non-attendance deductions (like Philhealth, SSS, etc.)
+              return !deduction.type.includes('Late') && 
+                     !deduction.type.includes('Absent') &&
+                     !deduction.type.includes('Early') &&
+                     !deduction.type.includes('Tardiness') &&
+                     !deduction.type.includes('Partial')
+            }).map((deduction: any) => ({
+              type: deduction.type,
+              amount: Number(deduction.amount ?? 0),
+              description: deduction.description || ''
+            })) || []
+          }
         }
       })
 
@@ -696,7 +706,13 @@ export default function PayrollPage() {
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <DollarSign className="h-4 w-4 text-green-600" />
-                            {formatCurrency(entry.finalNetPay)}
+                            {formatCurrency(
+                              Number(entry.breakdown.basicSalary) - (
+                                Number(entry.breakdown.attendanceDeductions) +
+                                Number(entry.breakdown.loanDeductions) +
+                                Number(entry.breakdown.otherDeductions)
+                              )
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -782,7 +798,13 @@ export default function PayrollPage() {
                                         <hr />
                                         <div className="flex justify-between text-lg font-bold text-green-600">
                                           <span>Final Net Pay:</span>
-                                          <span>{formatCurrency(selectedEntry.finalNetPay)}</span>
+                                          <span>{formatCurrency(
+                                            Number(selectedEntry.breakdown.basicSalary) - (
+                                              Number(selectedEntry.breakdown.attendanceDeductions) +
+                                              Number(selectedEntry.breakdown.loanDeductions) +
+                                              Number(selectedEntry.breakdown.otherDeductions)
+                                            )
+                                          )}</span>
                                         </div>
                                       </div>
                                     </CardContent>
