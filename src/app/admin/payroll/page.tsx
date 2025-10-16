@@ -31,6 +31,7 @@ type PayrollEntry = {
   breakdown: {
     basicSalary: number
     attendanceDeductions: number
+    leaveDeductions: number
     loanDeductions: number
     otherDeductions: number
     attendanceDetails: AttendanceDetail[]
@@ -101,10 +102,13 @@ export default function PayrollPage() {
   const [payrollPeriodStart, setPayrollPeriodStart] = useState('')
   const [payrollPeriodEnd, setPayrollPeriodEnd] = useState('')
   const [payrollReleaseTime, setPayrollReleaseTime] = useState('17:00')
+  const [originalReleaseTime, setOriginalReleaseTime] = useState('17:00') // Store original time-out end time
   const [savingPeriod, setSavingPeriod] = useState(false)
   const [canRelease, setCanRelease] = useState(false)
   const [settingsCustomDays, setSettingsCustomDays] = useState('')
   const [timeUntilRelease, setTimeUntilRelease] = useState('')
+  const [useTestingMode, setUseTestingMode] = useState(false)
+  const [testingMinutes, setTestingMinutes] = useState('2')
 
   // Load payroll data
   const loadPayrollData = async () => {
@@ -133,11 +137,24 @@ export default function PayrollPage() {
         // Coerce numeric fields and compute a reliable net pay fallback
         const basicSalary = Number(entry?.personnelType?.basicSalary ?? entry?.grossSalary ?? 0)
         const attendanceDeductions = Number(entry?.attendanceDeductions ?? 0)
+        const leaveDeductions = Number(entry?.unpaidLeaveDeduction ?? 0) // Map from backend
         const loanDeductions = Number(entry?.loanPayments ?? 0)
         const otherDeductions = Number(entry?.databaseDeductions ?? 0)
-        const computedNet = basicSalary - (attendanceDeductions + loanDeductions + otherDeductions)
+        const computedNet = basicSalary - (attendanceDeductions + leaveDeductions + loanDeductions + otherDeductions)
         const netFromServer = Number(entry?.netSalary ?? entry?.netPay ?? NaN)
         const finalNet = Number.isFinite(netFromServer) ? netFromServer : computedNet
+        
+        console.log(`💰 Net Pay Calculation - ${entry.name}:`, {
+          basicSalary,
+          attendanceDeductions,
+          leaveDeductions,
+          loanDeductions,
+          otherDeductions,
+          computedNet,
+          netFromServer,
+          finalNet,
+          rawEntry: entry
+        })
 
         return {
           users_id: entry.users_id,
@@ -150,6 +167,7 @@ export default function PayrollPage() {
           breakdown: {
             basicSalary,
             attendanceDeductions, // Real-time calculated attendance deductions
+            leaveDeductions, // Leave deductions
             loanDeductions,
             otherDeductions, // Database deductions (Philhealth, SSS, etc.)
             attendanceDetails: entry.attendanceRecords?.map((record: any) => ({
@@ -189,7 +207,10 @@ export default function PayrollPage() {
       // Set payroll period settings
       setPayrollPeriodStart(result.summary?.settings?.periodStart || '')
       setPayrollPeriodEnd(result.summary?.settings?.periodEnd || '')
-      setPayrollReleaseTime(result.summary?.settings?.payrollReleaseTime || '17:00')
+      // Use time-out end time as release time (automatic)
+      const releaseTime = result.summary?.settings?.timeOutEnd || result.summary?.settings?.payrollReleaseTime || '17:00'
+      setPayrollReleaseTime(releaseTime)
+      setOriginalReleaseTime(releaseTime) // Store the original automatic time
       // Use settings.hasGeneratedForSettings to control Generate button state
       const generatedState = !!result.summary?.settings?.hasGeneratedForSettings
       console.log('🔍 Payroll UI Debug - hasGeneratedForSettings:', generatedState)
@@ -197,25 +218,106 @@ export default function PayrollPage() {
       console.log('🔍 Payroll UI Debug - Payroll entries count:', entries.length)
       setHasGeneratedForSettings(generatedState)
       
-      // Check if current date/time is on or after period end date + release time
-      if (result.summary?.settings?.periodEnd && result.summary?.settings?.payrollReleaseTime) {
-        const periodEnd = new Date(result.summary.settings.periodEnd)
-        const releaseTime = result.summary.settings.payrollReleaseTime
-        const [hours, minutes] = releaseTime.split(':').map(Number)
-        
-        // Set the release time on the period end date
-        periodEnd.setHours(hours, minutes, 0, 0)
-        
-        const now = new Date()
-        const canReleaseNow = now >= periodEnd
-        setCanRelease(canReleaseNow)
-        console.log('🔍 Release Check - Now:', now.toISOString(), 'Period End + Release Time:', periodEnd.toISOString(), 'Can Release:', canReleaseNow)
+      // Check release status and send notifications if needed
+      if (result.summary?.settings?.periodEnd) {
+        try {
+          const checkResponse = await fetch('/api/admin/payroll/check-release', {
+            method: 'POST'
+          })
+          if (checkResponse.ok) {
+            const checkData = await checkResponse.json()
+            setCanRelease(checkData.canRelease)
+            if (checkData.releaseTime) {
+              setPayrollReleaseTime(checkData.releaseTime)
+            }
+            console.log('🔍 Release Check - Can Release:', checkData.canRelease, 'Notification Sent:', checkData.notificationSent)
+          }
+        } catch (error) {
+          console.error('Error checking release status:', error)
+          setCanRelease(false)
+        }
       } else {
         setCanRelease(false)
       }
     } catch (error) {
       console.error('Error loading payroll data:', error)
       toast.error('Failed to load payroll data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Automatic release function (called when countdown hits zero)
+  const handleAutoReleasePayroll = async () => {
+    try {
+      setLoading(true)
+      toast.loading('Auto-releasing payroll...', { id: 'auto-release-payroll' })
+
+      // Calculate next period dates automatically
+      let calculatedNextStart = ''
+      let calculatedNextEnd = ''
+      
+      if (currentPeriod?.periodStart && currentPeriod?.periodEnd) {
+        const start = new Date(currentPeriod.periodStart)
+        const end = new Date(currentPeriod.periodEnd)
+        const durationDays = calculatePeriodDurationInPhilippines(start, end)
+        const nextStart = new Date(end)
+        nextStart.setDate(end.getDate() + 1)
+        const nextEnd = new Date(nextStart)
+        nextEnd.setDate(nextStart.getDate() + durationDays - 1)
+        
+        calculatedNextStart = toPhilippinesDateString(nextStart)
+        calculatedNextEnd = toPhilippinesDateString(nextEnd)
+      }
+
+      // Release payroll with auto-calculated next period
+      const result = await releasePayrollWithAudit(calculatedNextStart, calculatedNextEnd)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to auto-release payroll')
+      }
+
+      toast.success(`🎉 Payroll auto-released successfully for ${result.releasedCount} employees!`, { id: 'auto-release-payroll' })
+      
+      // Auto-generate payslips after successful release
+      toast.loading('Generating payslips...', { id: 'auto-generate-payslips' })
+      setTimeout(async () => {
+        try {
+          await handleGeneratePayslips()
+          toast.success('Payslips generated successfully!', { id: 'auto-generate-payslips' })
+        } catch (error) {
+          console.error('Error auto-generating payslips:', error)
+          toast.error('Payroll released but failed to auto-generate payslips. Please generate manually.', { id: 'auto-generate-payslips' })
+        }
+      }, 1000)
+
+      // Update UI state
+      setPayrollEntries(prevEntries => 
+        prevEntries.map(entry => ({
+          ...entry,
+          status: 'Released' as const
+        }))
+      )
+
+      setCurrentPeriod(prevPeriod => prevPeriod ? {
+        ...prevPeriod,
+        status: 'Released'
+      } : null)
+
+      setHasGeneratedForSettings(false)
+      
+      // If in testing mode, reset back to original release time and disable testing mode
+      if (useTestingMode) {
+        setPayrollReleaseTime(originalReleaseTime)
+        setUseTestingMode(false)
+        toast.success('Testing mode disabled. Release time reset to automatic time-out end.', { duration: 3000 })
+      }
+      
+      // Reload payroll data
+      await loadPayrollData()
+      
+    } catch (error) {
+      console.error('Error auto-releasing payroll:', error)
+      toast.error(`Failed to auto-release payroll: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'auto-release-payroll' })
     } finally {
       setLoading(false)
     }
@@ -508,23 +610,25 @@ export default function PayrollPage() {
 
   // Format currency - exactly 2 decimal places
   const formatCurrency = (amount: number) => {
+    // Handle NaN, null, undefined
+    const safeAmount = Number.isFinite(amount) ? amount : 0
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
       currency: 'PHP',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(amount)
+    }).format(safeAmount)
   }
 
   // Get status badge
   const getStatusBadge = (status: string) => {
     const variants = {
-      'Pending': 'bg-yellow-100 text-yellow-800',
-      'Released': 'bg-green-100 text-green-800',
-      'Archived': 'bg-gray-100 text-gray-800'
+      'Pending': 'bg-yellow-100 dark:bg-yellow-950/30 text-yellow-800 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800',
+      'Released': 'bg-orange-100 dark:bg-orange-950/30 text-orange-800 dark:text-orange-400 border-orange-200 dark:border-orange-800',
+      'Archived': 'bg-muted text-muted-foreground border-border'
     }
     return (
-      <Badge className={variants[status as keyof typeof variants] || 'bg-gray-100 text-gray-800'}>
+      <Badge className={variants[status as keyof typeof variants] || 'bg-muted text-muted-foreground border-border'}>
         {status}
       </Badge>
     )
@@ -543,23 +647,49 @@ export default function PayrollPage() {
 
   // Timer to update countdown every second
   useEffect(() => {
-    if (!currentPeriod?.periodEnd || !payrollReleaseTime || canRelease) {
+    if (!currentPeriod?.periodEnd || !payrollReleaseTime) {
       setTimeUntilRelease('')
       return
     }
 
     const updateCountdown = () => {
-      const periodEnd = new Date(currentPeriod.periodEnd)
-      const [hours, minutes] = payrollReleaseTime.split(':').map(Number)
-      periodEnd.setHours(hours, minutes, 0, 0)
-      
       const now = new Date()
-      const diff = periodEnd.getTime() - now.getTime()
+      const [hours, minutes] = payrollReleaseTime.split(':').map(Number)
+      
+      // In testing mode, use today's date with the manual time
+      // Otherwise, use period end date with the release time
+      let releaseDateTime: Date
+      if (useTestingMode) {
+        // Testing mode: use the exact time set (could be future or past)
+        releaseDateTime = new Date()
+        releaseDateTime.setHours(hours, minutes, 0, 0)
+        
+        // IMPORTANT: Don't move to tomorrow in testing mode
+        // This allows testing with times that are coming up soon
+      } else {
+        // Normal mode: use period end date
+        releaseDateTime = new Date(currentPeriod.periodEnd)
+        releaseDateTime.setHours(hours, minutes, 0, 0)
+      }
+      
+      const diff = releaseDateTime.getTime() - now.getTime()
       
       if (diff <= 0) {
         setTimeUntilRelease('Release available now!')
-        setCanRelease(true)
+        if (!canRelease) {
+          setCanRelease(true)
+          // Auto-release payroll when countdown reaches zero
+          if (hasGeneratedForSettings && currentPeriod?.status !== 'Released') {
+            console.log('🚀 Auto-releasing payroll...')
+            handleAutoReleasePayroll()
+          }
+        }
         return
+      }
+      
+      // If we're counting down, make sure canRelease is false
+      if (canRelease) {
+        setCanRelease(false)
       }
       
       const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -578,7 +708,7 @@ export default function PayrollPage() {
     const interval = setInterval(updateCountdown, 1000)
     
     return () => clearInterval(interval)
-  }, [currentPeriod?.periodEnd, payrollReleaseTime, canRelease])
+  }, [currentPeriod?.periodEnd, payrollReleaseTime, canRelease, useTestingMode])
 
   // Load archived payrolls when archive tab is accessed
   useEffect(() => {
@@ -586,6 +716,25 @@ export default function PayrollPage() {
       loadArchivedPayrolls()
     }
   }, [activeTab])
+
+  // Periodic check for reminder notifications (every 30 minutes)
+  useEffect(() => {
+    const checkReminders = async () => {
+      try {
+        await fetch('/api/admin/payroll/check-release', { method: 'POST' })
+      } catch (error) {
+        console.error('Error checking reminders:', error)
+      }
+    }
+
+    // Check immediately on mount
+    checkReminders()
+
+    // Then check every 30 minutes
+    const interval = setInterval(checkReminders, 30 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -619,16 +768,16 @@ export default function PayrollPage() {
 
       {/* Release Countdown Timer */}
       {!canRelease && currentPeriod && currentPeriod.status !== 'Released' && timeUntilRelease && (
-        <Card className="border-2 border-yellow-500 bg-yellow-50">
+        <Card className="border-2 border-yellow-500 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-yellow-800 mb-1">Payroll Release Countdown</p>
-                <p className="text-xs text-yellow-600">Release available on {formatDateForDisplay(new Date(currentPeriod.periodEnd))} at {payrollReleaseTime}</p>
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400 mb-1">Payroll Release Countdown</p>
+                <p className="text-xs text-yellow-600 dark:text-yellow-500">Release available on {formatDateForDisplay(new Date(currentPeriod.periodEnd))} at {payrollReleaseTime}</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-yellow-700 mb-1">Release in:</p>
-                <div className="text-4xl font-bold font-mono text-yellow-900 tracking-wider">
+                <p className="text-xs text-yellow-700 dark:text-yellow-500 mb-1">Release in:</p>
+                <div className="text-4xl font-bold font-mono text-yellow-900 dark:text-yellow-400 tracking-wider">
                   {timeUntilRelease}
                 </div>
               </div>
@@ -639,13 +788,13 @@ export default function PayrollPage() {
 
       {/* Release Ready Banner */}
       {canRelease && currentPeriod && currentPeriod.status !== 'Released' && (
-        <Card className="border-2 border-green-500 bg-green-50">
+        <Card className="border-2 border-orange-500 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30">
           <CardContent className="p-6">
             <div className="flex items-center justify-center gap-3">
               <div className="text-4xl">✓</div>
               <div>
-                <p className="text-lg font-bold text-green-800">Payroll Release Available!</p>
-                <p className="text-sm text-green-600">You can now release the payroll</p>
+                <p className="text-lg font-bold text-orange-800 dark:text-orange-400">Payroll Release Available!</p>
+                <p className="text-sm text-orange-600 dark:text-orange-500">You can now release the payroll</p>
               </div>
             </div>
           </CardContent>
@@ -779,11 +928,11 @@ export default function PayrollPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4 text-green-600" />
+                          <div className="font-medium text-green-600">
                             {formatCurrency(
                               Number(entry.breakdown.basicSalary) - (
                                 Number(entry.breakdown.attendanceDeductions) +
+                                Number(entry.breakdown.leaveDeductions) +
                                 Number(entry.breakdown.loanDeductions) +
                                 Number(entry.breakdown.otherDeductions)
                               )
@@ -873,6 +1022,10 @@ export default function PayrollPage() {
                                           <span>-{formatCurrency(selectedEntry.breakdown.attendanceDeductions)}</span>
                                         </div>
                                         <div className="flex justify-between text-red-600">
+                                          <span>Leave Deductions:</span>
+                                          <span>-{formatCurrency(selectedEntry.breakdown.leaveDeductions)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-red-600">
                                           <span>Loan Deductions:</span>
                                           <span>-{formatCurrency(selectedEntry.breakdown.loanDeductions)}</span>
                                         </div>
@@ -886,6 +1039,7 @@ export default function PayrollPage() {
                                           <span>{formatCurrency(
                                             Number(selectedEntry.breakdown.basicSalary) - (
                                               Number(selectedEntry.breakdown.attendanceDeductions) +
+                                              Number(selectedEntry.breakdown.leaveDeductions) +
                                               Number(selectedEntry.breakdown.loanDeductions) +
                                               Number(selectedEntry.breakdown.otherDeductions)
                                             )
@@ -1261,16 +1415,129 @@ export default function PayrollPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="payrollReleaseTime">Release Time</Label>
+                    <Label htmlFor="payrollReleaseTime">Release Time (Auto: Time-out End)</Label>
                     <Input
                       id="payrollReleaseTime"
                       type="time"
                       value={payrollReleaseTime}
                       onChange={(e) => setPayrollReleaseTime(e.target.value)}
+                      disabled={!useTestingMode}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Payroll can only be released after this time on period end date</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {useTestingMode ? 'Manual override for testing' : 'Automatically set to time-out end time from attendance settings'}
+                    </p>
                   </div>
                 </div>
+                
+                {/* Testing Mode */}
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="testingMode" className="text-base font-semibold">🧪 Testing Mode</Label>
+                      <p className="text-xs text-muted-foreground mt-1">Enable to manually set release time for testing (normally auto-set to time-out end)</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        id="testingMode"
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={useTestingMode}
+                        onChange={(e) => setUseTestingMode(e.target.checked)}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+                  
+                  {useTestingMode && (
+                    <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 space-y-4">
+                      <div>
+                        <Label>Quick Test: Release in X Minutes</Label>
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            type="number"
+                            placeholder="Minutes"
+                            value={testingMinutes}
+                            onChange={(e) => setTestingMinutes(e.target.value)}
+                            min="1"
+                            max="60"
+                            className="w-24"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const minutes = parseInt(testingMinutes)
+                              if (minutes > 0) {
+                                const now = new Date()
+                                now.setMinutes(now.getMinutes() + minutes)
+                                const hours = now.getHours().toString().padStart(2, '0')
+                                const mins = now.getMinutes().toString().padStart(2, '0')
+                                setPayrollReleaseTime(`${hours}:${mins}`)
+                                toast.success(`Release time set to ${minutes} minute(s) from now: ${hours}:${mins}`)
+                              }
+                            }}
+                            disabled={!testingMinutes || parseInt(testingMinutes) <= 0}
+                          >
+                            Set Release Time
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const now = new Date()
+                              now.setMinutes(now.getMinutes() + 1)
+                              const hours = now.getHours().toString().padStart(2, '0')
+                              const mins = now.getMinutes().toString().padStart(2, '0')
+                              setPayrollReleaseTime(`${hours}:${mins}`)
+                              toast.success(`Release time set to 1 minute from now: ${hours}:${mins}`)
+                            }}
+                          >
+                            1 min
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const now = new Date()
+                              now.setMinutes(now.getMinutes() + 2)
+                              const hours = now.getHours().toString().padStart(2, '0')
+                              const mins = now.getMinutes().toString().padStart(2, '0')
+                              setPayrollReleaseTime(`${hours}:${mins}`)
+                              toast.success(`Release time set to 2 minutes from now: ${hours}:${mins}`)
+                            }}
+                          >
+                            2 min
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="border-t border-orange-200 dark:border-orange-800 pt-3">
+                        <Label>Or Set Custom Time Directly</Label>
+                        <p className="text-xs text-muted-foreground mb-2">You can edit the Release Time field above or click the button below to set it to now</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const now = new Date()
+                            const hours = now.getHours().toString().padStart(2, '0')
+                            const mins = now.getMinutes().toString().padStart(2, '0')
+                            setPayrollReleaseTime(`${hours}:${mins}`)
+                            toast.success(`Release time set to now: ${hours}:${mins}`)
+                          }}
+                        >
+                          Set to Current Time
+                        </Button>
+                      </div>
+                      
+                      <p className="text-xs text-orange-600 dark:text-orange-400">⚠️ Remember to disable testing mode and save to use automatic time-out end time</p>
+                    </div>
+                  )}
+                </div>
+                
                 {payrollPeriodStart && payrollPeriodEnd && (
                   <div className="text-sm text-muted-foreground">
                     <strong>Working Days:</strong> {

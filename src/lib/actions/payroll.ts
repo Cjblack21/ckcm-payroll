@@ -328,7 +328,7 @@ export async function getPayrollSummary(): Promise<{
           orderBy: { date: 'asc' }
         })
 
-        // Compute total work hours and rebuild attendanceRecords (minimal fields for UI)
+        // Compute total work hours and rebuild attendanceRecords with per-day deductions (so UI can display them)
         let totalWorkHours = 0
         const attendanceRecords = att.map(r => {
           let hours = 0
@@ -338,6 +338,33 @@ export async function getPayrollSummary(): Promise<{
             hours = Math.max(0, (to.getTime() - ti.getTime()) / (1000 * 60 * 60))
           }
           totalWorkHours += hours
+
+          // Compute per-record deduction mirroring attendance rules
+          let recordDeduction = 0
+          if (r.status === 'LATE' && r.timeIn) {
+            const ti = new Date(r.timeIn)
+            const expected = new Date(r.date)
+            const [h, m] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
+            // Keep the +1 minute tolerance used by stored-entry path to match older logic
+            const m2 = m + 1
+            if (m2 >= 60) expected.setHours(h + 1, m2 - 60, 0, 0)
+            else expected.setHours(h, m2, 0, 0)
+            const perSec = (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) / workingDaysInPeriod / 8 / 60 / 60
+            const seconds = Math.max(0, (ti.getTime() - expected.getTime()) / 1000)
+            const daily = (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) / workingDaysInPeriod
+            recordDeduction = Math.min(seconds * perSec, daily * 0.5)
+          } else if (r.status === 'ABSENT') {
+            const daily = (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) / workingDaysInPeriod
+            recordDeduction = daily
+          } else if (r.status === 'PARTIAL') {
+            const basic = se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)
+            const daily = basic / workingDaysInPeriod
+            const hourly = daily / 8
+            // Hours short from expected 8
+            const hoursShort = Math.max(0, 8 - hours)
+            recordDeduction = hoursShort * hourly
+          }
+
           return {
             date: r.date.toISOString().split('T')[0],
             timeIn: r.timeIn?.toISOString() || null,
@@ -345,7 +372,7 @@ export async function getPayrollSummary(): Promise<{
             status: r.status,
             workHours: hours,
             earnings: 0,
-            deductions: 0,
+            deductions: recordDeduction,
           }
         }) as any
 
@@ -1136,6 +1163,20 @@ export async function releasePayroll(entryIds: string[]): Promise<{
       return { success: false, error: 'Unauthorized' }
     }
 
+    // Get payroll entries to find period info and user IDs
+    const entries = await prisma.payrollEntry.findMany({
+      where: {
+        payroll_entries_id: {
+          in: entryIds
+        }
+      },
+      select: {
+        users_id: true,
+        periodStart: true,
+        periodEnd: true
+      }
+    })
+
     // Update payroll entries status to RELEASED
     await prisma.payrollEntry.updateMany({
       where: {
@@ -1148,6 +1189,26 @@ export async function releasePayroll(entryIds: string[]): Promise<{
         releasedAt: new Date()
       }
     })
+
+    // Send notification to all personnel
+    if (entries.length > 0) {
+      const { createNotification } = await import('@/lib/notifications')
+      const periodStart = new Date(entries[0].periodStart).toLocaleDateString()
+      const periodEnd = new Date(entries[0].periodEnd).toLocaleDateString()
+      
+      for (const entry of entries) {
+        try {
+          await createNotification({
+            title: 'Payroll Released',
+            message: `Your payroll for ${periodStart} - ${periodEnd} has been released. View your payslip now.`,
+            type: 'success',
+            userId: entry.users_id
+          })
+        } catch (notifError) {
+          console.error(`Failed to create notification for user ${entry.users_id}:`, notifError)
+        }
+      }
+    }
 
     revalidatePath('/admin/payroll')
     
@@ -1254,6 +1315,20 @@ export async function releasePayrollWithAudit(nextPeriodStart?: string, nextPeri
     const startOfDayPH = new Date(startDate); startOfDayPH.setHours(0,0,0,0)
     const endOfDayPH = new Date(endDate); endOfDayPH.setHours(23,59,59,999)
 
+    // Get entries that will be released (before transaction) for notification sending
+    const entriesToRelease = await prisma.payrollEntry.findMany({
+      where: {
+        periodStart: { gte: startOfDayPH },
+        periodEnd: { lte: endOfDayPH },
+        status: { in: ['PENDING'] }
+      },
+      select: {
+        users_id: true,
+        periodStart: true,
+        periodEnd: true
+      }
+    })
+
     // Atomically: release current period entries and persist next period in AttendanceSettings
     const updateResult = await prisma.$transaction(async (tx) => {
       // Release all pending entries for current period
@@ -1290,6 +1365,41 @@ export async function releasePayrollWithAudit(nextPeriodStart?: string, nextPeri
 
       return res
     })
+
+    // Send notification to all personnel whose payroll was released
+    if (entriesToRelease.length > 0) {
+      const { createNotification } = await import('@/lib/notifications')
+      const periodStart = new Date(entriesToRelease[0].periodStart).toLocaleDateString()
+      const periodEnd = new Date(entriesToRelease[0].periodEnd).toLocaleDateString()
+      
+      // Send notification to each personnel
+      for (const entry of entriesToRelease) {
+        try {
+          await createNotification({
+            title: 'Payroll Released',
+            message: `Your payroll for ${periodStart} - ${periodEnd} has been released. View your payslip now.`,
+            type: 'success',
+            userId: entry.users_id
+          })
+        } catch (notifError) {
+          console.error(`Failed to create notification for user ${entry.users_id}:`, notifError)
+        }
+      }
+      console.log(`✅ Sent payroll release notifications to ${entriesToRelease.length} personnel`)
+      
+      // Send notification to admin
+      try {
+        await createNotification({
+          title: '🎉 Payroll Auto-Released',
+          message: `Payroll for ${periodStart} - ${periodEnd} was automatically released to ${entriesToRelease.length} employees.`,
+          type: 'success',
+          userId: adminId
+        })
+        console.log(`✅ Sent admin notification for automatic payroll release`)
+      } catch (notifError) {
+        console.error(`Failed to create admin notification:`, notifError)
+      }
+    }
 
     // After release, archive the just-released period when the next Generate happens; for now do not reset summary here
 

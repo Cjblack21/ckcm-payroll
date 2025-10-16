@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { createNotification } from '@/lib/notifications'
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,7 +57,32 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Payroll period rescheduled: ${nextPeriodConfig.periodStart.toLocaleDateString()} - ${nextPeriodConfig.periodEnd.toLocaleDateString()}`)
 
-    return NextResponse.json({ 
+    // Create notification for all users about payroll reschedule
+    try {
+      // Get all active users
+      const activeUsers = await prisma.users.findMany({
+        where: { 
+          status: 'ACTIVE',
+          role: { not: 'ADMIN' } // Don't notify admins, they already know
+        },
+        select: { users_id: true }
+      })
+
+      // Create notification for each user
+      for (const user of activeUsers) {
+        await createNotification({
+          title: 'Payroll Period Rescheduled',
+          message: `The next payroll period has been rescheduled to ${nextPeriodConfig.periodStart.toLocaleDateString()} - ${nextPeriodConfig.periodEnd.toLocaleDateString()}${notes ? `. Notes: ${notes}` : ''}`,
+          type: 'info',
+          userId: user.users_id
+        })
+      }
+    } catch (notificationError) {
+      console.error('Error creating payroll reschedule notifications:', notificationError)
+      // Don't fail the main operation if notification creation fails
+    }
+
+    return NextResponse.json({
       success: true,
       message: `Next payroll period set: ${new Date(nextPeriodStart).toLocaleDateString()} - ${new Date(nextPeriodEnd).toLocaleDateString()}`,
       period: {

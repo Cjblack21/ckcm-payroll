@@ -249,29 +249,92 @@ export default function AttendancePage() {
 
       {/* Period Status */}
       {attendanceSettings?.periodStart && attendanceSettings?.periodEnd && (
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-blue-900">Current Attendance Period</h3>
-                <p className="text-sm text-blue-700">
-                  {new Date(attendanceSettings.periodStart).toLocaleDateString()} - {new Date(attendanceSettings.periodEnd).toLocaleDateString()}
-                  {" "}({(() => {
-                    const start = new Date(attendanceSettings.periodStart)
-                    const end = new Date(attendanceSettings.periodEnd)
-                    let days = 0
-                    const current = new Date(start)
-                    while (current <= end) {
-                      if (current.getDay() !== 0) days++ // Exclude Sundays
-                      current.setDate(current.getDate() + 1)
-                    }
-                    return days
-                  })()} working days)
-                </p>
+        <Card className="bg-gradient-to-br from-orange-50 via-orange-100 to-orange-50 dark:from-orange-950/30 dark:via-orange-900/30 dark:to-orange-950/30 border-orange-200 dark:border-orange-800 shadow-sm">
+          <CardContent className="pt-6 pb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Period Info */}
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-background dark:bg-card rounded-lg shadow-sm">
+                  <Calendar className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Current Period</p>
+                  <h3 className="text-lg font-bold text-foreground">
+                    {new Date(attendanceSettings.periodStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {" - "}
+                    {new Date(attendanceSettings.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {(() => {
+                      const start = new Date(attendanceSettings.periodStart)
+                      const end = new Date(attendanceSettings.periodEnd)
+                      let days = 0
+                      const current = new Date(start)
+                      while (current <= end) {
+                        if (current.getDay() !== 0) days++
+                        current.setDate(current.getDate() + 1)
+                      }
+                      return days
+                    })()} working days
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm text-blue-700">
-                  Auto-Mark: {attendanceSettings.autoMarkAbsent ? '✅ Absent' : '❌ Absent'} | {attendanceSettings.autoMarkLate ? '✅ Late' : '❌ Late'}
+
+              {/* Auto-Mark Absent */}
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-lg shadow-sm ${
+                  attendanceSettings.autoMarkAbsent ? 'bg-orange-100 dark:bg-orange-950/30' : 'bg-muted'
+                }`}>
+                  <User className={`w-6 h-6 ${
+                    attendanceSettings.autoMarkAbsent ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Auto-Mark Absent</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-lg font-bold ${
+                      attendanceSettings.autoMarkAbsent ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'
+                    }`}>
+                      {attendanceSettings.autoMarkAbsent ? 'Enabled' : 'Disabled'}
+                    </span>
+                    {attendanceSettings.autoMarkAbsent && (
+                      <Badge variant="default" className="bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-950/30">
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {attendanceSettings.autoMarkAbsent ? 'Automatically marks no-show as absent' : 'Manual marking required'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Auto-Mark Late */}
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-lg shadow-sm ${
+                  attendanceSettings.autoMarkLate ? 'bg-orange-100 dark:bg-orange-950/30' : 'bg-muted'
+                }`}>
+                  <Clock className={`w-6 h-6 ${
+                    attendanceSettings.autoMarkLate ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Auto-Mark Late</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-lg font-bold ${
+                      attendanceSettings.autoMarkLate ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'
+                    }`}>
+                      {attendanceSettings.autoMarkLate ? 'Enabled' : 'Disabled'}
+                    </span>
+                    {attendanceSettings.autoMarkLate && (
+                      <Badge variant="default" className="bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-950/30">
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {attendanceSettings.autoMarkLate ? 'Automatically flags late arrivals' : 'Manual marking required'}
+                  </p>
                 </div>
               </div>
             </div>
