@@ -18,6 +18,7 @@ export default function AttendancePortalPage() {
   const [settings, setSettings] = useState<any>(null)
   const [attendanceStatus, setAttendanceStatus] = useState<any>(null)
   const [showAlreadyTimedInModal, setShowAlreadyTimedInModal] = useState(false)
+  const [leaveStatus, setLeaveStatus] = useState<any>(null)
 
   // Use a configurable base path so the app can be deployed under e.g. /attendance-portal
   const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ""
@@ -100,6 +101,7 @@ export default function AttendancePortalPage() {
   const onPunch = async () => {
     setSaving(true)
     setMessage(null)
+    setLeaveStatus(null)
     
     try {
       // Use API route for attendance portal (no authentication required)
@@ -112,6 +114,10 @@ export default function AttendancePortalPage() {
       const result = await response.json()
       
       if (!response.ok) {
+        // Check if error is due to leave
+        if (result.onLeave) {
+          setLeaveStatus(result.leaveDetails)
+        }
         setMessage(result.error || 'Failed to record attendance')
       } else {
         // Clear the form and show brief success message
@@ -178,44 +184,77 @@ export default function AttendancePortalPage() {
   const outWindow = within(settings?.timeOutStart, settings?.timeOutEnd)
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Clock className="h-5 w-5 text-primary" />
-            <CardTitle className="text-2xl">Attendance Portal</CardTitle>
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-red-50 to-orange-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 relative overflow-hidden p-4">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-400/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-red-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
+
+      <Card className="w-full max-w-2xl relative z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl border-white/20 dark:border-slate-700/50">
+        <CardHeader className="text-center pb-4">
+          {/* Logo/Icon */}
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl shadow-lg flex items-center justify-center">
+              <Clock className="h-10 w-10 text-white" />
+            </div>
           </div>
-          <div className="text-sm text-muted-foreground">
+          <CardTitle className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent mb-2">
+            Attendance Portal
+          </CardTitle>
+          <div className="text-sm sm:text-base text-muted-foreground">
             Submit your time in/out using your School ID
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 p-6 sm:p-8">
           {/* Current Time Display */}
           <div className="text-center">
-            <div className="text-2xl font-mono font-semibold text-primary" suppressHydrationWarning>
-              {mounted ? manilaTime : ''}
+            <div className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-slate-800 dark:to-slate-700 rounded-2xl p-6 border-2 border-orange-200/50 dark:border-orange-900/30 shadow-inner">
+              <div className="text-xs sm:text-sm text-muted-foreground mb-2 font-medium uppercase tracking-wide">Current Time (Manila)</div>
+              <div className="text-2xl sm:text-3xl font-mono font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent" suppressHydrationWarning>
+                {mounted ? manilaTime : ''}
+              </div>
             </div>
           </div>
 
           {/* User ID Input */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">School ID</label>
+          <div className="space-y-3">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+              </svg>
+              School ID
+            </label>
             <Input 
               placeholder="Enter your School ID" 
               value={schoolId} 
               onChange={(e) => setSchoolId(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && onPunch()}
+              className="h-12 text-base bg-background/50 border-muted-foreground/20 focus:border-orange-500 transition-colors"
             />
           </div>
 
           {/* Submit Button */}
           <Button 
-            className="w-full" 
+            className="w-full h-12 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold text-base shadow-lg hover:shadow-xl transition-all duration-200" 
             disabled={saving || !schoolId.trim() || !canPunch} 
             onClick={onPunch}
           >
-            {saving ? 'Processing...' : getPunchAction()}
-            {!saving && <ArrowRightCircle className="h-4 w-4 ml-2" />}
+            {saving ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </>
+            ) : (
+              <>
+                {getPunchAction()}
+                <ArrowRightCircle className="h-5 w-5 ml-2" />
+              </>
+            )}
           </Button>
           
           {/* Info message when outside preferred windows */}
@@ -225,8 +264,8 @@ export default function AttendancePortalPage() {
             
             if (!isTimeInWindow && !isTimeOutWindow) {
               return (
-                <div className="text-center text-sm p-3 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
-                  <AlertCircle className="h-4 w-4 inline mr-2" />
+                <div className="text-center text-sm p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200 border-2 border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-5 w-5 inline mr-2" />
                   Outside preferred time windows. Late time-ins will be marked as "Late" status.
                 </div>
               )
@@ -236,33 +275,37 @@ export default function AttendancePortalPage() {
 
           {/* Time Windows */}
           {settings && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="text-center">
-                <h3 className="text-sm font-medium text-muted-foreground">Attendance Windows</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Attendance Windows</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-muted/50 p-3 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <LogIn className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium">Time In</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 p-5 rounded-xl border-2 border-green-200 dark:border-green-800 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                      <LogIn className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-base font-semibold text-green-900 dark:text-green-100">Time In</span>
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm font-medium text-green-700 dark:text-green-300">
                     {formatHHmmTo12(settings.timeInStart)} — {formatHHmmTo12(settings.timeInEnd)}
                     {(() => {
                       const startMinutes = parseInt(settings.timeInStart.split(':')[0]) * 60 + parseInt(settings.timeInStart.split(':')[1])
                       const endMinutes = parseInt(settings.timeInEnd.split(':')[0]) * 60 + parseInt(settings.timeInEnd.split(':')[1])
                       return startMinutes > endMinutes ? (
-                        <span className="ml-1 text-xs text-amber-600">(overnight)</span>
+                        <span className="ml-1 text-xs text-amber-600 dark:text-amber-400 font-semibold">(overnight)</span>
                       ) : null
                     })()}
                   </div>
                 </div>
-                <div className="bg-muted/50 p-3 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <LogOut className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Time Out</span>
+                <div className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 p-5 rounded-xl border-2 border-orange-200 dark:border-orange-800 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
+                      <LogOut className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-base font-semibold text-orange-900 dark:text-orange-100">Time Out</span>
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm font-medium text-orange-700 dark:text-orange-300">
                     {formatHHmmTo12(settings.timeOutStart)} — {formatHHmmTo12(settings.timeOutEnd)}
                   </div>
                 </div>
@@ -272,24 +315,63 @@ export default function AttendancePortalPage() {
               {(inWindow !== null || outWindow !== null) && (
                 <div className="text-center">
                   <Badge 
-                    variant={inWindow ? "default" : outWindow ? "secondary" : "outline"}
-                    className="text-xs"
+                    variant="outline"
+                    className={`text-xs px-4 py-2 font-medium border-2 ${
+                      inWindow 
+                        ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700' 
+                        : outWindow 
+                        ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700' 
+                        : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'
+                    }`}
                   >
-                    {inWindow ? 'Within time-in window' : outWindow ? 'Within time-out window' : 'Outside allowed windows'}
+                    {inWindow ? '🟢 Within time-in window' : outWindow ? '🟠 Within time-out window' : '⚪ Outside allowed windows'}
                   </Badge>
                 </div>
               )}
             </div>
           )}
 
+          {/* Leave Status Display */}
+          {leaveStatus && (
+            <div className="bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">You are on approved leave</h4>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <span className="font-medium capitalize">{leaveStatus.type}</span> leave from{' '}
+                    <span className="font-medium">{new Date(leaveStatus.startDate).toLocaleDateString()}</span> to{' '}
+                    <span className="font-medium">{new Date(leaveStatus.endDate).toLocaleDateString()}</span>
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                    Attendance cannot be recorded during your leave period.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Message Display */}
           {message && (
-            <div className={`text-center text-sm p-3 rounded-lg ${
+            <div className={`text-center text-sm sm:text-base p-4 rounded-xl font-medium border-2 shadow-sm ${
               message.includes('successfully') 
-                ? 'bg-green-50 text-green-700 border border-green-200' 
-                : 'bg-destructive/10 text-destructive border border-destructive/20'
+                ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700' 
+                : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700'
             }`}>
-              {message}
+              <div className="flex items-center justify-center gap-2">
+                {message.includes('successfully') ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <AlertCircle className="w-5 h-5" />
+                )}
+                <span>{message}</span>
+              </div>
             </div>
           )}
         </CardContent>

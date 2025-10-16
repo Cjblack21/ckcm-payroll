@@ -27,6 +27,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 })
     }
 
+    // Check if user has approved leave for today
+    const now = getNowInPhilippines()
+    const startToday = getStartOfDayInPhilippines(now)
+    const endToday = getEndOfDayInPhilippines(now)
+    
+    const approvedLeave = await prisma.leaveRequest.findFirst({
+      where: {
+        users_id,
+        status: 'APPROVED',
+        startDate: { lte: endToday },
+        endDate: { gte: startToday }
+      }
+    })
+
+    if (approvedLeave) {
+      const leaveType = approvedLeave.isPaid ? 'paid' : 'unpaid'
+      return NextResponse.json({ 
+        error: `You are on approved ${leaveType} leave from ${new Date(approvedLeave.startDate).toLocaleDateString()} to ${new Date(approvedLeave.endDate).toLocaleDateString()}. Attendance cannot be recorded during leave.`,
+        onLeave: true,
+        leaveDetails: {
+          type: leaveType,
+          startDate: approvedLeave.startDate,
+          endDate: approvedLeave.endDate
+        }
+      }, { status: 403 })
+    }
+
     const settings = await prisma.attendanceSettings.findFirst()
     const now = getNowInPhilippines()
     const nowHH = now.getHours().toString().padStart(2, '0')

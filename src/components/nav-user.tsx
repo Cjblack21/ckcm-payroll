@@ -2,12 +2,12 @@
 
 import {
   User,
-  Settings,
   ChevronsUpDown,
   LogOut,
-  Shield,
+  KeyRound,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
+import Link from "next/link"
 
 import {
   Avatar,
@@ -81,17 +81,17 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <User />
-                Profile Settings
+              <DropdownMenuItem asChild>
+                <Link href="/personnel/profile">
+                  <User />
+                  Profile Settings
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings />
-                Preferences
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Shield />
-                Security
+              <DropdownMenuItem asChild>
+                <Link href="/personnel/profile?tab=security">
+                  <KeyRound />
+                  Change Password
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

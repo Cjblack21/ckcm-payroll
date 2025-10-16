@@ -52,17 +52,25 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <img 
-            src="/ckcm.png" 
-            alt="CKCM Logo" 
-            className="h-8 w-8 object-contain"
-          />
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">CKCM PMS</span>
-            <span className="text-xs text-muted-foreground">Employee</span>
-          </div>
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/personnel/dashboard">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <img 
+                    src="/ckcm.png" 
+                    alt="CKCM Logo" 
+                    className="h-8 w-8 object-contain"
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold">CKCM PMS</span>
+                  <span className="text-xs">Employee</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden">
         {/* Main Dashboard */}
@@ -98,7 +106,7 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <Link href="/leave">
+                  <Link href="/personnel/leaves">
                     <Calendar />
                     <span>Leave</span>
                   </Link>

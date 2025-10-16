@@ -9,7 +9,8 @@ import {
   Banknote, 
   Calendar as CalendarIcon,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  FileText
 } from "lucide-react"
 import { AdminDashboardCharts } from "@/components/admin-dashboard-charts"
 import { AdminCalendar } from "@/components/admin-calendar"
@@ -84,6 +85,15 @@ export default async function AdminDashboard() {
       trend: "stable",
       color: "text-purple-600",
       href: "/admin/holidays"
+    },
+    {
+      title: "Pending Leaves",
+      value: dashboardStats.pendingLeaves.toString(),
+      description: "Awaiting approval",
+      icon: FileText,
+      trend: "stable",
+      color: "text-yellow-600",
+      href: "/admin/leaves"
     },
   ]
 

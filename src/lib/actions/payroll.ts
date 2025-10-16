@@ -60,6 +60,8 @@ export type PayrollEntry = {
   // Separate deduction breakdowns for frontend
   attendanceDeductions: number
   databaseDeductions: number
+  unpaidLeaveDeduction: number
+  unpaidLeaveDays: number
 }
 
 export type DeductionDetail = {
@@ -466,6 +468,8 @@ export async function getPayrollSummary(): Promise<{
           loanPayments,
           attendanceDeductions,
           databaseDeductions,
+          unpaidLeaveDeduction: 0, // For stored entries, unpaid leave is already in totalDeductions
+          unpaidLeaveDays: 0,
         })
       }
 
@@ -793,6 +797,37 @@ export async function getPayrollSummary(): Promise<{
       
       // No auto-creation of deductions; page should reflect only existing records
 
+      // Get approved unpaid leave requests for this user in the payroll period
+      const unpaidLeaveRequests = await prisma.leaveRequest.findMany({
+        where: {
+          users_id: user.users_id,
+          status: 'APPROVED',
+          isPaid: false,
+          startDate: { lte: periodEnd },
+          endDate: { gte: periodStart }
+        }
+      })
+
+      // Calculate unpaid leave deduction
+      let totalUnpaidLeaveDays = 0
+      for (const leave of unpaidLeaveRequests) {
+        const leaveStart = new Date(leave.startDate) > periodStart ? new Date(leave.startDate) : periodStart
+        const leaveEnd = new Date(leave.endDate) < periodEnd ? new Date(leave.endDate) : periodEnd
+        
+        // Count days between leaveStart and leaveEnd (inclusive)
+        let currentDate = new Date(leaveStart)
+        while (currentDate <= leaveEnd) {
+          // Only count working days (exclude Sundays)
+          if (getPhilippinesDayOfWeek(currentDate) !== 0) {
+            totalUnpaidLeaveDays++
+          }
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+      }
+      
+      const unpaidLeaveDeduction = totalUnpaidLeaveDays * dailySalary
+      console.log(`🔍 Unpaid Leave Debug - User: ${user.name}, Unpaid Days: ${totalUnpaidLeaveDays}, Daily Salary: ₱${dailySalary.toFixed(2)}, Total Deduction: ₱${unpaidLeaveDeduction.toFixed(2)}`)
+
       // Get active loans for this user and calculate monthly payment
       const activeLoans = await prisma.loan.findMany({
         where: {
@@ -812,12 +847,12 @@ export async function getPayrollSummary(): Promise<{
         return sum + perPayrollPayment
       }, 0)
 
-      // Use database deductions + attendance deductions + loan payments
-      const finalTotalDeductions = totalDatabaseDeductions + totalAttendanceDeductions + totalLoanPayments
+      // Use database deductions + attendance deductions + unpaid leave deductions + loan payments
+      const finalTotalDeductions = totalDatabaseDeductions + totalAttendanceDeductions + unpaidLeaveDeduction + totalLoanPayments
 
       const netSalary = grossSalary - finalTotalDeductions
 
-      console.log(`🔍 Payroll Summary - User: ${user.name}, Basic Salary: ₱${basicSalary.toFixed(6)}, Gross (Full Period): ₱${grossSalary.toFixed(6)}, Database Deductions: ₱${totalDatabaseDeductions.toFixed(6)}, Attendance Deductions: ₱${totalAttendanceDeductions.toFixed(6)}, Loan Payments: ₱${totalLoanPayments.toFixed(6)}, Total Deductions: ₱${finalTotalDeductions.toFixed(6)}, Net: ₱${netSalary.toFixed(6)}`)
+      console.log(`🔍 Payroll Summary - User: ${user.name}, Basic Salary: ₱${basicSalary.toFixed(6)}, Gross (Full Period): ₱${grossSalary.toFixed(6)}, Database Deductions: ₱${totalDatabaseDeductions.toFixed(6)}, Attendance Deductions: ₱${totalAttendanceDeductions.toFixed(6)}, Unpaid Leave Deduction: ₱${unpaidLeaveDeduction.toFixed(6)}, Loan Payments: ₱${totalLoanPayments.toFixed(6)}, Total Deductions: ₱${finalTotalDeductions.toFixed(6)}, Net: ₱${netSalary.toFixed(6)}`)
 
       computedEntries.push({
         users_id: user.users_id,
@@ -848,7 +883,9 @@ export async function getPayrollSummary(): Promise<{
         loanPayments: totalLoanPayments,
         // Separate deduction breakdowns for frontend
         attendanceDeductions: totalAttendanceDeductions,
-        databaseDeductions: totalDatabaseDeductions
+        databaseDeductions: totalDatabaseDeductions,
+        unpaidLeaveDeduction: unpaidLeaveDeduction,
+        unpaidLeaveDays: totalUnpaidLeaveDays
       })
 
       compTotalGross += grossSalary

@@ -236,6 +236,36 @@ export async function POST(request: NextRequest) {
         appliedAt: deduction.appliedAt.toISOString().split('T')[0]
       }))
 
+      // Get unpaid leave for this period
+      const unpaidLeaveRequests = await prisma.leaveRequest.findMany({
+        where: {
+          users_id: entry.users_id,
+          status: 'APPROVED',
+          isPaid: false,
+          startDate: { lte: entry.periodEnd },
+          endDate: { gte: entry.periodStart }
+        }
+      })
+
+      // Calculate unpaid leave deduction
+      let totalUnpaidLeaveDays = 0
+      unpaidLeaveRequests.forEach(leave => {
+        const leaveStart = new Date(leave.startDate) > entry.periodStart ? new Date(leave.startDate) : entry.periodStart
+        const leaveEnd = new Date(leave.endDate) < entry.periodEnd ? new Date(leave.endDate) : entry.periodEnd
+        
+        // Count working days only (exclude Sundays)
+        let currentDate = new Date(leaveStart)
+        while (currentDate <= leaveEnd) {
+          if (currentDate.getDay() !== 0) { // Not Sunday
+            totalUnpaidLeaveDays++
+          }
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+      })
+      
+      const dailySalary = workingDaysInPeriod > 0 ? basicSalary / workingDaysInPeriod : 0
+      const unpaidLeaveDeduction = totalUnpaidLeaveDays * dailySalary
+
       // Calculate loan details
       const periodDays = Math.floor((entry.periodEnd.getTime() - entry.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
       const loanFactor = periodDays <= 16 ? 0.5 : 1.0
@@ -264,6 +294,8 @@ export async function POST(request: NextRequest) {
           overtimePay: Number(entry.overtime),
           attendanceDeductions: totalAttendanceDeductions,
           nonAttendanceDeductions: otherDeductionDetails.reduce((sum, detail) => sum + detail.amount, 0),
+          unpaidLeaveDeduction: unpaidLeaveDeduction,
+          unpaidLeaveDays: totalUnpaidLeaveDays,
           loanPayments: loanDetails.reduce((sum, detail) => sum + detail.amount, 0),
           grossPay: Number(entry.basicSalary) + Number(entry.overtime),
           totalDeductions: Number(entry.deductions),
@@ -366,6 +398,16 @@ export async function POST(request: NextRequest) {
                     <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                   </div>
                 `).join('')}
+              </div>
+            ` : ''}
+            
+            ${breakdown.unpaidLeaveDeduction && breakdown.unpaidLeaveDeduction > 0 ? `
+              <div class="deduction-section">
+                <div class="deduction-title">Unpaid Leave:</div>
+                <div class="detail-row deduction-detail">
+                  <span>Unpaid Leave (${breakdown.unpaidLeaveDays} days)</span>
+                  <span class="deduction">-₱${breakdown.unpaidLeaveDeduction.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
               </div>
             ` : ''}
             
