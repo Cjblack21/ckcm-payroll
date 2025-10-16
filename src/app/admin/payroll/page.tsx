@@ -208,7 +208,7 @@ export default function PayrollPage() {
       setPayrollPeriodStart(result.summary?.settings?.periodStart || '')
       setPayrollPeriodEnd(result.summary?.settings?.periodEnd || '')
       // Use time-out end time as release time (automatic)
-      const releaseTime = result.summary?.settings?.timeOutEnd || result.summary?.settings?.payrollReleaseTime || '17:00'
+      const releaseTime = result.summary?.settings?.timeOutEnd || '17:00'
       setPayrollReleaseTime(releaseTime)
       setOriginalReleaseTime(releaseTime) // Store the original automatic time
       // Use settings.hasGeneratedForSettings to control Generate button state
