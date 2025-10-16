@@ -4,6 +4,10 @@ import { getStartOfDayInPhilippines, getEndOfDayInPhilippines, getNowInPhilippin
 import { calculateLateDeduction, calculateEarlyTimeoutDeduction, createLateDeduction } from "@/lib/attendance-calculations"
 import { AttendanceStatus } from "@prisma/client"
 
+// Ensure this route is always dynamically rendered
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 function isWithinWindow(nowHHmm: string, start?: string | null, end?: string | null): boolean {
   if (!start || !end) return true
   return start <= nowHHmm && nowHHmm <= end
