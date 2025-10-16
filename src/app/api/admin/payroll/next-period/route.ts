@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       // Get all active users
       const activeUsers = await prisma.user.findMany({
         where: { 
-          status: 'ACTIVE',
+          isActive: true,
           role: { not: 'ADMIN' } // Don't notify admins, they already know
         },
         select: { users_id: true }
