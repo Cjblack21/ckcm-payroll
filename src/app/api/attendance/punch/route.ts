@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
     }
 
     const settings = await prisma.attendanceSettings.findFirst()
-    const now = getNowInPhilippines()
     const nowHH = now.getHours().toString().padStart(2, '0')
     const nowMM = now.getMinutes().toString().padStart(2, '0')
     const nowHHmm = `${nowHH}:${nowMM}`
