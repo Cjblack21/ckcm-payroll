@@ -17,7 +17,7 @@ export async function POST() {
     // Get attendance settings to check release time
     const settings = await prisma.attendanceSettings.findFirst()
     
-    if (!settings?.periodEnd || !settings?.timeOutEnd) {
+    if (!settings?.periodStart || !settings?.periodEnd || !settings?.timeOutEnd) {
       return NextResponse.json({ success: false, message: 'No settings configured' })
     }
 
