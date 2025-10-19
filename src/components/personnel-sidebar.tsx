@@ -5,7 +5,6 @@ import { SSRSafe } from "@/components/ssr-safe"
 import {
   Home,
   Clock,
-  DollarSign,
   CreditCard,
   User,
   Calendar,
@@ -29,18 +28,19 @@ import {
 import Link from "next/link"
 
 // PMS Personnel Dashboard Data
-const getNavData = (user?: { name?: string | null, email?: string }) => ({
+const getNavData = (user?: { id?: string, name?: string | null, email?: string, avatar?: string | null }) => ({
   user: {
+    id: user?.id,
     name: user?.name || "Personnel User",
     email: user?.email || "personnel@pms.com",
-    avatar: "",
+    avatar: user?.avatar || "",
   },
   navMain: [],
   projects: [],
 })
 
 interface PersonnelSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  user?: { name?: string | null, email?: string }
+  user?: { id?: string, name?: string | null, email?: string, avatar?: string | null }
 }
 
 export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
@@ -54,27 +54,34 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/personnel/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <img 
-                    src="/ckcm.png" 
-                    alt="CKCM Logo" 
-                    className="h-8 w-8 object-contain"
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">CKCM PMS</span>
-                  <span className="text-xs">Employee</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+            <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:justify-center">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                <img 
+                  src="/ckcm.png" 
+                  alt="CKCM Logo" 
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+              <div className="group-data-[collapsible=icon]:hidden flex flex-col gap-0.5 leading-none">
+                <span className="font-semibold">CKCM PMS</span>
+                <span className="text-xs text-muted-foreground">Welcome to PMS</span>
+              </div>
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="group-data-[collapsible=icon]:hidden px-3 py-2 mt-2">
+          <p className="text-xs font-medium text-muted-foreground">Account</p>
+        </div>
+        <SSRSafe>
+          <NavUser user={data.user} role="personnel" />
+        </SSRSafe>
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden">
+        <SidebarSeparator />
+        
         {/* Main Dashboard */}
         <SidebarGroup key="personnel-main-v2">
+          <SidebarGroupLabel>Overview</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
             <SidebarMenu>
               <SidebarMenuItem>
@@ -126,7 +133,7 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link href="/personnel/payroll">
-                    <DollarSign />
+                    <span className="flex items-center justify-center w-4 h-4 text-lg font-bold">₱</span>
                     <span>Payroll</span>
                   </Link>
                 </SidebarMenuButton>
@@ -144,9 +151,10 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <SSRSafe>
-          <NavUser user={data.user} />
-        </SSRSafe>
+        <div className="group-data-[collapsible=icon]:hidden px-3 py-2 text-center border-t">
+          <p className="text-xs font-medium">CKCM Payroll Management System</p>
+          <p className="text-xs text-muted-foreground">© 2025 All rights reserved</p>
+        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

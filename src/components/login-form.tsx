@@ -6,19 +6,11 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "react-hot-toast"
-import { Eye, EyeOff, Sun, Moon, Settings } from "lucide-react"
-import { useTheme } from "next-themes"
+import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
 
 export function LoginForm({
@@ -28,7 +20,6 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
-  const { setTheme } = useTheme()
 
   const {
     register,
@@ -71,181 +62,103 @@ export function LoginForm({
   }
 
   const handleGoogleSignIn = async () => {
-    setIsLoading(true)
-    try {
-      const result = await signIn("google", { 
-        callbackUrl: "/dashboard",
-        redirect: false 
-      })
-      
-      const err = result?.error
-      if (err) {
-        console.error("Google sign in error:", err)
-        toast.error(`Google sign in failed: ${err}`)
-      } else if (result?.ok) {
-        toast.success("Google sign in successful!")
-        router.push("/dashboard")
-        router.refresh()
-      }
-    } catch (error) {
-      toast.error("Something went wrong with Google sign in")
-      console.error("Google sign in error:", error)
-    } finally {
-      setIsLoading(false)
-    }
+    await signIn("google", { 
+      callbackUrl: "/dashboard"
+    })
   }
 
   return (
     <form 
-      className={cn("flex flex-col gap-5", className)} 
+      className={cn("space-y-5", className)} 
       onSubmit={handleSubmit(onSubmit)}
       {...props}
     >
-      <div className="space-y-5">
-        {/* Email Field */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="email" className="text-sm font-medium">
-              Email Address
-            </Label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="h-8 w-8"
-                >
-                  <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                  <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                  <span className="sr-only">Toggle theme</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[140px]">
-                <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
-                  <Sun className="mr-2 h-4 w-4" />
-                  Light
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
-                  <Moon className="mr-2 h-4 w-4" />
-                  Dark
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
-                  System
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div className="relative">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-              </svg>
-            </div>
-            <Input 
-              id="email" 
-              type="email" 
-              placeholder="Enter your email" 
-              {...register("email")}
-              disabled={isLoading}
-              className="pl-10 h-11 bg-background/50 border-muted-foreground/20 focus:border-primary transition-colors"
-            />
-          </div>
-          {errors.email && (
-            <p className="text-sm text-destructive flex items-center gap-1">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              {errors.email.message}
-            </p>
-          )}
+      {/* Email */}
+      <div className="space-y-2">
+        <Label htmlFor="email" className="text-sm font-medium">
+          Email Address
+        </Label>
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <Input 
+            id="email" 
+            type="email" 
+            placeholder="you@ckcm.edu.ph" 
+            {...register("email")}
+            disabled={isLoading}
+            className="h-12 rounded-xl pl-10 transition-all focus-visible:ring-2"
+          />
         </div>
-
-        {/* Password Field */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-medium">
-              Password
-            </Label>
-            <a
-              href="#"
-              className="text-xs text-primary hover:underline underline-offset-4 transition-colors"
-            >
-              Forgot password?
-            </a>
-          </div>
-          <div className="relative">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <Input 
-              id="password" 
-              type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
-              {...register("password")}
-              disabled={isLoading}
-              className="pl-10 pr-10 h-11 bg-background/50 border-muted-foreground/20 focus:border-primary transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              disabled={isLoading}
-            >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
-            </button>
-          </div>
-          {errors.password && (
-            <p className="text-sm text-destructive flex items-center gap-1">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              {errors.password.message}
-            </p>
-          )}
-        </div>
-
-        {/* Login Button */}
-        <Button 
-          type="submit" 
-          className="w-full h-11 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200" 
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Signing in...
-            </>
-          ) : (
-            "Sign In"
-          )}
-        </Button>
+        {errors.email && (
+          <p className="text-sm text-destructive">{errors.email.message}</p>
+        )}
       </div>
+
+      {/* Password */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password" className="text-sm font-medium">
+            Password
+          </Label>
+          <a href="#" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+            Forgot password?
+          </a>
+        </div>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <Input 
+            id="password" 
+            type={showPassword ? "text" : "password"}
+            placeholder="Enter your password"
+            {...register("password")}
+            disabled={isLoading}
+            className="h-12 rounded-xl pl-10 pr-10 transition-all focus-visible:ring-2"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            disabled={isLoading}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+        {errors.password && (
+          <p className="text-sm text-destructive">{errors.password.message}</p>
+        )}
+      </div>
+
+      {/* Sign In Button */}
+      <Button 
+        type="submit" 
+        className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold shadow-lg shadow-blue-500/30 transition-all hover:shadow-xl hover:shadow-blue-500/40" 
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Signing in...
+          </>
+        ) : (
+          "Sign In"
+        )}
+      </Button>
 
       {/* Divider */}
-      <div className="relative my-4">
+      <div className="relative py-3">
         <div className="absolute inset-0 flex items-center">
-          <Separator className="w-full" />
+          <span className="w-full border-t border-slate-200 dark:border-slate-800" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white dark:bg-slate-900 px-3 text-muted-foreground font-medium">Or continue with</span>
+          <span className="bg-white px-3 text-slate-500 dark:bg-slate-900 dark:text-slate-400">Or continue with</span>
         </div>
       </div>
 
-      {/* Google Sign In Button */}
+      {/* Google Sign In */}
       <Button
         type="button"
         variant="outline"
-        className="w-full h-11 border-2 hover:bg-muted/50 transition-all duration-200 font-medium"
+        className="w-full h-12 rounded-xl border-slate-200 font-medium transition-all hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
         onClick={handleGoogleSignIn}
         disabled={isLoading}
       >
@@ -267,15 +180,12 @@ export function LoginForm({
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
           />
         </svg>
-        {isLoading ? "Signing in..." : "Sign in with Google"}
+        Sign in with Google
       </Button>
 
-      {/* Info Text */}
-      <div className="text-center">
-        <p className="text-xs text-muted-foreground px-4">
-          Only @ckcm.edu.ph email addresses are allowed for Google sign in.
-        </p>
-      </div>
+      <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+        Only @ckcm.edu.ph email addresses are allowed
+      </p>
     </form>
   )
 }

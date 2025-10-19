@@ -29,7 +29,7 @@ import {
   TableRow 
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Plus, Edit, Trash2, MapPin, Flag } from "lucide-react"
+import { Calendar, Plus, Edit, Trash2, MapPin, Flag, Download } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns"
 import { SSRSafe } from "@/components/ssr-safe"
@@ -64,10 +64,38 @@ export default function HolidaysPage() {
     type: 'COMPANY' as 'NATIONAL' | 'RELIGIOUS' | 'COMPANY',
     description: ''
   })
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
     fetchHolidays()
+    autoImportPhilippineHolidays()
   }, [])
+
+  const autoImportPhilippineHolidays = async () => {
+    try {
+      // Check if we already have holidays for 2025
+      const hasHolidays = holidays.some(h => {
+        const year = new Date(h.date).getFullYear()
+        return year === 2025
+      })
+
+      // If no 2025 holidays exist, auto-import Philippine holidays
+      if (!hasHolidays) {
+        const response = await fetch('/api/admin/holidays/import?type=philippine', {
+          method: 'POST'
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.imported > 0) {
+            fetchHolidays()
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail - user can manually import if needed
+      console.log('Auto-import skipped')
+    }
+  }
 
   // Removed static Philippines holidays. The page now relies solely on DB holidays.
 
@@ -177,6 +205,33 @@ export default function HolidaysPage() {
     })
     setEditingHoliday(null)
     setIsDialogOpen(false)
+  }
+
+  const handleImport = async (type: 'philippine' | 'international') => {
+    if (!confirm(`Import ${type === 'philippine' ? 'Philippine' : 'International'} holidays for 2025?`)) return
+
+    setImporting(true)
+    try {
+      const response = await fetch(`/api/admin/holidays/import?type=${type}`, {
+        method: 'POST'
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast.success(data.message)
+        if (data.imported > 0) {
+          fetchHolidays()
+        }
+      } else {
+        toast.error(data.error || 'Failed to import holidays')
+      }
+    } catch (error) {
+      console.error('Error importing holidays:', error)
+      toast.error('Failed to import holidays')
+    } finally {
+      setImporting(false)
+    }
   }
 
   // Calendar helper functions
@@ -323,10 +378,28 @@ export default function HolidaysPage() {
         <div className="lg:col-span-2">
           <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Holidays Calendar
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Holidays Calendar - {format(currentMonth, 'MMMM yyyy')}
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              >
+                ←
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              >
+                →
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -347,14 +420,23 @@ export default function HolidaysPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {holidays.length === 0 ? (
+                {holidays
+                  .filter(holiday => {
+                    const holidayDate = new Date(holiday.date)
+                    return isSameMonth(holidayDate, currentMonth)
+                  })
+                  .length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No holidays found. Add your first holiday to get started.
+                      No holidays found for {format(currentMonth, 'MMMM yyyy')}.
                     </TableCell>
                   </TableRow>
                 ) : (
                   holidays
+                    .filter(holiday => {
+                      const holidayDate = new Date(holiday.date)
+                      return isSameMonth(holidayDate, currentMonth)
+                    })
                     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                     .map((holiday) => (
                       <TableRow key={holiday.holidays_id}>

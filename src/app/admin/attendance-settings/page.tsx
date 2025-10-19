@@ -57,10 +57,10 @@ export default function AttendanceSettingsPage() {
       const apiData = {
         timeInStart: settings.timeInStart,
         timeInEnd: settings.timeInEnd,
-        noTimeInCutoff: settings.noTimeInCutoff,
+        noTimeInCutoff: false, // Always enforce time-in restrictions
         timeOutStart: settings.timeOutStart,
         timeOutEnd: settings.timeOutEnd,
-        noTimeOutCutoff: settings.noTimeOutCutoff,
+        noTimeOutCutoff: false, // Always enforce time-out restrictions
         periodStart: settings.periodStart,
         periodEnd: settings.periodEnd,
         autoMarkAbsent: settings.autoMarkAbsent,
@@ -162,78 +162,58 @@ export default function AttendanceSettingsPage() {
         <CardContent className="space-y-6">
           {/* Time In Settings */}
           <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="noTimeInCutoff"
-                checked={settings.noTimeInCutoff}
-                onCheckedChange={(checked) => updateSetting('noTimeInCutoff', checked)}
-              />
-              <Label htmlFor="noTimeInCutoff">No time-in restrictions</Label>
-            </div>
-            
-            {!settings.noTimeInCutoff && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="timeInStart">Time In Start (HH:MM)</Label>
-                  <Input
-                    id="timeInStart"
-                    type="time"
-                    value={settings.timeInStart || ''}
-                    onChange={(e) => updateSetting('timeInStart', e.target.value)}
-                  />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Start of Time In (no late deduction)
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="timeInEnd">Time In End (HH:MM)</Label>
-                  <Input
-                    id="timeInEnd"
-                    type="time"
-                    value={settings.timeInEnd || ''}
-                    onChange={(e) => updateSetting('timeInEnd', e.target.value)}
-                  />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    End of Time In (late deductions start)
-                  </p>
-                </div>
+            <h3 className="font-semibold text-lg">Time In Window</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="timeInStart">Time In Start (HH:MM)</Label>
+                <Input
+                  id="timeInStart"
+                  type="time"
+                  value={settings.timeInStart || ''}
+                  onChange={(e) => updateSetting('timeInStart', e.target.value)}
+                />
+                <p className="text-sm text-muted-foreground mt-1">
+                  Start of Time In (no late deduction)
+                </p>
               </div>
-            )}
+              <div>
+                <Label htmlFor="timeInEnd">Time In End (HH:MM)</Label>
+                <Input
+                  id="timeInEnd"
+                  type="time"
+                  value={settings.timeInEnd || ''}
+                  onChange={(e) => updateSetting('timeInEnd', e.target.value)}
+                />
+                <p className="text-sm text-muted-foreground mt-1">
+                  End of Time In (late deductions start)
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Time Out Settings */}
           <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="noTimeOutCutoff"
-                checked={settings.noTimeOutCutoff}
-                onCheckedChange={(checked) => updateSetting('noTimeOutCutoff', checked)}
-              />
-              <Label htmlFor="noTimeOutCutoff">No time-out restrictions</Label>
-            </div>
-            
-            {!settings.noTimeOutCutoff && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="timeOutStart">Time Out Start (HH:MM)</Label>
-                  <Input
-                    id="timeOutStart"
-                    type="time"
-                    value={settings.timeOutStart || ''}
-                    onChange={(e) => updateSetting('timeOutStart', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="timeOutEnd">Time Out End (HH:MM)</Label>
-                  <Input
-                    id="timeOutEnd"
-                    type="time"
-                    value={settings.timeOutEnd || ''}
-                    onChange={(e) => updateSetting('timeOutEnd', e.target.value)}
-                  />
-                </div>
+            <h3 className="font-semibold text-lg">Time Out Window</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="timeOutStart">Time Out Start (HH:MM)</Label>
+                <Input
+                  id="timeOutStart"
+                  type="time"
+                  value={settings.timeOutStart || ''}
+                  onChange={(e) => updateSetting('timeOutStart', e.target.value)}
+                />
               </div>
-            )}
+              <div>
+                <Label htmlFor="timeOutEnd">Time Out End (HH:MM)</Label>
+                <Input
+                  id="timeOutEnd"
+                  type="time"
+                  value={settings.timeOutEnd || ''}
+                  onChange={(e) => updateSetting('timeOutEnd', e.target.value)}
+                />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -43,7 +43,6 @@ import {
   Plus, 
   MoreHorizontal, 
   Edit, 
-  Trash2, 
   Eye, 
   UserCheck, 
   UserX,
@@ -250,27 +249,6 @@ export function UserManagement() {
     }
   }
 
-  // Handle delete user
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return
-
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        const error = await response.text()
-        throw new Error(error)
-      }
-
-      toast.success('User deleted successfully')
-      fetchUsers()
-    } catch (error) {
-      console.error('Error deleting user:', error)
-      toast.error('Failed to delete user')
-    }
-  }
 
   // Handle toggle user status
   const handleToggleUserStatus = async (user: User) => {
@@ -551,13 +529,6 @@ export function UserManagement() {
                               <UserCheck className="mr-2 h-4 w-4" />
                             )}
                             {user.isActive ? 'Deactivate' : 'Activate'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteUser(user.users_id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete User
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

@@ -23,7 +23,10 @@ export async function GET() {
       include: {
         personnelType: {
           select: {
-            basicSalary: true
+            personnel_types_id: true,
+            name: true,
+            basicSalary: true,
+            isActive: true
           }
         },
         attendances: {

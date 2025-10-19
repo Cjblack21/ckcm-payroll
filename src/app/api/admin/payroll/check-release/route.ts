@@ -58,7 +58,8 @@ export async function POST() {
           title: '🔔 Payroll Release Tomorrow',
           message: `Payroll for ${periodStart} - ${periodEndStr} will be automatically released tomorrow at ${releaseTimeStr}.`,
           type: 'info',
-          userId: adminId
+          userId: adminId,
+          link: '/admin/payroll'
         })
         console.log('✅ Sent 24-hour reminder notification to admin')
       }
@@ -69,9 +70,22 @@ export async function POST() {
           title: '🔔 Payroll Release in 1 Hour',
           message: `Payroll for ${periodStart} - ${periodEndStr} will be automatically released at ${releaseTimeStr}. Please ensure all attendance is verified.`,
           type: 'warning',
-          userId: adminId
+          userId: adminId,
+          link: '/admin/payroll'
         })
         console.log('✅ Sent 1-hour reminder notification to admin')
+      }
+      
+      // Release ready notification (when countdown hits zero)
+      if (canRelease && hoursUntilRelease <= 0 && hoursUntilRelease > -1) {
+        await createNotification({
+          title: '✅ Payroll Ready to Release!',
+          message: `Payroll for ${periodStart} - ${periodEndStr} is now ready to be released. Click here to go to the payroll page.`,
+          type: 'success',
+          userId: adminId,
+          link: '/admin/payroll'
+        })
+        console.log('✅ Sent release-ready notification to admin')
       }
     }
 

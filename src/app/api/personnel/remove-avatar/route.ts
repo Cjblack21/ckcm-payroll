@@ -12,8 +12,11 @@ export async function DELETE() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Note: Avatar functionality not implemented in current schema
-    // This endpoint is a placeholder for future avatar support
+    // Remove avatar from database
+    await prisma.user.update({
+      where: { users_id: session.user.id },
+      data: { avatar: null },
+    })
 
     return NextResponse.json({ message: "Avatar removed successfully" })
   } catch (error) {

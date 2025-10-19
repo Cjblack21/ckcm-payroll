@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { User, Mail, Building, DollarSign, KeyRound, Eye, EyeOff, Camera } from "lucide-react"
+import { User, Mail, Building, DollarSign, KeyRound, Eye, EyeOff, Camera, Settings } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 type ProfileData = {
@@ -40,6 +40,16 @@ export default function PersonnelProfile() {
   })
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Settings state
+  const [settings, setSettings] = useState({
+    theme: "light",
+    language: "en",
+    emailNotifications: true,
+    payrollNotifications: true,
+    attendanceReminders: true,
+  })
+  const [savingSettings, setSavingSettings] = useState(false)
 
   useEffect(() => {
     async function loadProfileData() {
@@ -58,7 +68,26 @@ export default function PersonnelProfile() {
       }
     }
 
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/personnel/settings')
+        if (res.ok) {
+          const data = await res.json()
+          setSettings({
+            theme: data.settings.theme,
+            language: data.settings.language,
+            emailNotifications: data.settings.emailNotifications,
+            payrollNotifications: data.settings.payrollNotifications,
+            attendanceReminders: data.settings.attendanceReminders,
+          })
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error)
+      }
+    }
+
     loadProfileData()
+    loadSettings()
   }, [])
 
   async function handleChangePassword() {
@@ -182,6 +211,35 @@ export default function PersonnelProfile() {
     }
   }
 
+  async function handleSaveSettings() {
+    try {
+      setSavingSettings(true)
+      const response = await fetch('/api/personnel/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save settings')
+      }
+
+      toast.success('Settings saved successfully!')
+      
+      // Apply theme if changed
+      if (settings.theme !== 'light') {
+        document.documentElement.classList.toggle('dark', settings.theme === 'dark')
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to save settings')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex-1 space-y-6 p-4 pt-6">
@@ -219,6 +277,10 @@ export default function PersonnelProfile() {
           <TabsTrigger value="profile">
             <User className="w-4 h-4 mr-2" />
             Profile
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <Settings className="w-4 h-4 mr-2" />
+            Settings
           </TabsTrigger>
           <TabsTrigger value="security">
             <KeyRound className="w-4 h-4 mr-2" />
@@ -338,6 +400,120 @@ export default function PersonnelProfile() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Settings Tab */}
+        <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Application Settings
+              </CardTitle>
+              <CardDescription>
+                Configure your preferences and application settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Theme Settings */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Appearance</Label>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <div className="font-medium">Theme</div>
+                    <div className="text-sm text-muted-foreground">Choose your display theme</div>
+                  </div>
+                  <select 
+                    className="border rounded-md px-3 py-2"
+                    value={settings.theme}
+                    onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
+                  >
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="system">System</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Notification Settings */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Notifications</Label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <div className="font-medium">Email Notifications</div>
+                      <div className="text-sm text-muted-foreground">Receive email updates about your account</div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="h-4 w-4" 
+                      checked={settings.emailNotifications}
+                      onChange={(e) => setSettings({ ...settings, emailNotifications: e.target.checked })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <div className="font-medium">Payroll Notifications</div>
+                      <div className="text-sm text-muted-foreground">Get notified about payroll updates</div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="h-4 w-4" 
+                      checked={settings.payrollNotifications}
+                      onChange={(e) => setSettings({ ...settings, payrollNotifications: e.target.checked })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <div className="font-medium">Attendance Reminders</div>
+                      <div className="text-sm text-muted-foreground">Get reminders about time-in and time-out</div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="h-4 w-4" 
+                      checked={settings.attendanceReminders}
+                      onChange={(e) => setSettings({ ...settings, attendanceReminders: e.target.checked })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Language & Region */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Language & Region</Label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <div className="font-medium">Language</div>
+                      <div className="text-sm text-muted-foreground">Select your preferred language</div>
+                    </div>
+                    <select 
+                      className="border rounded-md px-3 py-2"
+                      value={settings.language}
+                      onChange={(e) => setSettings({ ...settings, language: e.target.value })}
+                    >
+                      <option value="en">English</option>
+                      <option value="fil">Filipino</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <div className="font-medium">Time Zone</div>
+                      <div className="text-sm text-muted-foreground">Asia/Manila (GMT+8)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Button 
+                className="w-full md:w-auto"
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+              >
+                {savingSettings ? "Saving..." : "Save Settings"}
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Security Tab */}

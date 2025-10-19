@@ -211,6 +211,7 @@ export async function GET() {
       user: {
         name: user.name,
         email: user.email,
+        avatar: user.avatar,
         position: user.personnelType?.name || 'No position assigned',
         basicSalary: basicSalary,
         periodSalary: periodSalary

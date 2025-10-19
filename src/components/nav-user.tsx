@@ -5,6 +5,7 @@ import {
   ChevronsUpDown,
   LogOut,
   KeyRound,
+  Settings,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
@@ -32,14 +33,18 @@ import {
 
 export function NavUser({
   user,
+  role = "personnel",
 }: {
   user: {
+    id?: string
     name: string
     email: string
     avatar: string
   }
+  role?: "personnel" | "admin"
 }) {
   const { isMobile } = useSidebar()
+  const profilePath = role === "admin" ? "/admin/profile" : "/personnel/profile"
 
   return (
     <SidebarMenu>
@@ -56,7 +61,7 @@ export function NavUser({
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+                <span className="truncate text-xs text-muted-foreground">{user.id}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -75,20 +80,27 @@ export function NavUser({
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
-                  <span className="truncate text-xs">{user.email}</span>
+                  <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                  <span className="truncate text-xs text-muted-foreground">ID: {user.id}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/personnel/profile">
+                <Link href={profilePath}>
                   <User />
                   Profile Settings
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/personnel/profile?tab=security">
+                <Link href={`${profilePath}?tab=settings`}>
+                  <Settings />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`${profilePath}?tab=security`}>
                   <KeyRound />
                   Change Password
                 </Link>

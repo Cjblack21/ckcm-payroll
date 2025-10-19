@@ -21,7 +21,11 @@ import {
   Users,
   DollarSign,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Activity,
+  LogIn,
+  LogOut,
+  ClipboardList
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { SSRSafe } from "@/components/ssr-safe"
@@ -52,6 +56,18 @@ type PayrollSummary = {
   attendanceRate: number
 }
 
+type ActivityLogEntry = {
+  activity_logs_id: string
+  users_id: string
+  userName: string | null
+  userEmail: string
+  userRole: string
+  action: 'LOGIN' | 'LOGOUT'
+  ipAddress: string | null
+  userAgent: string | null
+  createdAt: string
+}
+
 export default function ReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
@@ -59,6 +75,12 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState<MonthlyReport | null>(null)
   const [payrollSummary, setPayrollSummary] = useState<PayrollSummary[]>([])
   const [showDetailed, setShowDetailed] = useState(false)
+  const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([])
+  const [showActivityLogs, setShowActivityLogs] = useState(false)
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [currentView, setCurrentView] = useState<'reports' | 'logs' | 'attendance'>('reports')
+  const [attendanceLogs, setAttendanceLogs] = useState<any[]>([])
+  const [attendanceLoading, setAttendanceLoading] = useState(false)
 
   const months = [
     { value: 1, label: "January" },
@@ -124,11 +146,86 @@ export default function ReportsPage() {
     generateReport()
   }, [])
 
+  async function loadActivityLogs() {
+    try {
+      setLogsLoading(true)
+      const res = await fetch('/api/admin/reports/activity-logs?limit=100')
+      const data = await res.json()
+      
+      if (res.ok) {
+        setActivityLogs(data.logs || [])
+      } else {
+        console.error('Failed to load activity logs:', data.error)
+      }
+    } catch (error) {
+      console.error('Failed to load activity logs:', error)
+    } finally {
+      setLogsLoading(false)
+    }
+  }
+
+  async function loadAttendanceLogs() {
+    try {
+      setAttendanceLoading(true)
+      const res = await fetch('/api/admin/attendance/all?limit=100')
+      const data = await res.json()
+      
+      if (res.ok) {
+        setAttendanceLogs(data.attendance || [])
+      } else {
+        console.error('Failed to load attendance logs:', data.error)
+      }
+    } catch (error) {
+      console.error('Failed to load attendance logs:', error)
+    } finally {
+      setAttendanceLoading(false)
+    }
+  }
+
   return (
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between rounded-md px-4 py-3 bg-transparent dark:bg-sidebar text-foreground dark:text-sidebar-foreground">
-        <h2 className="text-3xl font-bold tracking-tight">Monthly Reports</h2>
+        <h2 className="text-3xl font-bold tracking-tight">
+          {currentView === 'reports' ? 'Monthly Reports' : 
+           currentView === 'logs' ? 'Login Activity Logs' : 'Attendance Logs'}
+        </h2>
         <div className="flex items-center gap-2">
+          <Button
+            variant={currentView === 'reports' ? 'default' : 'outline'}
+            onClick={() => setCurrentView('reports')}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Monthly Reports
+          </Button>
+          <Button
+            variant={currentView === 'logs' ? 'default' : 'outline'}
+            onClick={() => {
+              setCurrentView('logs')
+              setShowActivityLogs(true)
+              loadActivityLogs()
+            }}
+            disabled={logsLoading}
+          >
+            <Activity className="h-4 w-4 mr-2" />
+            {logsLoading ? 'Loading...' : 'Login Logs'}
+          </Button>
+          <Button
+            variant={currentView === 'attendance' ? 'default' : 'outline'}
+            onClick={() => {
+              setCurrentView('attendance')
+              loadAttendanceLogs()
+            }}
+            disabled={attendanceLoading}
+          >
+            <ClipboardList className="h-4 w-4 mr-2" />
+            {attendanceLoading ? 'Loading...' : 'Attendance Logs'}
+          </Button>
+        </div>
+      </div>
+
+      {currentView === 'reports' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
           <SSRSafe>
             <Select value={selectedMonth.toString()} onValueChange={(value) => setSelectedMonth(parseInt(value))}>
               <SelectTrigger className="w-32">
@@ -168,7 +265,6 @@ export default function ReportsPage() {
             </Button>
           )}
         </div>
-      </div>
 
       {reportData && (
         <>
@@ -337,6 +433,135 @@ export default function ReportsPage() {
               <Calendar className="h-4 w-4 mr-2" />
               Generate Report
             </Button>
+          </CardContent>
+        </Card>
+      )}
+        </div>
+      )}
+
+      {/* Login Logs View */}
+      {currentView === 'logs' && (
+        <Card>
+          <CardContent className="pt-6">
+            {logsLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading activity logs...
+              </div>
+            ) : activityLogs.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>IP Address</TableHead>
+                    <TableHead>Date & Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activityLogs.map((log) => (
+                    <TableRow key={log.activity_logs_id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{log.userName || log.userEmail}</div>
+                          <div className="text-sm text-muted-foreground">{log.userEmail}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant={log.action === 'LOGIN' ? 'default' : 'secondary'}
+                          className={log.action === 'LOGIN' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}
+                        >
+                          {log.action === 'LOGIN' ? (
+                            <><LogIn className="h-3 w-3 mr-1 inline" /> Login</>
+                          ) : (
+                            <><LogOut className="h-3 w-3 mr-1 inline" /> Logout</>
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{log.userRole}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {log.ipAddress || 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No activity logs found.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Attendance Logs View */}
+      {currentView === 'attendance' && (
+        <Card>
+          <CardContent className="pt-6">
+            {attendanceLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading attendance logs...
+              </div>
+            ) : attendanceLogs.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Time In</TableHead>
+                    <TableHead>Time Out</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attendanceLogs.map((log: any) => (
+                    <TableRow key={log.attendances_id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{log.user?.name || log.user?.email}</div>
+                          <div className="text-sm text-muted-foreground">{log.user?.email}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{new Date(log.date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-sm">
+                        {log.timeIn ? new Date(log.timeIn).toLocaleTimeString() : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {log.timeOut ? new Date(log.timeOut).toLocaleTimeString() : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline"
+                          className={
+                            log.status === 'PRESENT' ? 'bg-green-100 text-green-800' :
+                            log.status === 'LATE' ? 'bg-yellow-100 text-yellow-800' :
+                            log.status === 'ABSENT' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }
+                        >
+                          {log.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {new Date(log.date).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No attendance logs found.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

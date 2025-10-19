@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Calendar, Plus, Eye, Clock } from "lucide-react"
+import { Calendar, Plus, Eye, Clock, Trash2 } from "lucide-react"
+import { getNowInPhilippines, toPhilippinesDateString } from "@/lib/timezone"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,12 +35,13 @@ import {
 import { toast } from "react-hot-toast"
 
 type LeaveStatus = "PENDING" | "APPROVED" | "DENIED"
-type LeaveType = "VACATION" | "FMLA" | "PARENTAL" | "SICK" | "UNPAID" | "PERSONAL" | "PUBLIC_HOLIDAY" | "RELIGIOUS" | "SABBATICAL" | "BEREAVEMENT" | "COMPENSATORY" | "CUSTOM"
+type RequestType = "LEAVE" | "TRAVEL_ORDER"
+type LeaveType = "VACATION" | "SICK" | "EMERGENCY" | "PATERNITY" | "MATERNITY"
 
 type Leave = {
   leave_requests_id: string
+  requestType: RequestType
   type: LeaveType
-  customLeaveType?: string | null
   startDate: string
   endDate: string
   days: number
@@ -61,8 +63,8 @@ export default function PersonnelLeavesPage() {
 
   // Form state
   const [formData, setFormData] = useState({
+    requestType: "LEAVE" as RequestType,
     type: "VACATION" as LeaveType,
-    customLeaveType: "",
     startDate: "",
     endDate: "",
     isPaid: true,
@@ -116,6 +118,20 @@ export default function PersonnelLeavesPage() {
       return
     }
 
+    // Check if dates are in the past using Philippines timezone
+    const today = getNowInPhilippines()
+    const todayDateStr = toPhilippinesDateString(today)
+    
+    if (formData.startDate < todayDateStr) {
+      toast.error("Start date cannot be in the past")
+      return
+    }
+    
+    if (formData.endDate < todayDateStr) {
+      toast.error("End date cannot be in the past")
+      return
+    }
+
     if (calculatedDays <= 0) {
       toast.error("End date must be after start date")
       return
@@ -126,19 +142,14 @@ export default function PersonnelLeavesPage() {
       return
     }
 
-    if (formData.type === "CUSTOM" && !formData.customLeaveType.trim()) {
-      toast.error("Please specify custom leave type")
-      return
-    }
-
     try {
       setSubmitting(true)
       const response = await fetch("/api/personnel/leaves", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          requestType: formData.requestType,
           type: formData.type,
-          customLeaveType: formData.type === "CUSTOM" ? formData.customLeaveType : null,
           startDate: formData.startDate,
           endDate: formData.endDate,
           days: calculatedDays,
@@ -168,8 +179,8 @@ export default function PersonnelLeavesPage() {
 
   function resetForm() {
     setFormData({
+      requestType: "LEAVE",
       type: "VACATION",
-      customLeaveType: "",
       startDate: "",
       endDate: "",
       isPaid: true,
@@ -183,21 +194,17 @@ export default function PersonnelLeavesPage() {
     return "bg-yellow-100 text-yellow-800"
   }
 
-  function formatLeaveType(type: LeaveType, customType?: string | null) {
-    if (type === "CUSTOM" && customType) return customType
+  function formatRequestType(type: RequestType) {
+    return type === "TRAVEL_ORDER" ? "Travel Order" : "Leave"
+  }
+
+  function formatLeaveType(type: LeaveType) {
     const formatted: Record<LeaveType, string> = {
       VACATION: "Vacation",
-      FMLA: "FMLA",
-      PARENTAL: "Parental",
       SICK: "Sick",
-      UNPAID: "Unpaid",
-      PERSONAL: "Personal",
-      PUBLIC_HOLIDAY: "Public Holiday",
-      RELIGIOUS: "Religious",
-      SABBATICAL: "Sabbatical",
-      BEREAVEMENT: "Bereavement",
-      COMPENSATORY: "Compensatory",
-      CUSTOM: "Custom",
+      EMERGENCY: "Emergency",
+      PATERNITY: "Paternity",
+      MATERNITY: "Maternity",
     }
     return formatted[type] || type
   }
@@ -297,17 +304,10 @@ export default function PersonnelLeavesPage() {
                 <SelectContent>
                   <SelectItem value="ALL">All Types</SelectItem>
                   <SelectItem value="VACATION">Vacation</SelectItem>
-                  <SelectItem value="FMLA">FMLA</SelectItem>
-                  <SelectItem value="PARENTAL">Parental</SelectItem>
                   <SelectItem value="SICK">Sick</SelectItem>
-                  <SelectItem value="UNPAID">Unpaid</SelectItem>
-                  <SelectItem value="PERSONAL">Personal</SelectItem>
-                  <SelectItem value="PUBLIC_HOLIDAY">Public Holiday</SelectItem>
-                  <SelectItem value="RELIGIOUS">Religious</SelectItem>
-                  <SelectItem value="SABBATICAL">Sabbatical</SelectItem>
-                  <SelectItem value="BEREAVEMENT">Bereavement</SelectItem>
-                  <SelectItem value="COMPENSATORY">Compensatory</SelectItem>
-                  <SelectItem value="CUSTOM">Custom</SelectItem>
+                  <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                  <SelectItem value="PATERNITY">Paternity</SelectItem>
+                  <SelectItem value="MATERNITY">Maternity</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -339,7 +339,12 @@ export default function PersonnelLeavesPage() {
                 filteredLeaves.map((leave) => (
                   <TableRow key={leave.leave_requests_id}>
                     <TableCell>
-                      <Badge variant="outline">{formatLeaveType(leave.type, leave.customLeaveType)}</Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="outline" className="w-fit">{formatRequestType(leave.requestType)}</Badge>
+                        {leave.requestType === "LEAVE" && (
+                          <Badge variant="secondary" className="w-fit">{formatLeaveType(leave.type)}</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>{leave.startDate}</TableCell>
                     <TableCell>{leave.endDate}</TableCell>
@@ -355,16 +360,45 @@ export default function PersonnelLeavesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedLeave(leave)
-                          setViewDialogOpen(true)
-                        }}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedLeave(leave)
+                            setViewDialogOpen(true)
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {leave.status === "PENDING" && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              if (confirm("Are you sure you want to delete this leave request?")) {
+                                try {
+                                  const response = await fetch(`/api/leave-requests/${leave.leave_requests_id}`, {
+                                    method: "DELETE"
+                                  })
+                                  if (response.ok) {
+                                    toast.success("Leave request deleted successfully")
+                                    fetchLeaves()
+                                  } else {
+                                    const error = await response.json()
+                                    toast.error(error.error || "Failed to delete leave request")
+                                  }
+                                } catch (error) {
+                                  console.error("Error deleting leave:", error)
+                                  toast.error("Failed to delete leave request")
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -374,19 +408,52 @@ export default function PersonnelLeavesPage() {
         </CardContent>
       </Card>
 
-      {/* Request Leave Form Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* Request Leave Form Dialog - Redesigned */}
+      <Dialog open={formOpen} onOpenChange={(open) => {
+        setFormOpen(open)
+        if (!open) {
+          resetForm() // Reset form when dialog closes
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Request Leave</DialogTitle>
             <DialogDescription>
               Fill in the details below to submit your leave request
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Leave Type</Label>
+          <div className="space-y-6 mt-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Request Type</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, requestType: 'LEAVE' })}
+                  className={`p-3 rounded-md border text-left transition-colors ${
+                    formData.requestType === 'LEAVE'
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <p className="font-medium">Leave</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, requestType: 'TRAVEL_ORDER' })}
+                  className={`p-3 rounded-md border text-left transition-colors ${
+                    formData.requestType === 'TRAVEL_ORDER'
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <p className="font-medium">Travel Order</p>
+                </button>
+              </div>
+            </div>
+
+            {formData.requestType === "LEAVE" && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Leave Type</Label>
                 <Select
                   value={formData.type}
                   onValueChange={(value) => setFormData({ ...formData, type: value as LeaveType })}
@@ -395,61 +462,42 @@ export default function PersonnelLeavesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="VACATION">Vacation (Annual)</SelectItem>
-                    <SelectItem value="FMLA">Family and Medical Leave (FMLA)</SelectItem>
-                    <SelectItem value="PARENTAL">Parental Leave</SelectItem>
-                    <SelectItem value="SICK">Sick Leave</SelectItem>
-                    <SelectItem value="UNPAID">Unpaid Leave</SelectItem>
-                    <SelectItem value="PERSONAL">Personal Leave</SelectItem>
-                    <SelectItem value="PUBLIC_HOLIDAY">Public Holiday</SelectItem>
-                    <SelectItem value="RELIGIOUS">Religious Observance</SelectItem>
-                    <SelectItem value="SABBATICAL">Sabbatical Leave</SelectItem>
-                    <SelectItem value="BEREAVEMENT">Bereavement Leave</SelectItem>
-                    <SelectItem value="COMPENSATORY">Compensatory Leave</SelectItem>
-                    <SelectItem value="CUSTOM">Custom Leave</SelectItem>
+                    <SelectItem value="VACATION">Vacation</SelectItem>
+                    <SelectItem value="SICK">Sick</SelectItem>
+                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                    <SelectItem value="PATERNITY">Paternity</SelectItem>
+                    <SelectItem value="MATERNITY">Maternity</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div>
-                <Label>Category</Label>
-                <Select
-                  value={formData.isPaid ? "paid" : "unpaid"}
-                  onValueChange={(value) => setFormData({ ...formData, isPaid: value === "paid" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="unpaid">Unpaid</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {formData.type === "CUSTOM" && (
-              <div>
-                <Label>Custom Leave Type Name</Label>
-                <Input
-                  placeholder="e.g., Study Leave, Jury Duty, etc."
-                  value={formData.customLeaveType}
-                  onChange={(e) => setFormData({ ...formData, customLeaveType: e.target.value })}
-                />
               </div>
             )}
 
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Category</Label>
+              <Select
+                value={formData.isPaid ? "paid" : "unpaid"}
+                onValueChange={(value) => setFormData({ ...formData, isPaid: value === "paid" })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-3">
-              <div>
-                <Label>Duration (Quick Select)</Label>
-                <div className="flex gap-2 flex-wrap">
+              <Label className="text-sm font-medium">Duration</Label>
+              <div className="flex gap-2 flex-wrap">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const today = new Date()
-                      const formatted = today.toISOString().split("T")[0]
+                      const today = getNowInPhilippines()
+                      const formatted = toPhilippinesDateString(today)
                       setFormData({ ...formData, startDate: formatted, endDate: formatted })
                     }}
                   >
@@ -460,13 +508,13 @@ export default function PersonnelLeavesPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const start = new Date()
+                      const start = getNowInPhilippines()
                       const end = new Date(start)
                       end.setDate(start.getDate() + 2)
                       setFormData({ 
                         ...formData, 
-                        startDate: start.toISOString().split("T")[0], 
-                        endDate: end.toISOString().split("T")[0] 
+                        startDate: toPhilippinesDateString(start), 
+                        endDate: toPhilippinesDateString(end) 
                       })
                     }}
                   >
@@ -477,13 +525,13 @@ export default function PersonnelLeavesPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const start = new Date()
+                      const start = getNowInPhilippines()
                       const end = new Date(start)
                       end.setDate(start.getDate() + 4)
                       setFormData({ 
                         ...formData, 
-                        startDate: start.toISOString().split("T")[0], 
-                        endDate: end.toISOString().split("T")[0] 
+                        startDate: toPhilippinesDateString(start), 
+                        endDate: toPhilippinesDateString(end) 
                       })
                     }}
                   >
@@ -494,13 +542,13 @@ export default function PersonnelLeavesPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const start = new Date()
+                      const start = getNowInPhilippines()
                       const end = new Date(start)
                       end.setDate(start.getDate() + 6)
                       setFormData({ 
                         ...formData, 
-                        startDate: start.toISOString().split("T")[0], 
-                        endDate: end.toISOString().split("T")[0] 
+                        startDate: toPhilippinesDateString(start), 
+                        endDate: toPhilippinesDateString(end) 
                       })
                     }}
                   >
@@ -511,54 +559,55 @@ export default function PersonnelLeavesPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const start = new Date()
+                      const start = getNowInPhilippines()
                       const end = new Date(start)
                       end.setDate(start.getDate() + 13)
                       setFormData({ 
                         ...formData, 
-                        startDate: start.toISOString().split("T")[0], 
-                        endDate: end.toISOString().split("T")[0] 
+                        startDate: toPhilippinesDateString(start), 
+                        endDate: toPhilippinesDateString(end) 
                       })
                     }}
                   >
                     14 Days
                   </Button>
-                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Start Date</Label>
+                  <Label className="text-sm">Start Date</Label>
                   <Input
                     type="date"
+                    min={toPhilippinesDateString(getNowInPhilippines())}
                     value={formData.startDate}
                     onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                   />
                 </div>
 
                 <div>
-                  <Label>End Date</Label>
+                  <Label className="text-sm">End Date</Label>
                   <Input
                     type="date"
+                    min={formData.startDate || toPhilippinesDateString(getNowInPhilippines())}
                     value={formData.endDate}
                     onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                   />
                 </div>
               </div>
+              
+              {calculatedDays > 0 && (
+                <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
+                  <p className="text-sm text-blue-900">
+                    <span className="font-medium">Duration:</span> {calculatedDays} day{calculatedDays !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              )}
             </div>
 
-            {calculatedDays > 0 && (
-              <div className="bg-blue-50 p-3 rounded-md">
-                <p className="text-sm text-blue-800">
-                  <strong>Duration:</strong> {calculatedDays} day{calculatedDays !== 1 ? "s" : ""}
-                </p>
-              </div>
-            )}
-
-            <div>
-              <Label>Reason for Leave</Label>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Reason</Label>
               <Textarea
-                placeholder="Please provide a reason for your leave request..."
+                placeholder="Please provide a reason for your leave request"
                 rows={4}
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
@@ -593,9 +642,15 @@ export default function PersonnelLeavesPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-muted-foreground">Type</Label>
-                  <p className="font-medium">{formatLeaveType(selectedLeave.type, selectedLeave.customLeaveType)}</p>
+                  <Label className="text-muted-foreground">Request Type</Label>
+                  <p className="font-medium">{formatRequestType(selectedLeave.requestType)}</p>
                 </div>
+                {selectedLeave.requestType === "LEAVE" && (
+                  <div>
+                    <Label className="text-muted-foreground">Leave Type</Label>
+                    <p className="font-medium">{formatLeaveType(selectedLeave.type)}</p>
+                  </div>
+                )}
                 <div>
                   <Label className="text-muted-foreground">Status</Label>
                   <Badge className={statusClass(selectedLeave.status)}>

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CreditCard, TrendingUp, Calendar, DollarSign, FileText, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { CreditCard, TrendingUp, Calendar, FileText, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface LoanData {
@@ -162,7 +162,7 @@ export default function PersonnelLoansPage() {
                 <p className="text-sm text-gray-600">Total Amount</p>
                 <p className="text-2xl font-bold">{formatCurrency(summary.totalActiveLoanAmount)}</p>
               </div>
-              <DollarSign className="w-8 h-8 text-purple-600" />
+              <span className="text-4xl font-bold text-purple-600">₱</span>
             </div>
           </CardContent>
         </Card>

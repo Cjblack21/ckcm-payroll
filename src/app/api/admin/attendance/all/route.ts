@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
             email: true,
             personnelType: {
               select: {
-                basicSalary: true
+                personnel_types_id: true,
+                name: true,
+                basicSalary: true,
+                isActive: true
               }
             }
           }

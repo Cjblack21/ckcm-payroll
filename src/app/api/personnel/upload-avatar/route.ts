@@ -43,11 +43,16 @@ export async function POST(request: Request) {
     const filepath = path.join(uploadsDir, filename)
     await writeFile(filepath, buffer)
 
-    // Note: Avatar field not in schema - file saved but not stored in database
     const avatarUrl = `/uploads/avatars/${filename}`
 
+    // Update user avatar in database
+    await prisma.user.update({
+      where: { users_id: session.user.id },
+      data: { avatar: avatarUrl },
+    })
+
     return NextResponse.json({ 
-      message: "Avatar uploaded successfully (file only, not stored in database)",
+      message: "Avatar uploaded successfully",
       avatarUrl 
     })
   } catch (error) {

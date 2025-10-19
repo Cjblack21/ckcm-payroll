@@ -343,44 +343,60 @@ export default function PersonnelPayrollPage() {
               Current Payroll
             </CardTitle>
             <CardDescription>
-              Your payroll for the current biweekly period
+              Your payroll for the current period
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="text-center p-4 bg-green-50 rounded-lg">
-                <p className="text-sm text-gray-600">Basic Salary</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(Number(currentPayroll.basicSalary))}
-                </p>
-              </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-gray-600">Overtime</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(Number(currentPayroll.overtime))}
-                </p>
-              </div>
-              <div className="text-center p-4 bg-red-50 rounded-lg">
-                <p className="text-sm text-gray-600">Deductions</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency(Number(currentPayroll.deductions))}
-                </p>
-              </div>
-              <div className="text-center p-4 bg-purple-50 rounded-lg">
-                <p className="text-sm text-gray-600">Net Pay</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {formatCurrency(Number(currentPayroll.netPay))}
-                </p>
-              </div>
+          <CardContent className="pt-6">
+            {/* Summary Cards - Clean Design */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+              <Card className="border-l-4 border-l-green-500">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Basic Salary</p>
+                  <p className="text-xl font-semibold">
+                    {formatCurrency(Number(currentPayroll.basicSalary))}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Overtime</p>
+                  <p className="text-xl font-semibold">
+                    {formatCurrency(Number(currentPayroll.overtime))}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-red-500">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Deductions</p>
+                  <p className="text-xl font-semibold text-red-600 dark:text-red-400">
+                    {formatCurrency(Number(currentPayroll.deductions))}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-primary">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Net Pay</p>
+                  <p className="text-xl font-semibold text-primary">
+                    {formatCurrency(Number(currentPayroll.netPay))}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {((Number(currentPayroll.netPay) / Number(currentPayroll.basicSalary)) * 100).toFixed(1)}% of basic
+                  </p>
+                </CardContent>
+              </Card>
             </div>
             
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            {/* Status and Action */}
+            <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-3">
                 <Badge variant={currentPayroll.status === 'RELEASED' ? 'default' : 'secondary'}>
                   {currentPayroll.status}
                 </Badge>
                 {currentPayroll.releasedAt && (
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-muted-foreground">
                     Released: {formatDate(currentPayroll.releasedAt)}
                   </span>
                 )}
@@ -406,9 +422,11 @@ export default function PersonnelPayrollPage() {
 
       {/* Payroll Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Payroll Details</DialogTitle>
+            <DialogTitle className="text-xl font-semibold">
+              Payroll Details
+            </DialogTitle>
             <DialogDescription>
               Detailed breakdown of your payroll
             </DialogDescription>

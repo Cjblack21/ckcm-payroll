@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Bell, Check, CheckCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,9 +20,11 @@ interface Notification {
   type: 'info' | 'warning' | 'error' | 'success'
   isRead: boolean
   createdAt: string
+  link?: string
 }
 
 export function FunctionalNotifications() {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -188,8 +191,13 @@ export function FunctionalNotifications() {
             notifications.map((notification) => (
               <DropdownMenuItem 
                 key={notification.id} 
-                className="flex flex-col items-start p-3 cursor-pointer"
-                onClick={() => !notification.isRead && markAsRead(notification.id)}
+                className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent"
+                onClick={() => {
+                  if (!notification.isRead) markAsRead(notification.id)
+                  if (notification.link) {
+                    router.push(notification.link)
+                  }
+                }}
               >
                 <div className="flex items-start justify-between w-full">
                   <div className="flex-1">

@@ -164,10 +164,14 @@ export async function POST(request: NextRequest) {
 // Helper function to create attendance records for the specified period
 async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Date) {
   try {
+    // Get attendance settings for cut-off time
+    const settings = await prisma.attendanceSettings.findFirst()
+    const cutoffTime = settings?.timeOutEnd || '14:00'
+    
     // Get all active personnel
     const activePersonnel = await prisma.user.findMany({
       where: { isActive: true, role: 'PERSONNEL' },
-      select: { users_id: true }
+      select: { users_id: true, personnelType: true }
     })
 
     if (activePersonnel.length === 0) {
@@ -193,15 +197,48 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
 
     console.log(`Creating attendance records for ${workingDays.length} working days and ${activePersonnel.length} personnel`)
 
+    // Get current time in Philippines timezone
+    const { toZonedTime } = await import('date-fns-tz')
+    const nowPhilippines = toZonedTime(new Date(), 'Asia/Manila')
+    const [cutoffHours, cutoffMinutes] = cutoffTime.split(':').map(Number)
+
     // Create attendance records for each personnel and working day
     const recordsToCreate = []
+    const absenceDeductions = []
+    
     for (const person of activePersonnel) {
       for (const workingDay of workingDays) {
+        // Check if this day is today and past cut-off time
+        const dayStart = new Date(workingDay)
+        dayStart.setHours(0, 0, 0, 0)
+        const dayEnd = new Date(workingDay)
+        dayEnd.setHours(23, 59, 59, 999)
+        
+        const isToday = nowPhilippines >= dayStart && nowPhilippines <= dayEnd
+        const cutoffDateTime = new Date(nowPhilippines)
+        cutoffDateTime.setHours(cutoffHours, cutoffMinutes, 0, 0)
+        const isPastCutoff = isToday && nowPhilippines >= cutoffDateTime
+        
+        // If past cut-off and no time in/out, create as ABSENT
+        const status = isPastCutoff ? 'ABSENT' : 'PENDING'
+        
         recordsToCreate.push({
           users_id: person.users_id,
           date: workingDay,
-          status: 'PENDING' as const
+          status: status as const
         })
+        
+        // If marked as ABSENT, also create deduction
+        if (status === 'ABSENT' && person.personnelType?.basicSalary) {
+          const { calculateAbsenceDeduction } = await import('@/lib/attendance-calculations')
+          const deductionAmount = await calculateAbsenceDeduction(person.personnelType.basicSalary)
+          
+          absenceDeductions.push({
+            users_id: person.users_id,
+            deductionAmount,
+            date: workingDay
+          })
+        }
       }
     }
 
@@ -212,6 +249,41 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
     })
 
     console.log(`Successfully created ${recordsToCreate.length} attendance records`)
+    
+    // Create absence deductions for users marked as ABSENT
+    if (absenceDeductions.length > 0) {
+      // Get or create "Absence" deduction type
+      let absenceDeductionType = await prisma.deductionType.findFirst({
+        where: { name: 'Absence' }
+      })
+      
+      if (!absenceDeductionType) {
+        absenceDeductionType = await prisma.deductionType.create({
+          data: {
+            name: 'Absence',
+            description: 'Automatic deduction for absence (no time in)',
+            amount: 0,
+            isActive: true
+          }
+        })
+      }
+      
+      // Create deduction records
+      const deductionsToCreate = absenceDeductions.map(deduction => ({
+        users_id: deduction.users_id,
+        deduction_types_id: absenceDeductionType.deduction_types_id,
+        amount: deduction.deductionAmount,
+        appliedAt: deduction.date,
+        notes: `Absence: No time in/out by cut-off time (₱${deduction.deductionAmount.toFixed(2)} deduction - full daily salary)`
+      }))
+      
+      await prisma.deduction.createMany({
+        data: deductionsToCreate,
+        skipDuplicates: true
+      })
+      
+      console.log(`✅ Created ${absenceDeductions.length} absence deductions`)
+    }
   } catch (error) {
     console.error('Error creating attendance records for period:', error)
     // Don't throw error here to avoid breaking the settings update

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Calendar, CheckCircle, XCircle, Eye } from "lucide-react"
+import { Calendar, CheckCircle, XCircle, Eye, Trash2, History, ChevronDown, ChevronUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -63,6 +63,7 @@ export default function LeavesPage() {
   const [selectedLeave, setSelectedLeave] = useState<Leave | null>(null)
   const [adminComment, setAdminComment] = useState("")
   const [processing, setProcessing] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
 
   // Fetch leave requests from API
   useEffect(() => {
@@ -284,9 +285,31 @@ export default function LeavesPage() {
 
       {/* All Leave Requests History */}
       <Card>
-        <CardHeader>
-          <CardTitle>Leave History</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Leave History
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-2"
+          >
+            {showHistory ? (
+              <>
+                <ChevronUp className="h-4 w-4" />
+                Hide History
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4" />
+                Show History ({processedLeaves.length})
+              </>
+            )}
+          </Button>
         </CardHeader>
+        {showHistory && (
         <CardContent>
           {loading ? (
             <div className="py-8 text-center text-muted-foreground">Loading...</div>
@@ -340,16 +363,43 @@ export default function LeavesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedLeave(leave)
-                            setViewDialogOpen(true)
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedLeave(leave)
+                              setViewDialogOpen(true)
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to delete this leave request from ${leave.empName}?`)) {
+                                try {
+                                  const response = await fetch(`/api/leave-requests/${leave.leave_requests_id}`, {
+                                    method: "DELETE"
+                                  })
+                                  if (response.ok) {
+                                    toast.success("Leave request deleted successfully")
+                                    fetchLeaveRequests()
+                                  } else {
+                                    const error = await response.json()
+                                    toast.error(error.error || "Failed to delete leave request")
+                                  }
+                                } catch (error) {
+                                  console.error("Error deleting leave:", error)
+                                  toast.error("Failed to delete leave request")
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -358,6 +408,7 @@ export default function LeavesPage() {
             </Table>
           )}
         </CardContent>
+        )}
       </Card>
 
       {/* View Details Dialog */}

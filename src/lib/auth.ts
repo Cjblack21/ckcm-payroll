@@ -73,6 +73,7 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name,
             role: user.role,
+            avatar: user.avatar,
           }
         } catch (error) {
           console.error("Auth error:", error)
@@ -124,6 +125,7 @@ export const authOptions: NextAuthOptions = {
             // User exists, use their data
             token.role = existingUser.role
             token.userId = existingUser.users_id
+            token.avatar = existingUser.avatar
           } else {
             console.log('New user, setting up for account setup')
             // New user, mark as needing setup
@@ -144,6 +146,7 @@ export const authOptions: NextAuthOptions = {
         console.log('Processing credentials user:', user.id, user.role)
         token.role = user.role
         token.userId = user.id
+        token.avatar = user.avatar
       }
       
       console.log('JWT token final state:', { 
@@ -158,6 +161,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.userId as string || token.sub || ''
         session.user.role = token.role as Role || 'SETUP_REQUIRED'
+        session.user.avatar = token.avatar as string || null
         if (token.role === "SETUP_REQUIRED") {
           session.user.email = token.email as string || ''
           session.user.name = token.name as string || ''
@@ -203,6 +207,7 @@ export const authOptions: NextAuthOptions = {
 declare module "next-auth" {
   interface User {
     role: Role | "SETUP_REQUIRED"
+    avatar?: string | null
   }
   
   interface Session {
@@ -211,6 +216,7 @@ declare module "next-auth" {
       email: string
       name?: string | null
       image?: string | null
+      avatar?: string | null
       role: Role | "SETUP_REQUIRED"
     }
   }
@@ -223,5 +229,6 @@ declare module "next-auth/jwt" {
     email?: string
     name?: string
     picture?: string
+    avatar?: string | null
   }
 }

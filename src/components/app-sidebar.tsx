@@ -41,18 +41,19 @@ import {
 import Link from "next/link"
 
 // PMS Admin Dashboard Data - this will be made dynamic
-const getNavData = (user?: { name?: string | null, email?: string }) => ({
+const getNavData = (user?: { id?: string, name?: string | null, email?: string, avatar?: string | null }) => ({
   user: {
+    id: user?.id,
     name: user?.name || "System Administrator",
     email: user?.email || "admin@pms.com",
-    avatar: "",
+    avatar: user?.avatar || "",
   },
   navMain: [],
   projects: [],
 })
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  user?: { name?: string | null, email?: string }
+  user?: { id?: string, name?: string | null, email?: string, avatar?: string | null }
 }
 
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
@@ -66,27 +67,34 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/admin/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <img 
-                    src="/ckcm.png" 
-                    alt="CKCM Logo" 
-                    className="h-8 w-8 object-contain"
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">CKCM PMS</span>
-                  <span className="text-xs">Administrator</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+            <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:justify-center">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                <img 
+                  src="/ckcm.png" 
+                  alt="CKCM Logo" 
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+              <div className="group-data-[collapsible=icon]:hidden flex flex-col gap-0.5 leading-none">
+                <span className="font-semibold">CKCM PMS</span>
+                <span className="text-xs text-muted-foreground">Welcome to PMS</span>
+              </div>
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="group-data-[collapsible=icon]:hidden px-3 py-2 mt-2">
+          <p className="text-xs font-medium text-muted-foreground">Account</p>
+        </div>
+        <SSRSafe>
+          <NavUser user={data.user} role="admin" />
+        </SSRSafe>
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden">
+        <SidebarSeparator />
+        
         {/* Main Dashboard */}
         <SidebarGroup>
+          <SidebarGroupLabel>Overview</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
             <SidebarMenu>
               <SidebarMenuItem>
@@ -163,7 +171,7 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
                 <SidebarMenuButton asChild>
                   <Link href="/admin/personnel-types">
                     <UserCheck />
-                    <span>Personnel Types</span>
+                    <span>Position</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -253,9 +261,10 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <SSRSafe>
-          <NavUser user={data.user} />
-        </SSRSafe>
+        <div className="group-data-[collapsible=icon]:hidden px-3 py-2 text-center border-t">
+          <p className="text-xs font-medium">CKCM Payroll Management System</p>
+          <p className="text-xs text-muted-foreground">© 2025 All rights reserved</p>
+        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

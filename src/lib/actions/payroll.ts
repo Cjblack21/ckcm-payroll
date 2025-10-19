@@ -127,13 +127,29 @@ export async function getPayrollSummary(): Promise<{
       periodEnd = new Date(attendanceSettings.periodEnd)
       console.log(`🔧 Payroll period aligned with attendance period: ${periodStart.toISOString()} to ${periodEnd.toISOString()}`)
     } else {
-      // Fallback to current month if no attendance settings
-      const now = new Date()
-      const currentYear = now.getFullYear()
-      const currentMonth = now.getMonth()
-      periodStart = new Date(currentYear, currentMonth, 1)
-      periodEnd = new Date(currentYear, currentMonth + 1, 0)
-      console.log(`🔧 Payroll period fallback to current month: ${periodStart.toISOString()} to ${periodEnd.toISOString()}`)
+      // No period set - return empty summary (no fallback to current month)
+      console.log('🔧 No payroll period set - returning empty summary')
+      return {
+        success: true,
+        summary: {
+          periodStart: '',
+          periodEnd: '',
+          totalEmployees: 0,
+          totalGrossSalary: 0,
+          totalDeductions: 0,
+          totalNetSalary: 0,
+          workingDays: [],
+          payrollEntries: [],
+          hasGenerated: false,
+          hasReleased: false,
+          settings: {
+            periodStart: '',
+            periodEnd: '',
+            hasGeneratedForSettings: false,
+            timeOutEnd: attendanceSettings?.timeOutEnd || null
+          }
+        }
+      }
     }
 
     // Preserve settings period separately for UI logic (Generate button state)
@@ -834,6 +850,26 @@ export async function getPayrollSummary(): Promise<{
           startDate: { lte: periodEnd },
           endDate: { gte: periodStart }
         }
+      })
+
+      console.log(`🔍 UNPAID LEAVE DEBUG - User: ${user.name}`)
+      console.log(`🔍 UNPAID LEAVE DEBUG - Payroll Period: ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`)
+      console.log(`🔍 UNPAID LEAVE DEBUG - Found ${unpaidLeaveRequests.length} unpaid leave requests in this period`)
+      unpaidLeaveRequests.forEach(leave => {
+        console.log(`🔍 UNPAID LEAVE DEBUG - ✓ Leave FOUND: ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]}, Days: ${leave.days}, isPaid: ${leave.isPaid}`)
+      })
+      
+      // Also check ALL approved unpaid leaves for this user (for debugging)
+      const allUnpaidLeaves = await prisma.leaveRequest.findMany({
+        where: {
+          users_id: user.users_id,
+          status: 'APPROVED',
+          isPaid: false
+        }
+      })
+      console.log(`🔍 UNPAID LEAVE DEBUG - Total approved unpaid leaves (all periods): ${allUnpaidLeaves.length}`)
+      allUnpaidLeaves.forEach(leave => {
+        console.log(`🔍 UNPAID LEAVE DEBUG - All Leaves: ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]}`)
       })
 
       // Calculate unpaid leave deduction

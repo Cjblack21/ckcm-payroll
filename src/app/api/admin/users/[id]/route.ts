@@ -209,6 +209,27 @@ export async function DELETE(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    // Check if user has related records
+    const [attendanceCount, payrollCount, loanCount, deductionCount, leaveCount] = await Promise.all([
+      prisma.attendance.count({ where: { users_id: resolvedParams.id } }),
+      prisma.payrollEntry.count({ where: { users_id: resolvedParams.id } }),
+      prisma.loan.count({ where: { users_id: resolvedParams.id } }),
+      prisma.deduction.count({ where: { users_id: resolvedParams.id } }),
+      prisma.leaveRequest.count({ where: { users_id: resolvedParams.id } })
+    ])
+
+    const totalRelatedRecords = attendanceCount + payrollCount + loanCount + deductionCount + leaveCount
+
+    if (totalRelatedRecords > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Cannot delete user with existing records',
+          details: `This user has ${attendanceCount} attendance records, ${payrollCount} payroll records, ${loanCount} loans, ${deductionCount} deductions, and ${leaveCount} leave requests. Please deactivate the user instead.`
+        },
+        { status: 400 }
+      )
+    }
+
     // Delete user (this will cascade delete sessions)
     await prisma.user.delete({
       where: { users_id: resolvedParams.id }
@@ -217,6 +238,18 @@ export async function DELETE(
     return NextResponse.json({ message: 'User deleted successfully' })
   } catch (error) {
     console.error('Error deleting user:', error)
+    
+    // Handle Prisma foreign key constraint error
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return NextResponse.json(
+        { 
+          error: 'Cannot delete user with existing records',
+          details: 'This user has related records in the system. Please deactivate the user instead of deleting.'
+        },
+        { status: 400 }
+      )
+    }
+    
     return NextResponse.json(
       { error: 'Failed to delete user' },
       { status: 500 }

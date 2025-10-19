@@ -9,16 +9,38 @@ import { formatInTimeZone } from "date-fns-tz"
 import { Badge } from "@/components/ui/badge"
 import { Clock, ArrowRightCircle, LogIn, LogOut, AlertCircle } from "lucide-react"
 
+// Types for settings and responses to satisfy linting without using 'any'
+type AttendanceSettings = {
+  timeInStart?: string | null
+  timeInEnd?: string | null
+  timeOutStart?: string | null
+  timeOutEnd?: string | null
+}
+
+type AttendanceStatusResp = {
+  status?: string
+  message?: string
+  timeIn?: string | null
+  timeOut?: string | null
+  status_type?: string | null
+}
+
+type LeaveDetails = {
+  type: string
+  startDate: string
+  endDate: string
+}
+
 export default function AttendancePortalPage() {
   const [mounted, setMounted] = useState(false)
   const [now, setNow] = useState<Date>(new Date())
   const [schoolId, setSchoolId] = useState("")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [settings, setSettings] = useState<any>(null)
-  const [attendanceStatus, setAttendanceStatus] = useState<any>(null)
+  const [settings, setSettings] = useState<AttendanceSettings | null>(null)
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResp | null>(null)
   const [showAlreadyTimedInModal, setShowAlreadyTimedInModal] = useState(false)
-  const [leaveStatus, setLeaveStatus] = useState<any>(null)
+  const [leaveStatus, setLeaveStatus] = useState<LeaveDetails | null>(null)
 
   // Use a configurable base path so the app can be deployed under e.g. /attendance-portal
   const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ""
@@ -46,7 +68,7 @@ export default function AttendancePortalPage() {
       try {
         const res = await fetch(`${BASE_PATH}/api/attendance/settings`)
         const data = await res.json()
-        setSettings(data.settings || null)
+        setSettings((data.settings || null) as AttendanceSettings | null)
       } catch (e) {}
     })()
   }, [])
@@ -80,14 +102,14 @@ export default function AttendancePortalPage() {
     }
   }
 
-  const checkAttendanceStatus = async (userId: string) => {
+  const checkAttendanceStatus = async (userId: string): Promise<AttendanceStatusResp | null> => {
     try {
       const res = await fetch(`${BASE_PATH}/api/attendance/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ users_id: userId })
       })
-      const data = await res.json()
+      const data = (await res.json()) as AttendanceStatusResp
       if (res.ok) {
         setAttendanceStatus(data)
         return data
@@ -105,10 +127,11 @@ export default function AttendancePortalPage() {
     
     try {
       // Use API route for attendance portal (no authentication required)
+      const payload = schoolId.trim().includes('@') ? { email: schoolId.trim() } : { users_id: schoolId.trim() }
       const response = await fetch(`${BASE_PATH}/api/attendance/punch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ users_id: schoolId })
+        body: JSON.stringify(payload)
       })
       
       const result = await response.json()
@@ -146,17 +169,31 @@ export default function AttendancePortalPage() {
     }
   }
 
-  // Determine if user can punch in/out based on current time and settings
+  // Determine if user can punch in/out based on cutoff only
   const canPunch = useMemo(() => {
-    if (!settings) return true // Allow if no settings
-    
+    if (!settings) return true
+
     const currentTime = hhmmNow()
-    const isTimeInWindow = within(settings.timeInStart, settings.timeInEnd)
-    const isTimeOutWindow = within(settings.timeOutStart, settings.timeOutEnd)
     
-    // Always allow punching - let the backend API handle all validation
-    // The backend will correctly mark late time-ins as LATE status
-    // The backend will block time-ins only if explicitly configured to do so
+    // Block only after cutoff (timeOutEnd)
+    if (settings.timeOutEnd) {
+      const [ch, cm] = currentTime.split(':').map(Number)
+      const [eh, em] = settings.timeOutEnd.split(':').map(Number)
+      const cur = ch * 60 + cm
+      const end = eh * 60 + em
+      const start = settings.timeOutStart ? (parseInt(settings.timeOutStart.split(':')[0]) * 60 + parseInt(settings.timeOutStart.split(':')[1])) : null
+      let afterEnd = false
+      if (start !== null && start > end) {
+        // Overnight cutoff
+        afterEnd = cur > end && cur < start
+      } else {
+        // Normal same-day cutoff
+        afterEnd = cur > end
+      }
+      if (afterEnd) return false
+    }
+
+    // Otherwise allow (late/early will have deductions)
     return true
   }, [settings, now])
 
@@ -207,7 +244,7 @@ export default function AttendancePortalPage() {
             Attendance Portal
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground font-medium">
-            Submit your time in/out using your School ID
+            Submit your time in/out using your School ID or Email
           </p>
         </div>
         
@@ -225,10 +262,10 @@ export default function AttendancePortalPage() {
             <svg className="w-7 h-7 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
             </svg>
-            School ID
+            School ID or Email
           </label>
           <Input 
-            placeholder="Enter your School ID" 
+            placeholder="Enter your School ID or Email" 
             value={schoolId} 
             onChange={(e) => setSchoolId(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && onPunch()}
@@ -293,10 +330,12 @@ export default function AttendancePortalPage() {
                   ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700' 
                   : outWindow 
                   ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700' 
+                  : canPunch
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700'
                   : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'
               }`}
             >
-              {inWindow ? '🟢 Within time-in window' : outWindow ? '🟠 Within time-out window' : '⚪ Outside windows'}
+              {inWindow ? '🟢 On-time window' : outWindow ? '🟠 Time-out window' : canPunch ? '⚠️ Late/Early (deductions apply)' : '⚪ Past cutoff (attendance closed)'}
             </Badge>
           </div>
         )}

@@ -108,7 +108,7 @@ export function generatePayslipHTML(
       `}
       
       <div style="margin-bottom: 2px;">
-        <strong>Employee:</strong> ${employee.name || employee.email}
+        <strong>Personnel:</strong> ${employee.name || employee.email}
       </div>
       <div style="margin-bottom: 2px;">
         <strong>Email:</strong> ${employee.email}
@@ -182,7 +182,7 @@ export function generatePayslipsHTML(
   headerSettings: HeaderSettings | null,
   employeesPerPage: number = 6
 ): string {
-  // Group employees into pages
+  // Group personnel into pages
   const pages = []
   for (let i = 0; i < employees.length; i += employeesPerPage) {
     pages.push(employees.slice(i, i + employeesPerPage))

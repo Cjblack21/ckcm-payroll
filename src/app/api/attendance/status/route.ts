@@ -8,15 +8,25 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
-    const { users_id } = await request.json()
-    if (!users_id || typeof users_id !== 'string') {
-      return NextResponse.json({ error: 'users_id is required' }, { status: 400 })
+    const body = await request.json()
+    const inputUsersId = typeof body?.users_id === 'string' ? body.users_id : null
+    const inputEmail = typeof body?.email === 'string' ? body.email : null
+
+    if (!inputUsersId && !inputEmail) {
+      return NextResponse.json({ error: 'users_id or email is required' }, { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({ where: { users_id } })
+    // Resolve user either by users_id or email
+    const user = inputUsersId
+      ? await prisma.user.findUnique({ where: { users_id: inputUsersId } })
+      : await prisma.user.findUnique({ where: { email: inputEmail! } })
+
     if (!user || !user.isActive) {
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 })
     }
+
+    // Use resolved users_id for all subsequent operations
+    const users_id = user.users_id
 
     const now = new Date()
     const startToday = startOfDay(now)

@@ -12,6 +12,7 @@ model User {
   email              String         @unique
   password           String
   name               String?
+  avatar             String?
   role               Role           @default(PERSONNEL)
   isActive           Boolean        @default(true)
   personnel_types_id String?
@@ -23,6 +24,8 @@ model User {
   payrolls           PayrollEntry[]
   sessions           Session[]
   leaveRequests      LeaveRequest[]
+  activityLogs       ActivityLog[]
+  settings           UserSettings?
   personnelType      PersonnelType? @relation(fields: [personnel_types_id], references: [personnel_types_id])
 
   @@index([personnel_types_id], map: "users_personnel_types_id_fkey")
@@ -38,6 +41,20 @@ model Session {
 
   @@index([users_id], map: "sessions_users_id_fkey")
   @@map("sessions")
+}
+
+model ActivityLog {
+  activity_logs_id String       @id @default(cuid()) @map("activity_logs_id")
+  users_id         String
+  action           ActivityType
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime     @default(now())
+  user             User         @relation(fields: [users_id], references: [users_id], onDelete: Cascade)
+
+  @@index([users_id], map: "activity_logs_users_id_fkey")
+  @@index([createdAt], map: "activity_logs_created_at_idx")
+  @@map("activity_logs")
 }
 
 model Department {
@@ -75,6 +92,7 @@ model Loan {
   startDate             DateTime
   endDate               DateTime
   purpose               String?
+  archivedAt            DateTime?
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
   user                  User       @relation(fields: [users_id], references: [users_id])
@@ -259,6 +277,7 @@ enum AttendanceStatus {
   ABSENT
   LATE
   PARTIAL
+  ON_LEAVE
 }
 
 enum LoanStatus {
@@ -300,4 +319,25 @@ enum EventType {
   MEETING
   TRAINING
   OTHER
+}
+
+enum ActivityType {
+  LOGIN
+  LOGOUT
+}
+
+model UserSettings {
+  user_settings_id           String   @id @default(cuid()) @map("user_settings_id")
+  users_id                   String   @unique
+  theme                      String   @default("light")
+  language                   String   @default("en")
+  emailNotifications         Boolean  @default(true)
+  payrollNotifications       Boolean  @default(true)
+  systemNotifications        Boolean  @default(true)
+  attendanceReminders        Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  user                       User     @relation(fields: [users_id], references: [users_id], onDelete: Cascade)
+
+  @@map("user_settings")
 }

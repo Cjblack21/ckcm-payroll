@@ -23,6 +23,7 @@ export type AttendanceRecord = {
     name: string | null
     email: string
     personnelType?: {
+      name: string
       basicSalary: number
     }
   }
@@ -282,6 +283,7 @@ export async function getCurrentDayAttendance(): Promise<{
       include: {
         personnelType: {
           select: {
+            name: true,
             basicSalary: true
           }
         }
@@ -304,6 +306,7 @@ export async function getCurrentDayAttendance(): Promise<{
             email: true,
             personnelType: {
               select: {
+                name: true,
                 basicSalary: true
               }
             }
@@ -974,6 +977,7 @@ export async function getPersonnelHistory(userId: string): Promise<{
       include: {
         personnelType: {
           select: {
+            name: true,
             basicSalary: true
           }
         }
@@ -1056,7 +1060,7 @@ export async function getPersonnelHistory(userId: string): Promise<{
             name: user.name,
             email: user.email,
             personnelType: user.personnelType ? {
-              ...user.personnelType,
+              name: user.personnelType.name,
               basicSalary: Number(user.personnelType.basicSalary)
             } : undefined
           }
@@ -1083,7 +1087,7 @@ export async function getPersonnelHistory(userId: string): Promise<{
             name: user.name,
             email: user.email,
             personnelType: user.personnelType ? {
-              ...user.personnelType,
+              name: user.personnelType.name,
               basicSalary: Number(user.personnelType.basicSalary)
             } : undefined
           },
@@ -1166,7 +1170,7 @@ export async function getPersonnelHistory(userId: string): Promise<{
           name: user.name,
           email: user.email,
           personnelType: user.personnelType ? {
-            ...user.personnelType,
+            name: user.personnelType.name,
             basicSalary: Number(user.personnelType.basicSalary)
           } : undefined
         },

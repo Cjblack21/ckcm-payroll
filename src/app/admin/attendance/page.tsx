@@ -30,14 +30,54 @@ export default function AttendancePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attendanceSettings, setAttendanceSettings] = useState<any>(null)
+  const [currentTime, setCurrentTime] = useState(new Date())
 
   const itemsPerPage = 50
+
+  // Update current time every second for live status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Load data based on view mode
   useEffect(() => {
     loadData()
     loadAttendanceSettings()
   }, [viewMode, dateFilter, currentPage])
+
+  // Periodic check to auto-mark absent users after cut-off time (every 1 minute)
+  useEffect(() => {
+    const autoCheckAbsent = async () => {
+      try {
+        const response = await fetch('/api/admin/attendance/auto-check-absent', {
+          method: 'POST'
+        })
+        if (response.ok) {
+          const result = await response.json()
+          console.log(`🔄 Auto-check: ${result.message}`)
+          if (result.markedCount > 0) {
+            console.log(`✅ Auto-marked ${result.markedCount} users as absent`)
+            toast.success(`Auto-marked ${result.markedCount} users as absent`)
+            // Refresh data if users were marked
+            await loadData()
+          }
+        }
+      } catch (error) {
+        console.error('Error in auto-check absent:', error)
+      }
+    }
+
+    // Run immediately on mount
+    autoCheckAbsent()
+
+    // Then run every 1 minute for better responsiveness
+    const interval = setInterval(autoCheckAbsent, 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [viewMode])
 
   // Auto-refresh removed to prevent errors and ensure real-time deductions are displayed correctly
 
@@ -165,12 +205,35 @@ export default function AttendancePage() {
     } else {
       return attendanceData.filter(record => 
         (record.user.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-         record.user.email.toLowerCase().includes(searchTerm.toLowerCase()))
+         record.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         record.user.users_id.toLowerCase().includes(searchTerm.toLowerCase()))
       )
     }
   }, [attendanceData, personnelData, searchTerm, viewMode])
 
-  const getStatusBadge = (status: AttendanceStatus) => {
+  // Calculate live status based on current time and cut-off
+  const getLiveStatus = (dbStatus: AttendanceStatus, timeIn: Date | string | null, timeOut: Date | string | null): AttendanceStatus => {
+    // If already marked as PRESENT, LATE, or ABSENT in DB, keep it
+    if (dbStatus === 'PRESENT' || dbStatus === 'LATE' || dbStatus === 'ABSENT' || dbStatus === 'NON_WORKING' || dbStatus === 'PARTIAL') {
+      return dbStatus
+    }
+
+    // For PENDING status, check if we're past cut-off time
+    if (dbStatus === 'PENDING' && attendanceSettings?.timeOutEnd) {
+      const [cutoffHours, cutoffMinutes] = attendanceSettings.timeOutEnd.split(':').map(Number)
+      const cutoffTime = new Date(currentTime)
+      cutoffTime.setHours(cutoffHours, cutoffMinutes, 0, 0)
+
+      // If current time is past cut-off and no time in/out, show as ABSENT (live)
+      if (currentTime >= cutoffTime && !timeIn && !timeOut) {
+        return 'ABSENT'
+      }
+    }
+
+    return dbStatus
+  }
+
+  const getStatusBadge = (status: AttendanceStatus, isLive: boolean = false) => {
     const variants = {
       PRESENT: "default",
       ABSENT: "destructive",
@@ -190,8 +253,11 @@ export default function AttendancePage() {
     }
 
     return (
-      <Badge variant={variants[status]}>
+      <Badge variant={variants[status]} className="flex items-center gap-1">
         {labels[status]}
+        {isLive && status === 'ABSENT' && (
+          <span className="ml-1 inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse" title="Live status based on cut-off time" />
+        )}
       </Badge>
     )
   }
@@ -260,9 +326,9 @@ export default function AttendancePage() {
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Current Period</p>
                   <h3 className="text-lg font-bold text-foreground">
-                    {new Date(attendanceSettings.periodStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {formatInTimeZone(new Date(attendanceSettings.periodStart), 'Asia/Manila', 'MMM dd')}
                     {" - "}
-                    {new Date(attendanceSettings.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {formatInTimeZone(new Date(attendanceSettings.periodEnd), 'Asia/Manila', 'MMM dd, yyyy')}
                   </h3>
                   <p className="text-sm text-muted-foreground mt-1">
                     {(() => {
@@ -431,8 +497,10 @@ export default function AttendancePage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Profile</TableHead>
+                  <TableHead>School ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Personnel Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Time In</TableHead>
                   <TableHead>Time Out</TableHead>
@@ -453,10 +521,20 @@ export default function AttendancePage() {
                         </AvatarFallback>
                       </Avatar>
                     </TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">
+                      {record.user.users_id}
+                    </TableCell>
                     <TableCell className="font-medium">
                       {record.user.name || record.user.email}
                     </TableCell>
-                    <TableCell>{record.user.email}</TableCell>
+                    <TableCell>
+                      <div className="max-w-[260px] truncate">{record.user.email}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {record.user.personnelType?.name || 'N/A'}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{format(new Date(record.date), "MMM dd, yyyy")}</TableCell>
                     <TableCell>
                       {record.status === 'PENDING' ? 'Not yet' : formatTime(record.timeIn)}
@@ -464,7 +542,13 @@ export default function AttendancePage() {
                     <TableCell>
                       {record.status === 'PENDING' ? '—' : formatTime(record.timeOut)}
                     </TableCell>
-                    <TableCell>{getStatusBadge(record.status)}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const liveStatus = getLiveStatus(record.status, record.timeIn, record.timeOut)
+                        const isLive = liveStatus !== record.status
+                        return getStatusBadge(liveStatus, isLive)
+                      })()}
+                    </TableCell>
                     <TableCell>{formatWorkHours(record.workHours)}</TableCell>
                     <TableCell className="text-green-600">{formatCurrency(record.earnings)}</TableCell>
                     <TableCell className="text-red-600">{formatCurrency(record.deductions)}</TableCell>
@@ -472,7 +556,7 @@ export default function AttendancePage() {
                 ))}
                 {filteredData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       No attendance records found for today.
                     </TableCell>
                   </TableRow>
@@ -603,18 +687,20 @@ export default function AttendancePage() {
             <>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Profile</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Time In</TableHead>
-                    <TableHead>Time Out</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Work Hours</TableHead>
-                    <TableHead>Earnings</TableHead>
-                    <TableHead>Deductions</TableHead>
-                  </TableRow>
+                <TableRow>
+                  <TableHead>Profile</TableHead>
+                  <TableHead>School ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Personnel Type</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Time In</TableHead>
+                  <TableHead>Time Out</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Work Hours</TableHead>
+                  <TableHead>Earnings</TableHead>
+                  <TableHead>Deductions</TableHead>
+                </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(filteredData as AttendanceRecord[]).map((record) => (
@@ -627,10 +713,20 @@ export default function AttendancePage() {
                           </AvatarFallback>
                         </Avatar>
                       </TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">
+                        {record.user.users_id}
+                      </TableCell>
                       <TableCell className="font-medium">
                         {record.user.name || record.user.email}
                       </TableCell>
-                      <TableCell>{record.user.email}</TableCell>
+                      <TableCell>
+                        <div className="max-w-[260px] truncate">{record.user.email}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {record.user.personnelType?.name || 'N/A'}
+                        </Badge>
+                      </TableCell>
                       <TableCell>{format(new Date(record.date), "MMM dd, yyyy")}</TableCell>
                       <TableCell>{formatTime(record.timeIn)}</TableCell>
                       <TableCell>{formatTime(record.timeOut)}</TableCell>
@@ -642,7 +738,7 @@ export default function AttendancePage() {
                   ))}
                   {filteredData.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                         No attendance records found.
                       </TableCell>
                     </TableRow>

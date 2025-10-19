@@ -66,6 +66,33 @@ type DashboardData = {
 export default function PersonnelDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [liveHours, setLiveHours] = useState<number | null>(null)
+
+  // Live counter effect
+  useEffect(() => {
+    if (!data?.todayStatus.timeIn || data?.todayStatus.timeOut) {
+      setLiveHours(null)
+      return
+    }
+
+    const calculateCurrentHours = () => {
+      if (!data.todayStatus.timeIn) return 0
+      const timeIn = new Date(data.todayStatus.timeIn)
+      const now = new Date()
+      const diffMs = now.getTime() - timeIn.getTime()
+      return diffMs / (1000 * 60 * 60) // Convert to hours
+    }
+
+    // Initial calculation
+    setLiveHours(calculateCurrentHours())
+
+    // Update every second
+    const interval = setInterval(() => {
+      setLiveHours(calculateCurrentHours())
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [data?.todayStatus.timeIn, data?.todayStatus.timeOut])
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -80,7 +107,7 @@ export default function PersonnelDashboard() {
           user: {
             name: payload.user?.name || 'User',
             email: payload.user?.email || 'user@example.com',
-            position: payload.user?.position || 'Employee',
+            position: payload.user?.position || 'Personnel',
             basicSalary: payload.user?.basicSalary || 0,
             periodSalary: payload.user?.periodSalary || 0,
           },
@@ -182,6 +209,9 @@ export default function PersonnelDashboard() {
         </div>
       </div>
 
+      <div>
+        <p className="text-sm text-muted-foreground mb-2">OVERVIEW</p>
+      </div>
       {/* Main Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Today's Status */}
@@ -203,7 +233,17 @@ export default function PersonnelDashboard() {
               {data.todayStatus.timeOut && (
                 <div>Time Out: {new Date(data.todayStatus.timeOut).toLocaleTimeString()}</div>
               )}
-              <div>Hours: {data.todayStatus.hours}</div>
+              <div className="flex items-center gap-2">
+                <span>Hours:</span>
+                {liveHours !== null && !data.todayStatus.timeOut ? (
+                  <span className="font-bold text-green-600 tabular-nums">
+                    {Math.floor(liveHours)}h {Math.floor((liveHours % 1) * 60)}m {Math.floor(((liveHours % 1) * 60 % 1) * 60)}s
+                    <span className="ml-1 text-[10px] text-green-500 animate-pulse">●</span>
+                  </span>
+                ) : (
+                  <span className="tabular-nums">{data.todayStatus.hours.toFixed(2)}</span>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

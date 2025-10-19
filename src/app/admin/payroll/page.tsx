@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -18,6 +18,7 @@ import {
   calculateWorkingDaysInPhilippines 
 } from '@/lib/timezone'
 import { Label } from '@/components/ui/label'
+import PayrollBreakdownDialog from '@/components/payroll/PayrollBreakdownDialog'
 
 // Types
 type PayrollEntry = {
@@ -80,6 +81,87 @@ type ArchivedPayroll = {
   releasedBy: string
 }
 
+// Live Work Hours Component
+function LiveWorkHours({ userId, totalWorkHours, now }: { userId: string; totalWorkHours: number; now: Date }) {
+  const [attendanceData, setAttendanceData] = useState<{ timeIn: string | null; timeOut: string | null } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchTodayAttendance() {
+      try {
+        const res = await fetch(`/api/admin/attendance/personnel/${userId}`)
+        if (res.ok) {
+          const data = await res.json()
+          // API returns { attendance: [...] }
+          const records = data.attendance || []
+          const today = new Date().toISOString().split('T')[0]
+          const todayRecord = records.find((record: any) => 
+            record.date.startsWith(today)
+          )
+          setAttendanceData({
+            timeIn: todayRecord?.timeIn || null,
+            timeOut: todayRecord?.timeOut || null
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching attendance:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchTodayAttendance()
+  }, [userId])
+
+  const liveHours = useMemo(() => {
+    if (!attendanceData?.timeIn || attendanceData?.timeOut) return null
+    
+    const timeIn = new Date(attendanceData.timeIn)
+    const diffMs = now.getTime() - timeIn.getTime()
+    return diffMs / (1000 * 60 * 60) // Convert to hours
+  }, [attendanceData, now])
+
+  const formatWorkHours = (hours: number) => {
+    const wholeHours = Math.floor(hours)
+    const minutes = Math.round((hours - wholeHours) * 60)
+    return `${wholeHours}:${minutes.toString().padStart(2, '0')}`
+  }
+
+  const formatLiveTime = (hours: number) => {
+    const h = Math.floor(hours)
+    const m = Math.floor((hours % 1) * 60)
+    const s = Math.floor(((hours % 1) * 60 % 1) * 60)
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-1">
+        <Clock className="h-4 w-4 text-muted-foreground animate-spin" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
+    )
+  }
+
+  if (liveHours !== null) {
+    return (
+      <div className="flex items-center gap-1">
+        <Clock className="h-4 w-4 text-green-600" />
+        <span className="font-mono font-bold text-green-600 tabular-nums">
+          {formatLiveTime(liveHours)}
+        </span>
+        <span className="text-green-500 text-xs animate-pulse ml-1">● LIVE</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Clock className="h-4 w-4 text-muted-foreground" />
+      {formatWorkHours(totalWorkHours)}
+    </div>
+  )
+}
+
 export default function PayrollPage() {
   const [payrollEntries, setPayrollEntries] = useState<PayrollEntry[]>([])
   const [archivedPayrolls, setArchivedPayrolls] = useState<ArchivedPayroll[]>([])
@@ -89,14 +171,13 @@ export default function PayrollPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('current')
   const [hasGeneratedForSettings, setHasGeneratedForSettings] = useState(false)
+  const [breakdownDialogOpen, setBreakdownDialogOpen] = useState(false)
   
   // Reschedule state
   const [nextPeriodType, setNextPeriodType] = useState('Semi-Monthly')
   const [nextPeriodStart, setNextPeriodStart] = useState('')
   const [nextPeriodEnd, setNextPeriodEnd] = useState('')
   const [nextPeriodNotes, setNextPeriodNotes] = useState('')
-  const [showNextPeriodModal, setShowNextPeriodModal] = useState(false)
-  const [customDays, setCustomDays] = useState('')
   
   // Payroll Time Settings state
   const [payrollPeriodStart, setPayrollPeriodStart] = useState('')
@@ -109,6 +190,8 @@ export default function PayrollPage() {
   const [timeUntilRelease, setTimeUntilRelease] = useState('')
   const [useTestingMode, setUseTestingMode] = useState(false)
   const [testingMinutes, setTestingMinutes] = useState('2')
+  const [now, setNow] = useState(new Date())
+  const [hasShownReleaseModal, setHasShownReleaseModal] = useState(false)
 
   // Load payroll data
   const loadPayrollData = async () => {
@@ -323,31 +406,91 @@ export default function PayrollPage() {
     }
   }
 
-  // Release payroll - shows modal first to set next period dates
+  // Release payroll - automatically calculate next period dates
   const handleReleasePayroll = async () => {
     try {
-      // Prefill suggested next-period dates based on current period duration using Philippines timezone
+      setLoading(true)
+      toast.loading('Releasing payroll...', { id: 'release-payroll' })
+      
+      // Auto-calculate next period dates based on current period duration
+      let nextStart = ''
+      let nextEnd = ''
+      
       if (currentPeriod?.periodStart && currentPeriod?.periodEnd) {
         const start = new Date(currentPeriod.periodStart)
         const end = new Date(currentPeriod.periodEnd)
         const durationDays = calculatePeriodDurationInPhilippines(start, end)
-        const nextStart = new Date(end)
-        nextStart.setDate(end.getDate() + 1)
-        const nextEnd = new Date(nextStart)
-        nextEnd.setDate(nextStart.getDate() + durationDays - 1)
+        const nextStartDate = new Date(end)
+        nextStartDate.setDate(end.getDate() + 1)
+        const nextEndDate = new Date(nextStartDate)
+        nextEndDate.setDate(nextStartDate.getDate() + durationDays - 1)
         
-        setNextPeriodStart(toPhilippinesDateString(nextStart))
-        setNextPeriodEnd(toPhilippinesDateString(nextEnd))
-      } else {
-        setNextPeriodStart('')
-        setNextPeriodEnd('')
+        nextStart = toPhilippinesDateString(nextStartDate)
+        nextEnd = toPhilippinesDateString(nextEndDate)
+        
+        console.log('🔍 AUTO RELEASE - Period calculation:', {
+          currentStart: start.toISOString(),
+          currentEnd: end.toISOString(),
+          durationDays,
+          nextStart: nextStartDate.toISOString(),
+          nextEnd: nextEndDate.toISOString(),
+          nextStartString: nextStart,
+          nextEndString: nextEnd
+        })
       }
       
-      // Show modal to capture next period dates before release
-      setShowNextPeriodModal(true)
+      // Release with auto-calculated dates
+      const result = await releasePayrollWithAudit(nextStart, nextEnd)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to release payroll')
+      }
+
+      toast.success(`Payroll released successfully for ${result.releasedCount} employees`, { id: 'release-payroll' })
+      
+      // Auto-update payroll period settings with the new period dates
+      setPayrollPeriodStart(nextStart)
+      setPayrollPeriodEnd(nextEnd)
+      
+      // Auto-generate payslips after successful release
+      toast.loading('Generating payslips...', { id: 'auto-generate-payslips' })
+      setTimeout(async () => {
+        try {
+          await handleGeneratePayslips()
+          toast.success('Payslips generated successfully!', { id: 'auto-generate-payslips' })
+        } catch (error) {
+          console.error('Error auto-generating payslips:', error)
+          toast.error('Payroll released but failed to auto-generate payslips. Please generate manually.', { id: 'auto-generate-payslips' })
+        }
+      }, 1000)
+
+      // Update the status of existing payroll entries to "Released"
+      setPayrollEntries(prevEntries => 
+        prevEntries.map(entry => ({
+          ...entry,
+          status: 'Released' as const
+        }))
+      )
+
+      // Update the current period to show it's released
+      setCurrentPeriod(prevPeriod => prevPeriod ? {
+        ...prevPeriod,
+        status: 'Released'
+      } : null)
+
+      // Reset states
+      setHasGeneratedForSettings(false)
+      setTimeUntilRelease('')
+      setCanRelease(false)
+      setHasShownReleaseModal(false)
+      
+      // Reload payroll data to get the updated state with new period
+      await loadPayrollData()
+      
     } catch (error) {
-      console.error('Error preparing release payroll:', error)
-      toast.error(`Failed to prepare payroll release: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('Error releasing payroll:', error)
+      toast.error(`Failed to release payroll: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'release-payroll' })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -355,6 +498,7 @@ export default function PayrollPage() {
   const handleGeneratePayroll = async () => {
     try {
       setLoading(true)
+      setHasShownReleaseModal(true) // Prevent countdown from showing modal during generation
       toast.loading('Generating payroll...', { id: 'generate-payroll' })
 
       // Call API endpoint to generate payroll
@@ -374,6 +518,7 @@ export default function PayrollPage() {
       // Force a small delay to ensure state is updated
       setTimeout(() => {
         setHasGeneratedForSettings(true)
+        setHasShownReleaseModal(false) // Reset modal flag for new period
         // Show helpful message if there were released entries that got archived
         if (payrollEntries.some(entry => entry.status === 'Released')) {
           toast.success('Previous released payroll has been moved to archive', { duration: 3000 })
@@ -383,6 +528,7 @@ export default function PayrollPage() {
     } catch (error) {
       console.error('Error generating payroll:', error)
       toast.error(`Failed to generate payroll: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'generate-payroll' })
+      setHasShownReleaseModal(false) // Reset on error
     } finally {
       setLoading(false)
     }
@@ -441,68 +587,6 @@ export default function PayrollPage() {
     }
   }
 
-  // Confirm release from modal
-  const handleConfirmRelease = async () => {
-    try {
-      setLoading(true)
-      toast.loading('Releasing payroll...', { id: 'release-payroll' })
-
-      const result = await releasePayrollWithAudit(nextPeriodStart, nextPeriodEnd)
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to release payroll')
-      }
-
-      toast.success(`Payroll released successfully for ${result.releasedCount} employees`, { id: 'release-payroll' })
-      setShowNextPeriodModal(false)
-      
-      // Auto-generate payslips after successful release
-      toast.loading('Generating payslips...', { id: 'auto-generate-payslips' })
-      setTimeout(async () => {
-        try {
-          await handleGeneratePayslips()
-          toast.success('Payslips generated successfully!', { id: 'auto-generate-payslips' })
-        } catch (error) {
-          console.error('Error auto-generating payslips:', error)
-          toast.error('Payroll released but failed to auto-generate payslips. Please generate manually.', { id: 'auto-generate-payslips' })
-        }
-      }, 1000)
-
-      // Update the status of existing payroll entries to "Released" without reloading new data
-      setPayrollEntries(prevEntries => 
-        prevEntries.map(entry => ({
-          ...entry,
-          status: 'Released' as const
-        }))
-      )
-
-      // Update the current period to show it's released
-      setCurrentPeriod(prevPeriod => prevPeriod ? {
-        ...prevPeriod,
-        status: 'Released'
-      } : null)
-
-      // IMPORTANT: Reset the generate button state so it can be used for the next period
-      setHasGeneratedForSettings(false)
-      
-      // DO NOT clear payroll entries - keep them visible with RELEASED status
-      // The entries are already updated to "Released" status above
-      
-      // Reload payroll data to get the updated state with new period
-      await loadPayrollData()
-      
-      // Force a small delay to ensure UI updates properly
-      setTimeout(() => {
-        console.log('🔍 Post-Release Debug - hasGeneratedForSettings reset to:', false)
-        console.log('🔍 Post-Release Debug - Payroll entries should still be visible with RELEASED status')
-      }, 100)
-
-    } catch (error) {
-      console.error('Error confirming release:', error)
-      toast.error(`Failed to release payroll: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'release-payroll' })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Load archived payrolls
   const loadArchivedPayrolls = async () => {
@@ -640,6 +724,14 @@ export default function PayrollPage() {
     entry.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  // Update current time every second for live counters
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   useEffect(() => {
     loadPayrollData()
     loadArchivedPayrolls()
@@ -678,11 +770,7 @@ export default function PayrollPage() {
         setTimeUntilRelease('Release available now!')
         if (!canRelease) {
           setCanRelease(true)
-          // Auto-release payroll when countdown reaches zero
-          if (hasGeneratedForSettings && currentPeriod?.status !== 'Released') {
-            console.log('🚀 Auto-releasing payroll...')
-            handleAutoReleasePayroll()
-          }
+          console.log('🚀 Countdown complete - Release button now enabled')
         }
         return
       }
@@ -767,7 +855,7 @@ export default function PayrollPage() {
       </div>
 
       {/* Release Countdown Timer */}
-      {!canRelease && currentPeriod && currentPeriod.status !== 'Released' && timeUntilRelease && (
+      {!canRelease && currentPeriod && currentPeriod.status !== 'Released' && timeUntilRelease && hasGeneratedForSettings && (
         <Card className="border-2 border-yellow-500 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -860,7 +948,7 @@ export default function PayrollPage() {
           <TabsTrigger value="current">Current Payroll</TabsTrigger>
           <TabsTrigger value="archived">Archived Payrolls</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="settings">Next Period</TabsTrigger>
+          <TabsTrigger value="settings">Payroll Time Settings</TabsTrigger>
         </TabsList>
 
         {/* Current Payroll Tab */}
@@ -922,10 +1010,11 @@ export default function PayrollPage() {
                         </TableCell>
                         <TableCell>{entry.email}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            {formatWorkHours(entry.totalWorkHours)}
-                          </div>
+                          <LiveWorkHours 
+                            userId={entry.users_id}
+                            totalWorkHours={entry.totalWorkHours}
+                            now={now}
+                          />
                         </TableCell>
                         <TableCell>
                           <div className="font-medium text-green-600">
@@ -948,215 +1037,16 @@ export default function PayrollPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setSelectedEntry(entry)}
-                              >
-                                View Payroll
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="w-[90vw] max-w-[1400px] max-h-[90vh] overflow-y-auto">
-                              <DialogHeader>
-                                <DialogTitle>Payroll Breakdown - {entry.name}</DialogTitle>
-                              </DialogHeader>
-                              {selectedEntry && (
-                                <div className="space-y-6 w-full overflow-hidden">
-                                  {/* Employee Info */}
-                                  <Card>
-                                    <CardHeader>
-                                      <CardTitle>Employee Information</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <div>
-                                          <p className="text-sm text-muted-foreground">User ID</p>
-                                          <p className="font-mono text-sm font-medium break-words">{selectedEntry.users_id}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-sm text-muted-foreground">Name</p>
-                                          <p className="font-medium break-words">{selectedEntry.name}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-sm text-muted-foreground">Personnel Type</p>
-                                          <Badge variant="outline" className="font-normal w-fit">
-                                            {selectedEntry.personnelType}
-                                          </Badge>
-                                        </div>
-                                        <div>
-                                          <p className="text-sm text-muted-foreground">Email</p>
-                                          <p className="font-medium break-words">{selectedEntry.email}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-sm text-muted-foreground">Payroll Period</p>
-                                          <p className="font-medium text-sm">
-                                            {currentPeriod ? 
-                                              `${formatDateForDisplay(new Date(currentPeriod.periodStart))} - ${formatDateForDisplay(new Date(currentPeriod.periodEnd))}` :
-                                              'N/A'
-                                            }
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <p className="text-sm text-muted-foreground">Total Work Hours</p>
-                                          <p className="font-medium">{formatWorkHours(selectedEntry.totalWorkHours)}</p>
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-
-                                  {/* Salary Breakdown */}
-                                  <Card>
-                                    <CardHeader>
-                                      <CardTitle>Salary Breakdown</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                      <div className="space-y-4">
-                                        <div className="flex justify-between">
-                                          <span>Basic Salary:</span>
-                                          <span className="font-medium">{formatCurrency(selectedEntry.breakdown.basicSalary)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-red-600">
-                                          <span>Attendance Deductions:</span>
-                                          <span>-{formatCurrency(selectedEntry.breakdown.attendanceDeductions)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-red-600">
-                                          <span>Leave Deductions:</span>
-                                          <span>-{formatCurrency(selectedEntry.breakdown.leaveDeductions)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-red-600">
-                                          <span>Loan Deductions:</span>
-                                          <span>-{formatCurrency(selectedEntry.breakdown.loanDeductions)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-red-600">
-                                          <span>Other Deductions:</span>
-                                          <span>-{formatCurrency(selectedEntry.breakdown.otherDeductions)}</span>
-                                        </div>
-                                        <hr />
-                                        <div className="flex justify-between text-lg font-bold text-green-600">
-                                          <span>Final Net Pay:</span>
-                                          <span>{formatCurrency(
-                                            Number(selectedEntry.breakdown.basicSalary) - (
-                                              Number(selectedEntry.breakdown.attendanceDeductions) +
-                                              Number(selectedEntry.breakdown.leaveDeductions) +
-                                              Number(selectedEntry.breakdown.loanDeductions) +
-                                              Number(selectedEntry.breakdown.otherDeductions)
-                                            )
-                                          )}</span>
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-
-                                  {/* Attendance Details */}
-                                  {selectedEntry.breakdown.attendanceDetails.length > 0 && (
-                                    <Card>
-                                      <CardHeader>
-                                        <CardTitle>Attendance Details</CardTitle>
-                                      </CardHeader>
-                                      <CardContent>
-                                        <div className="overflow-x-auto w-full">
-                                          <Table className="w-full">
-                                            <TableHeader>
-                                              <TableRow>
-                                                <TableHead className="min-w-[100px]">Date</TableHead>
-                                                <TableHead className="min-w-[80px]">Time In</TableHead>
-                                                <TableHead className="min-w-[80px]">Time Out</TableHead>
-                                                <TableHead className="min-w-[60px]">Hours</TableHead>
-                                                <TableHead className="min-w-[80px]">Status</TableHead>
-                                                <TableHead className="min-w-[100px]">Deduction</TableHead>
-                                              </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                              {selectedEntry.breakdown.attendanceDetails.map((detail, index) => (
-                                                <TableRow key={index}>
-                                                  <TableCell>{formatDateForDisplay(new Date(detail.date))}</TableCell>
-                                                  <TableCell>{detail.timeIn ? new Date(detail.timeIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila' }) : '-'}</TableCell>
-                                                  <TableCell>{detail.timeOut ? new Date(detail.timeOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila' }) : '-'}</TableCell>
-                                                  <TableCell>{formatWorkHours(detail.workHours)}</TableCell>
-                                                  <TableCell>
-                                                    <Badge variant={detail.status === 'PRESENT' ? 'default' : detail.status === 'LATE' ? 'secondary' : 'destructive'}>
-                                                      {detail.status}
-                                                    </Badge>
-                                                  </TableCell>
-                                                  <TableCell className="text-red-600">
-                                                    {detail.deduction > 0 ? `-${formatCurrency(detail.deduction)}` : '-'}
-                                                  </TableCell>
-                                                </TableRow>
-                                              ))}
-                                            </TableBody>
-                                          </Table>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  )}
-
-                                  {/* Loan Details */}
-                                  {selectedEntry.breakdown.loanDetails.length > 0 && (
-                                    <Card>
-                                      <CardHeader>
-                                        <CardTitle>Loan Details</CardTitle>
-                                      </CardHeader>
-                                      <CardContent>
-                                        <div className="overflow-x-auto w-full">
-                                          <Table className="w-full">
-                                            <TableHeader>
-                                              <TableRow>
-                                                <TableHead className="min-w-[120px]">Loan Type</TableHead>
-                                                <TableHead className="min-w-[120px]">Payment Amount</TableHead>
-                                                <TableHead className="min-w-[120px]">Remaining Balance</TableHead>
-                                              </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                              {selectedEntry.breakdown.loanDetails.map((loan, index) => (
-                                                <TableRow key={index}>
-                                                  <TableCell>{loan.type}</TableCell>
-                                                  <TableCell className="text-red-600">-{formatCurrency(loan.amount)}</TableCell>
-                                                  <TableCell>{formatCurrency(loan.remainingBalance)}</TableCell>
-                                                </TableRow>
-                                              ))}
-                                            </TableBody>
-                                          </Table>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  )}
-
-                                  {/* Other Deduction Details */}
-                                  {selectedEntry.breakdown.otherDeductionDetails.length > 0 && (
-                                    <Card>
-                                      <CardHeader>
-                                        <CardTitle>Other Deductions</CardTitle>
-                                      </CardHeader>
-                                      <CardContent>
-                                        <div className="overflow-x-auto w-full">
-                                          <Table className="w-full">
-                                            <TableHeader>
-                                              <TableRow>
-                                                <TableHead className="min-w-[120px]">Type</TableHead>
-                                                <TableHead className="min-w-[200px]">Description</TableHead>
-                                                <TableHead className="min-w-[100px]">Amount</TableHead>
-                                              </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                              {selectedEntry.breakdown.otherDeductionDetails.map((deduction, index) => (
-                                                <TableRow key={index}>
-                                                  <TableCell>{deduction.type}</TableCell>
-                                                  <TableCell>{deduction.description}</TableCell>
-                                                  <TableCell className="text-red-600">-{formatCurrency(deduction.amount)}</TableCell>
-                                                </TableRow>
-                                              ))}
-                                            </TableBody>
-                                          </Table>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  )}
-                                </div>
-                              )}
-                            </DialogContent>
-                          </Dialog>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedEntry(entry)
+                              setBreakdownDialogOpen(true)
+                            }}
+                          >
+                            View Breakdown
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1658,155 +1548,14 @@ export default function PayrollPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Next Period Modal (shown right after successful release) */}
-      <Dialog open={showNextPeriodModal} onOpenChange={setShowNextPeriodModal}>
-        <DialogContent className="w-[90vw] max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Next Payroll Period</DialogTitle>
-            <DialogDescription>
-              Suggested duration for the next cycle based on the period you just released.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Current Period</p>
-                <p className="font-medium">
-                  {currentPeriod ? `${formatDateForDisplay(new Date(currentPeriod.periodStart))} - ${formatDateForDisplay(new Date(currentPeriod.periodEnd))}` : '—'}
-                </p>
-              </div>
-              <div></div>
-            </div>
-            
-            {/* Quick Duration Shortcuts */}
-            <div>
-              <label className="text-sm font-medium mb-2 block">Quick Duration (from period end)</label>
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (currentPeriod?.periodEnd) {
-                      const start = new Date(currentPeriod.periodEnd)
-                      start.setDate(start.getDate() + 1)
-                      const end = new Date(start)
-                      end.setDate(start.getDate() + 6)
-                      setNextPeriodStart(toPhilippinesDateString(start))
-                      setNextPeriodEnd(toPhilippinesDateString(end))
-                    }
-                  }}
-                >
-                  7 Days
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (currentPeriod?.periodEnd) {
-                      const start = new Date(currentPeriod.periodEnd)
-                      start.setDate(start.getDate() + 1)
-                      const end = new Date(start)
-                      end.setDate(start.getDate() + 13)
-                      setNextPeriodStart(toPhilippinesDateString(start))
-                      setNextPeriodEnd(toPhilippinesDateString(end))
-                    }
-                  }}
-                >
-                  14 Days
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (currentPeriod?.periodEnd) {
-                      const start = new Date(currentPeriod.periodEnd)
-                      start.setDate(start.getDate() + 1)
-                      const end = new Date(start)
-                      end.setDate(start.getDate() + 14)
-                      setNextPeriodStart(toPhilippinesDateString(start))
-                      setNextPeriodEnd(toPhilippinesDateString(end))
-                    }
-                  }}
-                >
-                  15 Days (Semi-Monthly)
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (currentPeriod?.periodEnd) {
-                      const start = new Date(currentPeriod.periodEnd)
-                      start.setDate(start.getDate() + 1)
-                      const end = new Date(start)
-                      end.setMonth(start.getMonth() + 1)
-                      end.setDate(0) // Last day of month
-                      setNextPeriodStart(toPhilippinesDateString(start))
-                      setNextPeriodEnd(toPhilippinesDateString(end))
-                    }
-                  }}
-                >
-                  1 Month
-                </Button>
-              </div>
-              <div className="flex items-end gap-2 mt-2">
-                <div className="flex-1">
-                  <label className="text-sm font-medium">Custom Days</label>
-                  <Input 
-                    type="number" 
-                    placeholder="Enter days" 
-                    value={customDays}
-                    onChange={(e) => setCustomDays(e.target.value)}
-                    min="1"
-                    className="w-full"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  size="default"
-                  variant="outline"
-                  onClick={() => {
-                    const days = parseInt(customDays)
-                    if (currentPeriod?.periodEnd && days > 0) {
-                      const start = new Date(currentPeriod.periodEnd)
-                      start.setDate(start.getDate() + 1)
-                      const end = new Date(start)
-                      end.setDate(start.getDate() + days - 1)
-                      setNextPeriodStart(toPhilippinesDateString(start))
-                      setNextPeriodEnd(toPhilippinesDateString(end))
-                      toast.success(`Set period to ${days} days`)
-                    } else {
-                      toast.error('Please enter a valid number of days')
-                    }
-                  }}
-                  disabled={!customDays || parseInt(customDays) <= 0}
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">Next Period Start</label>
-                <Input type="date" value={nextPeriodStart} onChange={(e) => setNextPeriodStart(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Next Period End</label>
-                <Input type="date" value={nextPeriodEnd} onChange={(e) => setNextPeriodEnd(e.target.value)} />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">These dates will be saved to Attendance Settings and used for the next run.</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNextPeriodModal(false)}>Cancel</Button>
-            <Button onClick={handleConfirmRelease} disabled={!nextPeriodStart || !nextPeriodEnd}>Confirm & Release</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Payroll Breakdown Dialog */}
+      <PayrollBreakdownDialog
+        entry={selectedEntry}
+        currentPeriod={currentPeriod}
+        isOpen={breakdownDialogOpen}
+        onClose={() => setBreakdownDialogOpen(false)}
+      />
+
     </div>
   )
 }

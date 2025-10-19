@@ -152,7 +152,7 @@ export async function GET() {
   })
 
   // Separate attendance and non-attendance deductions
-  const attendanceRelatedTypes = ['Late Arrival', 'Absence Deduction', 'Partial Attendance', 'Absent', 'Late', 'Tardiness']
+  const attendanceRelatedTypes = ['Late Arrival', 'Early Time-Out', 'Absence Deduction', 'Partial Attendance', 'Absent', 'Late', 'Tardiness']
   const attendanceDeductions = allDeductions.filter(d => attendanceRelatedTypes.includes(d.deductionType.name))
   const nonAttendanceDeductions = allDeductions.filter(d => !attendanceRelatedTypes.includes(d.deductionType.name))
 

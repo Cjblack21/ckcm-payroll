@@ -106,6 +106,9 @@ export default async function AdminDashboard() {
         </p>
       </div>
 
+      <div>
+        <p className="text-sm text-muted-foreground mb-2">OVERVIEW</p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => {
           const Icon = stat.icon

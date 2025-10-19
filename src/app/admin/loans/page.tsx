@@ -10,11 +10,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { 
   Search, 
   Plus, 
   Eye, 
-  DollarSign, 
   Calendar, 
   User, 
   TrendingUp, 
@@ -23,7 +23,8 @@ import {
   Clock,
   CreditCard,
   Banknote,
-  FileText
+  FileText,
+  Archive
 } from "lucide-react"
 import { format } from "date-fns"
 
@@ -44,6 +45,7 @@ type UserOption = { users_id: string, name: string | null, email: string }
 
 export default function LoansPage() {
   const [items, setItems] = useState<LoanItem[]>([])
+  const [archivedItems, setArchivedItems] = useState<LoanItem[]>([])
   const [search, setSearch] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [open, setOpen] = useState(false)
@@ -52,9 +54,28 @@ export default function LoansPage() {
   const [saving, setSaving] = useState(false)
   const [selectedLoan, setSelectedLoan] = useState<LoanItem | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<{ amount: number; purpose: string; monthlyPaymentPercent: number; termMonths: number; status: string }>({ amount: 0, purpose: "", monthlyPaymentPercent: 0, termMonths: 0, status: "ACTIVE" })
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active')
+
+  // Auto-calculate monthly payment percentage when amount or term changes
+  useEffect(() => {
+    const amount = Number(form.amount)
+    const termMonths = Number(form.termMonths)
+    
+    if (amount > 0 && termMonths > 0) {
+      // Calculate percentage needed to pay off loan in the given term
+      // Formula: (100 / termMonths) to spread 100% over the term
+      const calculatedPercent = (100 / termMonths).toFixed(2)
+      setForm(f => ({ ...f, monthlyPaymentPercent: calculatedPercent }))
+    }
+  }, [form.amount, form.termMonths])
 
   useEffect(() => {
     loadLoans()
+    loadArchivedLoans()
   }, [])
 
   async function loadLoans() {
@@ -67,6 +88,29 @@ export default function LoansPage() {
       console.error('Error loading loans', e)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function loadArchivedLoans() {
+    try {
+      const res = await fetch('/api/admin/loans?archived=true')
+      const data = await res.json()
+      setArchivedItems(data.items || [])
+    } catch (e) {
+      console.error('Error loading archived loans', e)
+    }
+  }
+
+  async function archiveLoan(loan: LoanItem) {
+    try {
+      const ok = window.confirm(`Archive this loan for ${loan.userName || loan.userEmail}?`)
+      if (!ok) return
+      const res = await fetch(`/api/admin/loans/${loan.loans_id}/archive`, { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to archive loan')
+      await loadLoans()
+      await loadArchivedLoans()
+    } catch (e) {
+      console.error('Archive failed:', e)
     }
   }
 
@@ -89,6 +133,60 @@ export default function LoansPage() {
       setDetailsOpen(true)
     } catch (e) {
       console.error('Error loading loan details:', e)
+    }
+  }
+
+  async function startEdit(loan: LoanItem) {
+    try {
+      const res = await fetch(`/api/admin/loans/${loan.loans_id}`)
+      const data = await res.json()
+      setEditingId(loan.loans_id)
+      setEditForm({
+        amount: Number(data.amount),
+        purpose: data.purpose || "",
+        monthlyPaymentPercent: Number(data.monthlyPaymentPercent),
+        termMonths: Number(data.termMonths),
+        status: data.status || 'ACTIVE'
+      })
+      setEditOpen(true)
+    } catch (e) {
+      console.error('Error loading loan for edit:', e)
+    }
+  }
+
+  async function submitEdit() {
+    if (!editingId) return
+    setEditSaving(true)
+    try {
+      const res = await fetch(`/api/admin/loans/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purpose: editForm.purpose,
+          monthlyPaymentPercent: editForm.monthlyPaymentPercent,
+          termMonths: editForm.termMonths,
+          status: editForm.status,
+        })
+      })
+      if (!res.ok) throw new Error('Failed to update loan')
+      setEditOpen(false)
+      await loadLoans()
+    } catch (e) {
+      console.error('Edit failed:', e)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function deleteLoan(loan: LoanItem) {
+    try {
+      const ok = window.confirm('Delete this loan? This action cannot be undone.')
+      if (!ok) return
+      const res = await fetch(`/api/admin/loans/${loan.loans_id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete loan')
+      await loadLoans()
+    } catch (e) {
+      console.error('Delete failed:', e)
     }
   }
 
@@ -152,20 +250,28 @@ export default function LoansPage() {
             <Banknote className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
             Loan Management
           </h2>
-          <p className="text-muted-foreground">Manage employee loans and track payments</p>
+          <p className="text-muted-foreground">Manage personnel loans and track payments</p>
         </div>
-        <Dialog open={open} onOpenChange={(newOpen) => {
-          setOpen(newOpen)
-          if (newOpen) {
-            loadUsers()
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Loan
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={activeTab === 'archived' ? 'default' : 'outline'}
+            onClick={() => setActiveTab(activeTab === 'active' ? 'archived' : 'active')}
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            {activeTab === 'archived' ? 'Active Loans' : 'Archived Loans'}
+          </Button>
+          <Dialog open={open} onOpenChange={(newOpen) => {
+            setOpen(newOpen)
+            if (newOpen) {
+              loadUsers()
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Loan
+              </Button>
+            </DialogTrigger>
           <DialogContent className="w-[95vw] max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -177,11 +283,11 @@ export default function LoansPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-2">
                   <User className="h-4 w-4" />
-                  Employee
+                  Personnel
                 </label>
                 <Select value={form.users_id} onValueChange={(value) => setForm(f => ({ ...f, users_id: value }))}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an employee" />
+                    <SelectValue placeholder="Select personnel" />
                   </SelectTrigger>
                   <SelectContent>
                     {users.map(u => (
@@ -194,36 +300,49 @@ export default function LoansPage() {
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2 sm:col-span-1">
+              <div className="space-y-2 sm:col-span-1">
                   <label className="text-sm font-medium flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
+                    <span className="text-lg font-semibold">₱</span>
                     Loan Amount
                   </label>
-                  <Input 
-                    type="number" 
-                    min="0" 
-                    value={form.amount} 
-                    onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                    placeholder="Enter loan amount"
-                    className="w-full"
-                  />
+                  <div className="relative">
+                    <Input 
+                      type="text" 
+                      value={form.amount ? Number(form.amount).toLocaleString() : ''}
+                      onChange={(e) => {
+                        // Remove commas and non-numeric characters except digits
+                        const value = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')
+                        setForm(f => ({ ...f, amount: value }))
+                      }}
+                      placeholder="Enter loan amount"
+                      className="w-full"
+                    />
+                    {form.amount && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-blue-600">
+                        ₱{Number(form.amount).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2 sm:col-span-1">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
-                    Monthly Payment (%)
+                    Monthly Payment - Auto-calculated
                   </label>
-                  <Input 
-                    type="number" 
-                    min="0" 
-                    step="0.01" 
-                    value={form.monthlyPaymentPercent} 
-                    onChange={(e) => setForm(f => ({ ...f, monthlyPaymentPercent: e.target.value }))}
-                    placeholder="e.g., 2.0"
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Percentage of loan amount to deduct monthly (e.g., 2% = ₱2,000 monthly on ₱100,000 loan)
+                  <div className="relative">
+                    <Input 
+                      type="text" 
+                      value={
+                        form.amount && form.monthlyPaymentPercent
+                          ? `₱${((Number(form.amount) * Number(form.monthlyPaymentPercent)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })} (${form.monthlyPaymentPercent}%)`
+                          : 'Enter loan amount and term'
+                      }
+                      className="w-full bg-blue-50 font-semibold text-blue-900"
+                      readOnly
+                    />
+                  </div>
+                  <p className="text-xs text-blue-600 font-medium">
+                    ✓ Live calculation: {form.amount && form.termMonths ? `₱${Number(form.amount).toLocaleString()} ÷ ${form.termMonths} months = ${form.monthlyPaymentPercent}% monthly` : 'Waiting for input...'}
                   </p>
                 </div>
                 <div className="space-y-2 sm:col-span-2">
@@ -264,14 +383,14 @@ export default function LoansPage() {
                       Payment Preview
                     </h3>
                     <p className="text-sm text-blue-700">
-                      Real-time calculation based on your inputs. This shows exactly how much will be deducted from the employee&apos;s salary.
+                      Real-time calculation based on your inputs. This shows exactly how much will be deducted from the personnel&apos;s salary.
                     </p>
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-blue-800">Monthly Payment Amount</label>
                           <div className="flex items-center gap-2">
-                            <DollarSign className="h-4 w-4 text-blue-600" />
+                            <span className="text-lg font-semibold text-blue-600">₱</span>
                             <span className="text-lg font-bold text-blue-900">
                               ₱{((Number(form.amount) * Number(form.monthlyPaymentPercent)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                             </span>
@@ -296,16 +415,16 @@ export default function LoansPage() {
                       {form.termMonths && (
                         <div className="pt-2 border-t border-blue-200">
                           <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium text-blue-800">Total Interest-Free Amount</span>
+                            <span className="text-sm font-medium text-blue-800">Total Loan Amount</span>
                             <span className="text-sm font-semibold text-blue-900">₱{Number(form.amount).toLocaleString()}</span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium text-blue-800">Estimated Payoff Period</span>
+                            <span className="text-sm font-medium text-blue-800">Loan Term</span>
                             <span className="text-sm font-semibold text-blue-900">{form.termMonths} months</span>
                           </div>
                           {Number(form.termMonths) > 0 && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm font-medium text-blue-800">Estimated Monthly Collection</span>
+                              <span className="text-sm font-medium text-blue-800">Monthly Deduction</span>
                               <span className="text-sm font-semibold text-blue-900">
                                 ₱{((Number(form.amount) * Number(form.monthlyPaymentPercent)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                               </span>
@@ -339,6 +458,7 @@ export default function LoansPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -359,7 +479,7 @@ export default function LoansPage() {
         <Card className="border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Loan Amount</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
+            <span className="text-2xl font-bold text-green-600">₱</span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">₱{totalLoanAmount.toLocaleString()}</div>
@@ -400,8 +520,17 @@ export default function LoansPage() {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <User className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Active Loans</CardTitle>
+              {activeTab === 'active' ? (
+                <>
+                  <User className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Active Loans</CardTitle>
+                </>
+              ) : (
+                <>
+                  <Archive className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Archived Loans</CardTitle>
+                </>
+              )}
             </div>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -420,18 +549,21 @@ export default function LoansPage() {
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead className="font-semibold">Profile</TableHead>
-                <TableHead className="font-semibold">Employee</TableHead>
+                <TableHead className="font-semibold">Personnel</TableHead>
                 <TableHead className="font-semibold">Email</TableHead>
                 <TableHead className="font-semibold">Loan Amount</TableHead>
                 <TableHead className="font-semibold">Balance</TableHead>
                 <TableHead className="font-semibold">Per Payroll Payment</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="font-semibold">Date Applied</TableHead>
-                <TableHead className="font-semibold">Actions</TableHead>
+                <TableHead className="font-semibold">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(i => {
+              {(activeTab === 'active' ? filtered : archivedItems.filter(i =>
+                (i.userName || '').toLowerCase().includes(search.toLowerCase()) ||
+                i.userEmail.toLowerCase().includes(search.toLowerCase())
+              )).map(i => {
                 const monthlyPayment = i.amount * (i.monthlyPaymentPercent / 100)
                 const perPayrollPayment = monthlyPayment / 2
                 return (
@@ -463,16 +595,32 @@ export default function LoansPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>{format(new Date(i.createdAt), 'MMM dd, yyyy')}</TableCell>
-                    <TableCell>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        onClick={() => viewLoanDetails(i)}
-                        className="hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700"
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View Details
-                      </Button>
+                    <TableCell className="whitespace-nowrap">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline">Action</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => viewLoanDetails(i)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => startEdit(i)}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          {i.status === 'COMPLETED' && (
+                            <DropdownMenuItem onClick={() => archiveLoan(i)}>
+                              <Archive className="h-4 w-4 mr-2" />
+                              Archive
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem variant="destructive" onClick={() => deleteLoan(i)}>
+                            <AlertCircle className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 )
@@ -536,7 +684,7 @@ export default function LoansPage() {
               {/* Loan Details */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
+                  <span className="text-xl font-bold">₱</span>
                   Loan Details
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -633,6 +781,70 @@ export default function LoansPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* Edit Loan Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="w-[95vw] max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-amber-600" />
+              Edit Loan
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-sm font-medium">Amount</label>
+                <Input value={editForm.amount ? `₱${Number(editForm.amount).toLocaleString()}` : ''} readOnly className="bg-muted/50" />
+              </div>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={editForm.status} onValueChange={(v) => setEditForm(f => ({ ...f, status: v }))}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                    <SelectItem value="COMPLETED">COMPLETED</SelectItem>
+                    <SelectItem value="DEFAULTED">DEFAULTED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-sm font-medium">Purpose</label>
+                <Input value={editForm.purpose} onChange={(e) => setEditForm(f => ({ ...f, purpose: e.target.value }))} />
+              </div>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-sm font-medium">Term (months)</label>
+                <Input type="number" min="1" value={editForm.termMonths} onChange={(e) => setEditForm(f => ({ ...f, termMonths: Number(e.target.value) }))} />
+              </div>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-sm font-medium">Monthly Payment %</label>
+                <Input type="number" min="0" step="0.01" value={editForm.monthlyPaymentPercent} onChange={(e) => setEditForm(f => ({ ...f, monthlyPaymentPercent: Number(e.target.value) }))} />
+              </div>
+            </div>
+
+            {editForm.amount && editForm.monthlyPaymentPercent > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Monthly Payment</span>
+                  <span className="font-semibold">₱{((Number(editForm.amount) * Number(editForm.monthlyPaymentPercent)) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Per Payroll Payment</span>
+                  <span className="font-semibold">₱{(((Number(editForm.amount) * Number(editForm.monthlyPaymentPercent)) / 100) / 2).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row justify-end gap-3">
+              <Button variant="outline" onClick={() => setEditOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+              <Button disabled={editSaving} onClick={submitEdit} className="bg-amber-600 hover:bg-amber-700 text-white w-full sm:w-auto">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

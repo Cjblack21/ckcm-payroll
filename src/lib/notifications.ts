@@ -8,6 +8,7 @@ export interface Notification {
   isRead: boolean
   createdAt: Date
   userId?: string
+  link?: string // Optional link to redirect when notification is clicked
 }
 
 export async function createNotification(data: {
@@ -15,6 +16,7 @@ export async function createNotification(data: {
   message: string
   type: 'info' | 'warning' | 'error' | 'success'
   userId?: string
+  link?: string
 }) {
   // For now, we'll store notifications in memory
   // In production, you'd want to store these in the database
@@ -25,7 +27,8 @@ export async function createNotification(data: {
     type: data.type,
     isRead: false,
     createdAt: new Date(),
-    userId: data.userId
+    userId: data.userId,
+    link: data.link
   }
 
   // Store in global notifications array (in production, use database)
@@ -129,6 +132,56 @@ export async function getNotifications(userId?: string): Promise<Notification[]>
       }
     }
 
+    // Leave request notifications
+    const leaveRequests = await prisma.leaveRequest.findMany({
+      where: { users_id: userId },
+      orderBy: { createdAt: 'desc' },
+      take: 5 // Show last 5 leave requests
+    })
+    
+    for (const leave of leaveRequests) {
+      if (leave.status === 'PENDING') {
+        // Show pending leave notification
+        const daysSinceRequest = Math.floor((now.getTime() - new Date(leave.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        notifications.push({
+          id: `leave-${leave.leave_requests_id}`,
+          title: '⏳ Leave Request Pending',
+          message: `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()} is awaiting admin approval${daysSinceRequest > 0 ? ` (submitted ${daysSinceRequest} day${daysSinceRequest > 1 ? 's' : ''} ago)` : ''}.`,
+          type: 'warning',
+          isRead: false,
+          createdAt: new Date(leave.createdAt)
+        })
+      } else if (leave.status === 'APPROVED') {
+        // Show approved leave notification (only recent ones)
+        const updatedAt = leave.updatedAt || leave.createdAt
+        const hoursSinceApproval = Math.floor((now.getTime() - new Date(updatedAt).getTime()) / (1000 * 60 * 60))
+        if (hoursSinceApproval <= 48) { // Show for 48 hours
+          notifications.push({
+            id: `leave-${leave.leave_requests_id}`,
+            title: '✅ Leave Request Approved',
+            message: `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()} has been approved!`,
+            type: 'success',
+            isRead: false,
+            createdAt: new Date(updatedAt)
+          })
+        }
+      } else if (leave.status === 'DENIED') {
+        // Show denied leave notification (only recent ones)
+        const updatedAt = leave.updatedAt || leave.createdAt
+        const hoursSinceDenial = Math.floor((now.getTime() - new Date(updatedAt).getTime()) / (1000 * 60 * 60))
+        if (hoursSinceDenial <= 48) { // Show for 48 hours
+          notifications.push({
+            id: `leave-${leave.leave_requests_id}`,
+            title: '❌ Leave Request Denied',
+            message: `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()} was not approved.${leave.adminComment ? ` Reason: ${leave.adminComment}` : ''}`,
+            type: 'error',
+            isRead: false,
+            createdAt: new Date(updatedAt)
+          })
+        }
+      }
+    }
+
     // Active loans reminder
     const loans = await prisma.loan.findMany({ where: { users_id: userId, status: 'ACTIVE' } })
     if (loans.length > 0) {
@@ -140,6 +193,23 @@ export async function getNotifications(userId?: string): Promise<Notification[]>
         isRead: false,
         createdAt: new Date()
       })
+    }
+
+    // Payroll period ending notification
+    if (settings?.periodEnd) {
+      const periodEndDate = new Date(settings.periodEnd)
+      const daysUntilEnd = Math.ceil((periodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      
+      if (daysUntilEnd >= 0 && daysUntilEnd <= 3) {
+        notifications.push({
+          id: `period-end-${periodEndDate.getTime()}`,
+          title: 'Payroll Period Ending Soon',
+          message: `The current payroll period will end ${daysUntilEnd === 0 ? 'today' : `in ${daysUntilEnd} day${daysUntilEnd > 1 ? 's' : ''}`}. Make sure your attendance is up to date.`,
+          type: 'warning',
+          isRead: false,
+          createdAt: new Date()
+        })
+      }
     }
 
     // Payroll reschedule notifications from global store

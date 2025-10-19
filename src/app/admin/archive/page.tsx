@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { format } from "date-fns"
-import { Eye, Calendar, Users, DollarSign, ArrowLeft, Clock, FileText, Printer } from "lucide-react"
+import { Eye, Calendar, Users, DollarSign, ArrowLeft, Clock, FileText, Printer, Archive, Banknote } from "lucide-react"
 import { generatePayslipsHTML, PayslipData, HeaderSettings } from "@/lib/payslip-generator"
 
 type PayrollDetail = {
@@ -66,6 +66,19 @@ type DateGroup = {
 
 type ViewState = 'dates' | 'users' | 'details'
 
+type ArchivedLoan = {
+  loans_id: string
+  users_id: string
+  userName: string | null
+  userEmail: string
+  amount: number
+  balance: number
+  monthlyPaymentPercent: number
+  termMonths: number
+  status: string
+  createdAt: string
+}
+
 // Helper function to safely format dates
 function safeFormatDate(dateString: string | null | undefined, formatString: string, fallback: string = 'Invalid date'): string {
   if (!dateString) return fallback
@@ -86,10 +99,42 @@ export default function ArchivePage() {
   const [viewState, setViewState] = useState<ViewState>('dates')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollDetail | null>(null)
+  const [payrollArchiveView, setPayrollArchiveView] = useState<'current' | 'archived'>('current')
+  const [loanArchiveView, setLoanArchiveView] = useState<'current' | 'archived'>('archived')
+  const [archivedLoans, setArchivedLoans] = useState<ArchivedLoan[]>([])
+  const [isLoadingLoans, setIsLoadingLoans] = useState(false)
 
   useEffect(() => {
     loadArchive()
   }, [])
+
+  useEffect(() => {
+    if (loanArchiveView === 'archived') {
+      loadArchivedLoans()
+    }
+  }, [loanArchiveView])
+
+  async function loadArchivedLoans() {
+    setIsLoadingLoans(true)
+    try {
+      const res = await fetch('/api/admin/loans?archived=true')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        console.error('Archived loans API error:', res.status, res.statusText)
+        console.error('Error details:', errorData)
+        setArchivedLoans([])
+        return
+      }
+      const data = await res.json()
+      console.log('Archived loans loaded:', data)
+      setArchivedLoans(data.items || [])
+    } catch (e) {
+      console.error('Error loading archived loans', e)
+      setArchivedLoans([])
+    } finally {
+      setIsLoadingLoans(false)
+    }
+  }
 
   async function loadArchive() {
     setIsLoading(true)
@@ -143,6 +188,15 @@ export default function ArchivePage() {
       p.userEmail.toLowerCase().includes(q)
     )
   }, [selectedDateGroup, search])
+
+  const filteredLoans = useMemo(() => {
+    if (!search) return archivedLoans
+    const q = search.toLowerCase()
+    return archivedLoans.filter(loan => 
+      (loan.userName || '').toLowerCase().includes(q) ||
+      loan.userEmail.toLowerCase().includes(q)
+    )
+  }, [archivedLoans, search])
 
   function handleViewDate(date: string) {
     setSelectedDate(date)
@@ -278,7 +332,29 @@ export default function ArchivePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Input 
+          <Button
+            variant={payrollArchiveView === 'current' ? 'default' : 'outline'}
+            onClick={() => {
+              setPayrollArchiveView('current')
+              setLoanArchiveView('archived')
+              setViewState('dates')
+            }}
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            Payroll Archive
+          </Button>
+          <Button
+            variant={loanArchiveView === 'current' ? 'default' : 'outline'}
+            onClick={() => {
+              setLoanArchiveView('current')
+              setPayrollArchiveView('archived')
+              setViewState('dates')
+            }}
+          >
+            <Banknote className="h-4 w-4 mr-2" />
+            Loan Archive
+          </Button>
+          <Input
             placeholder={viewState === 'dates' ? 'Search dates...' : 'Search employees...'} 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
@@ -289,7 +365,7 @@ export default function ArchivePage() {
       </div>
 
       {/* Dates View */}
-      {viewState === 'dates' && (
+      {viewState === 'dates' && payrollArchiveView === 'current' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -346,7 +422,7 @@ export default function ArchivePage() {
       )}
 
       {/* Users View */}
-      {viewState === 'users' && selectedDateGroup && (
+      {viewState === 'users' && selectedDateGroup && payrollArchiveView === 'current' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -413,8 +489,67 @@ export default function ArchivePage() {
         </Card>
       )}
 
+      {/* Archived Loans View */}
+      {loanArchiveView === 'current' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5" />
+              Archived Loans
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="text-right">Loan Amount</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead className="text-right">Monthly %</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Date Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredLoans.map((loan) => (
+                  <TableRow key={loan.loans_id}>
+                    <TableCell className="font-medium">
+                      {loan.userName || loan.userEmail}
+                    </TableCell>
+                    <TableCell>{loan.userEmail}</TableCell>
+                    <TableCell className="text-right">₱{loan.amount.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">₱{loan.balance.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{loan.monthlyPaymentPercent}%</TableCell>
+                    <TableCell>{loan.termMonths} months</TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        loan.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                        loan.status === 'COMPLETED' ? 'bg-blue-100 text-blue-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {loan.status}
+                      </span>
+                    </TableCell>
+                    <TableCell>{safeFormatDate(loan.createdAt, 'MMM dd, yyyy', 'Invalid')}</TableCell>
+                  </TableRow>
+                ))}
+                {filteredLoans.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      {isLoadingLoans ? 'Loading archived loans...' : 'No archived loans found.'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Payroll Details Dialog */}
-      <Dialog open={viewState === 'details'} onOpenChange={(open) => !open && handleBackToUsers()}>
+      <Dialog open={viewState === 'details' && payrollArchiveView === 'current'} onOpenChange={(open) => !open && handleBackToUsers()}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">

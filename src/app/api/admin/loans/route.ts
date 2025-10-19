@@ -12,8 +12,10 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const q = (searchParams.get('q') || '').toLowerCase()
+    const archived = searchParams.get('archived') === 'true'
 
     const loans = await prisma.loan.findMany({
+      where: archived ? { archivedAt: { not: null } } : { archivedAt: null },
       include: {
         user: { select: { users_id: true, name: true, email: true } }
       },
@@ -40,7 +42,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items })
   } catch (error) {
     console.error('Error fetching loans:', error)
-    return NextResponse.json({ error: 'Failed to fetch loans' }, { status: 500 })
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    return NextResponse.json({ 
+      error: 'Failed to fetch loans',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 })
   }
 }
 

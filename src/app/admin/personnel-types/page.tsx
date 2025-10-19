@@ -62,7 +62,7 @@ export default function PersonnelTypesPage() {
     try {
       setLoading(true)
       
-      // Load personnel types
+      // Load positions
       const result = await getPersonnelTypes()
       
       if (!result.success) {
@@ -140,7 +140,7 @@ export default function PersonnelTypesPage() {
         return
       }
       
-      toast.success('Personnel type added')
+      toast.success('Position added')
       setOpen(false)
       resetForm()
       load()
@@ -164,7 +164,7 @@ export default function PersonnelTypesPage() {
         return
       }
       
-      toast.success('Personnel type updated')
+      toast.success('Position updated')
       setEditOpen(false)
       resetForm()
       load()
@@ -184,7 +184,7 @@ export default function PersonnelTypesPage() {
         return
       }
       
-      toast.success('Personnel type deleted')
+      toast.success('Position deleted')
       load()
     } catch {
       toast.error('Failed to delete')
@@ -207,47 +207,121 @@ export default function PersonnelTypesPage() {
   return (
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between rounded-md px-4 py-3 bg-transparent dark:bg-sidebar text-foreground dark:text-sidebar-foreground">
-        <h2 className="text-3xl font-bold tracking-tight">Personnel Types</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Position</h2>
         <SSRSafe>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2"/>Add New Personnel Type</Button>
+              <Button><Plus className="h-4 w-4 mr-2"/>Add New Position</Button>
             </DialogTrigger>
-          <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>Add Personnel Type</DialogTitle>
-              <DialogDescription>Define a personnel type and net pay.</DialogDescription>
+              <DialogTitle className="text-2xl">Add New Position</DialogTitle>
+              <DialogDescription>Create a new position and view automatic salary calculations.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-2 md:grid-cols-2">
-              <div className="grid gap-2 md:col-span-2">
-                <Label>Personnel type name</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Senior Developer" />
-              </div>
-              <div className="grid gap-2 md:col-span-2">
-                <Label>Net Pay per Month (PHP)</Label>
-                <Input value={basicSalaryInput} onChange={(e) => setBasicSalaryInput(e.target.value)} placeholder="e.g. 25k or 25000" />
-                <div className="text-sm text-muted-foreground">Basic salary for attendance period. Supports shorthand: 25k = 25,000; 1.5m = 1,500,000</div>
-              </div>
-              <div className="md:col-span-2 grid gap-2 rounded-md border p-3">
-                <div className="font-medium">Calculated breakdown (Based on {workingDays} working days in attendance period)</div>
-                <div className="grid md:grid-cols-3 gap-2 text-sm">
-                  <div>Period Total: ₱{basic.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                  <div>Daily Rate (÷{workingDays}): ₱{daily.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                  <div>Hourly Rate (÷8): ₱{hourly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                  <div>Per Minute: ₱{min.toLocaleString(undefined, { maximumFractionDigits: 4 })}</div>
-                  <div>Per Second: ₱{sec.toLocaleString(undefined, { maximumFractionDigits: 6 })}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {attendanceSettings?.periodStart && attendanceSettings?.periodEnd 
-                      ? `Period: ${new Date(attendanceSettings.periodStart).toLocaleDateString()} - ${new Date(attendanceSettings.periodEnd).toLocaleDateString()}`
-                      : 'No attendance period set - using 22 working days default'
-                    }
+            
+            <div className="space-y-6 py-4">
+              {/* Input Section */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="position-name" className="text-base font-semibold">Position Name</Label>
+                  <Input 
+                    id="position-name"
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="e.g. Senior Developer, Manager, Accountant" 
+                    className="w-full h-11 text-base"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="monthly-salary" className="text-base font-semibold">Monthly Salary (PHP)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">₱</span>
+                    <Input 
+                      id="monthly-salary"
+                      value={basicSalaryInput} 
+                      onChange={(e) => setBasicSalaryInput(e.target.value)} 
+                      placeholder="25000 or 25k" 
+                      className="w-full h-11 pl-8 text-base font-medium"
+                    />
                   </div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                    Tip: Use shorthand like 25k (25,000) or 1.5m (1,500,000)
+                  </p>
                 </div>
               </div>
+
+              {/* Salary Breakdown Section */}
+              {basic > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-border"></div>
+                    <h4 className="font-semibold text-base text-muted-foreground">Automatic Salary Breakdown</h4>
+                    <div className="h-px flex-1 bg-border"></div>
+                  </div>
+                  
+                  {/* Unified Salary Breakdown Card */}
+                  <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-lg p-6 border border-green-200 dark:border-green-900 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-base text-green-700 dark:text-green-400 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        Complete Salary Breakdown
+                      </h5>
+                      <span className="text-2xl font-bold text-green-600 dark:text-green-400">₱{basic.toLocaleString()}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                          <span className="text-sm text-muted-foreground">Daily Rate</span>
+                          <span className="text-base font-semibold">₱{daily.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">÷ {workingDays} working days</p>
+                      </div>
+                      
+                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                          <span className="text-sm text-muted-foreground">Hourly Rate</span>
+                          <span className="text-base font-semibold">₱{hourly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">÷ 8 hours per day</p>
+                      </div>
+                      
+                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                          <span className="text-sm text-muted-foreground">Per Minute</span>
+                          <span className="text-base font-semibold">₱{min.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">÷ 60 minutes per hour</p>
+                      </div>
+                      
+                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2 sm:col-span-2 lg:col-span-1">
+                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                          <span className="text-sm text-muted-foreground">Per Second</span>
+                          <span className="text-base font-semibold">₱{sec.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">÷ 60 seconds per minute</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!basic && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">Enter a monthly salary to see automatic breakdown</p>
+                </div>
+              )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setOpen(false); resetForm(); }}>Cancel</Button>
-              <Button onClick={create}>Save</Button>
+            
+            <DialogFooter className="flex gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={() => { setOpen(false); resetForm(); }} className="flex-1">
+                Cancel
+              </Button>
+              <Button onClick={create} disabled={!name.trim() || !basicSalaryInput.trim()} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                Create Position
+              </Button>
             </DialogFooter>
           </DialogContent>
           </Dialog>
@@ -256,7 +330,7 @@ export default function PersonnelTypesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Personnel Types</CardTitle>
+          <CardTitle>All Positions</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -320,7 +394,7 @@ export default function PersonnelTypesPage() {
                 ))}
                 {types.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No personnel types yet.</TableCell>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No positions yet.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -334,12 +408,12 @@ export default function PersonnelTypesPage() {
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Personnel Type</DialogTitle>
-              <DialogDescription>Update personnel type information and net pay.</DialogDescription>
+              <DialogTitle>Edit Position</DialogTitle>
+              <DialogDescription>Update position information and net pay.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-2 md:grid-cols-2">
               <div className="grid gap-2 md:col-span-2">
-                <Label>Personnel type name</Label>
+                <Label>Position name</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Senior Developer" />
               </div>
               <div className="grid gap-2 md:col-span-2">
@@ -388,44 +462,102 @@ export default function PersonnelTypesPage() {
       {/* View Dialog */}
       <SSRSafe>
         <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Personnel Type Details</DialogTitle>
-              <DialogDescription>View detailed information about this personnel type.</DialogDescription>
+              <DialogTitle className="text-xl">{selectedType?.name}</DialogTitle>
+              <DialogDescription>Complete position information and salary breakdown.</DialogDescription>
             </DialogHeader>
             {selectedType && (
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label>Name</Label>
-                  <div className="text-sm font-medium">{selectedType.name}</div>
+              <div className="space-y-6 py-4">
+                {/* Position Info Card */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{selectedType.name}</h3>
+                      <p className="text-sm text-muted-foreground">Position Details</p>
+                    </div>
+                    <Badge variant={selectedType.isActive ? 'default' : 'secondary'} className="text-sm px-3 py-1">
+                      {selectedType.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Monthly Salary</p>
+                      <p className="text-2xl font-bold text-green-600">₱{Number(selectedType.basicSalary).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Created On</p>
+                      <p className="text-sm font-medium">{new Date(selectedType.createdAt).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Monthly Net Pay</Label>
-                  <div className="text-sm font-medium">₱{Number(selectedType.basicSalary).toLocaleString()}</div>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Status</Label>
-                  <Badge variant={selectedType.isActive ? 'default' : 'secondary'}>
-                    {selectedType.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Created</Label>
-                  <div className="text-sm">{new Date(selectedType.createdAt).toLocaleString()}</div>
-                </div>
-                <div className="grid gap-2 rounded-md border p-3">
-                  <div className="font-medium">Salary Breakdown</div>
-                  <div className="grid gap-1 text-sm">
-                    <div>Biweekly: ₱{(Number(selectedType.basicSalary) / 2).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                    <div>Weekly: ₱{(Number(selectedType.basicSalary) / 4).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                    <div>Daily: ₱{(Number(selectedType.basicSalary) / 20).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                    <div>Hourly: ₱{(Number(selectedType.basicSalary) / 160).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+
+                {/* Salary Breakdown Card */}
+                <div className="bg-muted/30 rounded-lg p-6 border">
+                  <h4 className="font-semibold text-base mb-4 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    Salary Breakdown
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center py-2 border-b border-border/50">
+                        <span className="text-sm text-muted-foreground">Monthly</span>
+                        <span className="font-semibold">₱{Number(selectedType.basicSalary).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-border/50">
+                        <span className="text-sm text-muted-foreground">Biweekly</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / 2).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-sm text-muted-foreground">Weekly</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / 4).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center py-2 border-b border-border/50">
+                        <span className="text-sm text-muted-foreground">Daily</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / (workingDays || 22)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-border/50">
+                        <span className="text-sm text-muted-foreground">Hourly</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / ((workingDays || 22) * 8)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-sm text-muted-foreground">Per Hour (Avg)</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / 160).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center py-2 border-b border-border/50">
+                        <span className="text-sm text-muted-foreground">Per Minute</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / ((workingDays || 22) * 8 * 60)).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-border/50">
+                        <span className="text-sm text-muted-foreground">Per Second</span>
+                        <span className="font-semibold">₱{(Number(selectedType.basicSalary) / ((workingDays || 22) * 8 * 60 * 60)).toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-xs text-muted-foreground italic">Micro-calculations</span>
+                        <span className="text-xs text-muted-foreground">for precision</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-border/50">
+                    <p className="text-xs text-muted-foreground">
+                      * Daily and hourly rates based on {workingDays || 22} working days per month and 8 hours per day
+                    </p>
                   </div>
                 </div>
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setViewOpen(false)}>Close</Button>
+              <Button onClick={() => setViewOpen(false)} className="w-full sm:w-auto">
+                Close
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

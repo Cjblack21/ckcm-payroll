@@ -17,21 +17,37 @@ function isWithinWindow(nowHHmm: string, start?: string | null, end?: string | n
 
 export async function POST(request: NextRequest) {
   try {
-    const { users_id } = await request.json()
-    if (!users_id || typeof users_id !== 'string') {
-      return NextResponse.json({ error: 'users_id is required' }, { status: 400 })
+    const body = await request.json()
+    const inputUsersId = typeof body?.users_id === 'string' ? body.users_id : null
+    const inputEmail = typeof body?.email === 'string' ? body.email : null
+
+    if (!inputUsersId && !inputEmail) {
+      return NextResponse.json({ error: 'users_id or email is required' }, { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({ where: { users_id } })
+    // Resolve user either by users_id or email
+    const user = inputUsersId
+      ? await prisma.user.findUnique({ where: { users_id: inputUsersId } })
+      : await prisma.user.findUnique({ where: { email: inputEmail! } })
+
     if (!user || !user.isActive) {
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 })
     }
+
+    // Use resolved users_id for all subsequent operations
+    const users_id = user.users_id
 
     // Check if user has approved leave for today
     const now = getNowInPhilippines()
     const startToday = getStartOfDayInPhilippines(now)
     const endToday = getEndOfDayInPhilippines(now)
     
+    console.log('🔍 LEAVE CHECK DEBUG:')
+    console.log('🔍 Current Philippines time:', now.toISOString())
+    console.log('🔍 Start of today:', startToday.toISOString())
+    console.log('🔍 End of today:', endToday.toISOString())
+    
+    // Method 1: Check for approved leave requests
     const approvedLeave = await prisma.leaveRequest.findFirst({
       where: {
         users_id,
@@ -41,8 +57,21 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    console.log('🔍 LEAVE CHECK RESULT:', approvedLeave ? {
+      startDate: approvedLeave.startDate.toISOString(),
+      endDate: approvedLeave.endDate.toISOString(),
+      isPaid: approvedLeave.isPaid,
+      status: approvedLeave.status,
+      comparison: {
+        'startDate <= endToday': `${approvedLeave.startDate.toISOString()} <= ${endToday.toISOString()} = ${approvedLeave.startDate <= endToday}`,
+        'endDate >= startToday': `${approvedLeave.endDate.toISOString()} >= ${startToday.toISOString()} = ${approvedLeave.endDate >= startToday}`,
+        'Today is within leave': approvedLeave.startDate <= endToday && approvedLeave.endDate >= startToday
+      }
+    } : 'No approved leave found')
+
     if (approvedLeave) {
       const leaveType = approvedLeave.isPaid ? 'paid' : 'unpaid'
+      console.log(`⛔ BLOCKING ATTENDANCE: User is on ${leaveType} leave`)
       return NextResponse.json({ 
         error: `You are on approved ${leaveType} leave from ${new Date(approvedLeave.startDate).toLocaleDateString()} to ${new Date(approvedLeave.endDate).toLocaleDateString()}. Attendance cannot be recorded during leave.`,
         onLeave: true,
@@ -50,6 +79,28 @@ export async function POST(request: NextRequest) {
           type: leaveType,
           startDate: approvedLeave.startDate,
           endDate: approvedLeave.endDate
+        }
+      }, { status: 403 })
+    }
+    
+    // Method 2: Check if today's attendance record already has ON_LEAVE status
+    const existingAttendance = await prisma.attendance.findFirst({
+      where: { 
+        users_id, 
+        date: { gte: startToday, lte: endToday },
+        status: 'ON_LEAVE'
+      },
+    })
+    
+    if (existingAttendance) {
+      console.log(`⛔ BLOCKING ATTENDANCE: Attendance record already marked as ON_LEAVE`)
+      return NextResponse.json({ 
+        error: 'You are on approved leave today. Attendance cannot be recorded during leave.',
+        onLeave: true,
+        leaveDetails: {
+          type: 'leave',
+          startDate: existingAttendance.date,
+          endDate: existingAttendance.date
         }
       }, { status: 403 })
     }
@@ -67,8 +118,6 @@ export async function POST(request: NextRequest) {
       noTimeInCutoff: settings.noTimeInCutoff
     } : 'No settings found')
 
-    const startToday = getStartOfDayInPhilippines(now)
-    const endToday = getEndOfDayInPhilippines(now)
 
     // Find or create today's record
     let record = await prisma.attendance.findFirst({
@@ -78,46 +127,26 @@ export async function POST(request: NextRequest) {
     // Decide punch direction
     const isTimeInPhase = !record || !record.timeIn
 
-    // Validate windows
-    if (isTimeInPhase) {
-      console.log('🕐 Time-in phase validation:')
-      // For time-in, validate against time-in window
-      if (settings) {
-        // Convert times to minutes for proper comparison
-        const currentMinutes = parseInt(nowHH) * 60 + parseInt(nowMM)
-        const startMinutes = parseInt(settings.timeInStart!.split(':')[0]) * 60 + parseInt(settings.timeInStart!.split(':')[1])
-        const endMinutes = parseInt(settings.timeInEnd!.split(':')[0]) * 60 + parseInt(settings.timeInEnd!.split(':')[1])
-        
-        console.log(`Time comparison: ${nowHHmm} (${currentMinutes} min) vs ${settings.timeInStart} (${startMinutes} min) to ${settings.timeInEnd} (${endMinutes} min)`)
-        
-        // Check if this is an overnight window (start > end, like 23:58 to 09:00)
-        const isOvernightWindow = startMinutes > endMinutes
-        
-        let isWithinWindow = false
-        
-        if (isOvernightWindow) {
-          // Overnight window: current time is valid if it's >= start OR <= end
-          isWithinWindow = currentMinutes >= startMinutes || currentMinutes <= endMinutes
-          console.log(`Overnight window: ${currentMinutes} >= ${startMinutes} OR ${currentMinutes} <= ${endMinutes} = ${isWithinWindow}`)
-        } else {
-          // Normal window: current time is valid if it's >= start AND <= end
-          isWithinWindow = currentMinutes >= startMinutes && currentMinutes <= endMinutes
-          console.log(`Normal window: ${currentMinutes} >= ${startMinutes} AND ${currentMinutes} <= ${endMinutes} = ${isWithinWindow}`)
-        }
-        
-        // Allow late time-ins - they will be marked as LATE status
-        if (!isWithinWindow) {
-          console.log('⚠️ LATE TIME-IN: Outside preferred window, will be marked as LATE')
-        } else {
-          console.log('✅ ON-TIME: Within preferred time window')
-        }
-        console.log('✅ Time-in validation passed - allowing late time-ins')
+    // Validate cutoff only (allow late/early with deductions)
+    if (settings && settings.timeOutEnd) {
+      const currentMinutes = parseInt(nowHH) * 60 + parseInt(nowMM)
+      const cutoffMinutes = parseInt(settings.timeOutEnd.split(':')[0]) * 60 + parseInt(settings.timeOutEnd.split(':')[1])
+      const cutoffStart = settings.timeOutStart ? (parseInt(settings.timeOutStart.split(':')[0]) * 60 + parseInt(settings.timeOutStart.split(':')[1])) : null
+      
+      // Check if past cutoff (timeOutEnd)
+      let afterCutoff = false
+      if (cutoffStart !== null && cutoffStart > cutoffMinutes) {
+        // Overnight cutoff window
+        afterCutoff = currentMinutes > cutoffMinutes && currentMinutes < cutoffStart
       } else {
-        console.log('⚠️ No settings found - allowing time-in')
+        // Normal same-day cutoff
+        afterCutoff = currentMinutes > cutoffMinutes
       }
-    } else {
-      // Allow timeout anytime - no blocking of early timeouts as per new requirements
-      console.log('⏰ Time-out phase: Allowing timeout at any time')
+      
+      if (afterCutoff) {
+        console.log('⛔ Blocking punch: past daily cutoff (timeOutEnd)')
+        return NextResponse.json({ error: 'Attendance not allowed after daily cutoff. You will be marked absent if no punches recorded.' }, { status: 400 })
+      }
     }
 
     // Apply punch
@@ -138,8 +167,8 @@ export async function POST(request: NextRequest) {
         
         if (userWithSalary?.personnelType?.basicSalary) {
           const basicSalary = Number(userWithSalary.personnelType.basicSalary)
-          // Create expected time from settings
-          const expectedTime = new Date()
+          // Create expected time from settings using TODAY's date
+          const expectedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate())
           const [hours, minutes] = settings.timeInEnd.split(':').map(Number)
           // Deductions start 1 minute after timeInEnd (09:31 AM instead of 09:30 AM)
           const expectedMinutes = minutes + 1
@@ -183,12 +212,12 @@ export async function POST(request: NextRequest) {
         },
       })
       
-      // Late deduction calculated real-time from attendance record
-      // No need to store separate deduction records
+      // Create late deduction record if applicable
       if (lateDeduction > 0) {
-        console.log(`🔍 DEBUG: Real-time late deduction calculated for user ${users_id}`)
+        console.log(`🔍 DEBUG: Creating late deduction for user ${users_id}`)
         console.log(`🔍 DEBUG: lateDeduction = ${lateDeduction}, lateSeconds = ${lateSeconds}`)
-        console.log(`✅ Real-time late deduction: ${lateDeduction} for user ${users_id} (${lateSeconds} seconds late)`)
+        await createLateDeduction(users_id, lateDeduction, Math.round(lateSeconds / 60), now)
+        console.log(`✅ Created late deduction: ${lateDeduction} for user ${users_id} (${lateSeconds} seconds late)`)
       } else {
         console.log(`🔍 DEBUG: No late deduction for user ${users_id} - lateDeduction = ${lateDeduction}`)
       }
@@ -203,8 +232,8 @@ export async function POST(request: NextRequest) {
         
         if (userWithSalary?.personnelType?.basicSalary) {
           const basicSalary = Number(userWithSalary.personnelType.basicSalary)
-          // Create expected time from settings
-          const expectedTime = new Date()
+          // Create expected time from settings using TODAY's date
+          const expectedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate())
           const [hours, minutes] = settings.timeInEnd.split(':').map(Number)
           // Deductions start 1 minute after timeInEnd (09:31 AM instead of 09:30 AM)
           const expectedMinutes = minutes + 1
@@ -273,12 +302,13 @@ export async function POST(request: NextRequest) {
         data: { timeOut: now },
       })
       
-      // Early timeout deduction calculated real-time from attendance record
-      // No need to store separate deduction records
+      // Create early timeout deduction record if applicable
       if (earlyTimeoutDeduction > 0) {
-        console.log(`🔍 DEBUG: Real-time early timeout deduction calculated for user ${users_id}`)
+        console.log(`🔍 DEBUG: Creating early timeout deduction for user ${users_id}`)
         console.log(`🔍 DEBUG: earlyTimeoutDeduction = ${earlyTimeoutDeduction}, earlySeconds = ${earlySeconds}`)
-        console.log(`✅ Real-time early timeout deduction: ${earlyTimeoutDeduction} for user ${users_id} (${Math.floor(earlySeconds / 60)} minutes early)`)
+        const { createEarlyTimeoutDeduction } = await import('@/lib/attendance-calculations')
+        await createEarlyTimeoutDeduction(users_id, earlyTimeoutDeduction, Math.round(earlySeconds / 60), now)
+        console.log(`✅ Created early timeout deduction: ${earlyTimeoutDeduction} for user ${users_id} (${Math.floor(earlySeconds / 60)} minutes early)`)
       } else {
         console.log(`🔍 DEBUG: No early timeout deduction for user ${users_id} - earlyTimeoutDeduction = ${earlyTimeoutDeduction}`)
       }
