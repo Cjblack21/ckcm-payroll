@@ -14,7 +14,7 @@ import { formatInTimeZone } from "date-fns-tz"
 import { getCurrentDayAttendance, getPersonnelAttendance, getPersonnelHistory, type AttendanceRecord, type PersonnelAttendance } from "@/lib/actions/attendance"
 import toast from "react-hot-toast"
 
-type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "PARTIAL" | "NON_WORKING" | "PENDING"
+type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "PARTIAL" | "NON_WORKING" | "PENDING" | "ON_LEAVE"
 
 type ViewMode = "current-day" | "personnel" | "all-attendance"
 
@@ -213,8 +213,8 @@ export default function AttendancePage() {
 
   // Calculate live status based on current time and cut-off
   const getLiveStatus = (dbStatus: AttendanceStatus, timeIn: Date | string | null, timeOut: Date | string | null): AttendanceStatus => {
-    // If already marked as PRESENT, LATE, or ABSENT in DB, keep it
-    if (dbStatus === 'PRESENT' || dbStatus === 'LATE' || dbStatus === 'ABSENT' || dbStatus === 'NON_WORKING' || dbStatus === 'PARTIAL') {
+    // If already marked as PRESENT, LATE, ABSENT, ON_LEAVE in DB, keep it
+    if (dbStatus === 'PRESENT' || dbStatus === 'LATE' || dbStatus === 'ABSENT' || dbStatus === 'NON_WORKING' || dbStatus === 'PARTIAL' || dbStatus === 'ON_LEAVE') {
       return dbStatus
     }
 
@@ -241,6 +241,7 @@ export default function AttendancePage() {
       PARTIAL: "secondary",
       NON_WORKING: "outline",
       PENDING: "secondary",
+      ON_LEAVE: "outline",
     } as const
 
     const labels = {
@@ -250,6 +251,7 @@ export default function AttendancePage() {
       PARTIAL: "Partial",
       NON_WORKING: "Non-Working",
       PENDING: "Pending",
+      ON_LEAVE: "On Leave",
     }
 
     return (
