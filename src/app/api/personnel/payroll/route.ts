@@ -69,10 +69,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Cap the effective end to end-of-today to avoid future dates
-    const todayEOD = new Date();
-    todayEOD.setHours(23, 59, 59, 999)
-    const cappedEnd = periodEnd > todayEOD ? todayEOD : periodEnd
+    // Note: We no longer cap the period end to today, so personnel can see the full period countdown
+    // This allows the countdown timer to work correctly even before the period end date
 
     // Always prefer the user's latest RELEASED entry first (regardless of period)
     let currentPayroll = await prisma.payrollEntry.findFirst({
@@ -148,7 +146,7 @@ export async function GET(request: NextRequest) {
 
     // Determine effective period to display and factor calculations
     const effectiveStart = currentPayroll?.periodStart ?? periodStart
-    const effectiveEndRaw = currentPayroll?.periodEnd ?? cappedEnd
+    const effectiveEndRaw = currentPayroll?.periodEnd ?? periodEnd  // Use full periodEnd, not capped
     const effectiveEnd = new Date(effectiveEndRaw)
     effectiveEnd.setHours(23,59,59,999)
 
@@ -208,11 +206,15 @@ export async function GET(request: NextRequest) {
     // Compute real-time attendance deductions similar to admin logic
     const attendanceSettingsForCalc = await prisma.attendanceSettings.findFirst()
     const timeInEnd = attendanceSettingsForCalc?.timeInEnd || '09:30'
-    // Working days in period (exclude Sundays), use previously capped end-of-period
+    // Working days in period (exclude Sundays), use full period end
     let workingDaysInPeriod = 0
     {
       const cur = new Date(periodStart)
-      while (cur <= cappedEnd) {
+      // Cap working days calculation to today to avoid counting future dates
+      const todayEOD = new Date()
+      todayEOD.setHours(23, 59, 59, 999)
+      const calcEnd = periodEnd > todayEOD ? todayEOD : periodEnd
+      while (cur <= calcEnd) {
         if (cur.getDay() !== 0) workingDaysInPeriod++
         cur.setDate(cur.getDate() + 1)
       }

@@ -140,24 +140,33 @@ export default function PersonnelPayrollPage() {
 
   // Timer to update countdown every second
   useEffect(() => {
-    if (!data?.periodInfo?.current?.end || !data?.periodInfo?.current?.releaseTime || canRelease) {
+    if (!data?.periodInfo?.current?.end || !data?.periodInfo?.current?.releaseTime) {
       setTimeUntilRelease('')
       return
     }
 
     const updateCountdown = () => {
-      const periodEnd = new Date(data.periodInfo.current.end)
+      const now = new Date()
       const releaseTime = data.periodInfo.current.releaseTime || '17:00'
       const [hours, minutes] = releaseTime.split(':').map(Number)
-      periodEnd.setHours(hours, minutes, 0, 0)
       
-      const now = new Date()
-      const diff = periodEnd.getTime() - now.getTime()
+      // Create release date time using period end date
+      const releaseDateTime = new Date(data.periodInfo.current.end)
+      releaseDateTime.setHours(hours, minutes, 0, 0)
+      
+      const diff = releaseDateTime.getTime() - now.getTime()
       
       if (diff <= 0) {
         setTimeUntilRelease('Release available now!')
-        setCanRelease(true)
+        if (!canRelease) {
+          setCanRelease(true)
+        }
         return
+      }
+      
+      // If counting down, ensure canRelease is false
+      if (canRelease) {
+        setCanRelease(false)
       }
       
       const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -274,21 +283,21 @@ export default function PersonnelPayrollPage() {
         </div>
       </div>
 
-      {/* Release Countdown Timer */}
-      {!canRelease && currentPayroll?.status !== 'RELEASED' && timeUntilRelease && (
-        <Card className="border-2 border-yellow-500 bg-yellow-50">
+      {/* Release Countdown Timer - Only show if payroll exists (was generated) */}
+      {!canRelease && currentPayroll && currentPayroll.status !== 'RELEASED' && timeUntilRelease && (
+        <Card className="border-2 border-yellow-500 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-yellow-800 mb-1">Payroll Release Countdown</p>
-                <p className="text-xs text-yellow-600">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400 mb-1">Payroll Release Countdown</p>
+                <p className="text-xs text-yellow-600 dark:text-yellow-500">
                   Release available on {formatDate(periodInfo.current.end)}
                   {periodInfo.current.releaseTime && ` at ${periodInfo.current.releaseTime}`}
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-yellow-700 mb-1">Release in:</p>
-                <div className="text-4xl font-bold font-mono text-yellow-900 tracking-wider">
+                <p className="text-xs text-yellow-700 dark:text-yellow-500 mb-1">Release in:</p>
+                <div className="text-4xl font-bold font-mono text-yellow-900 dark:text-yellow-400 tracking-wider">
                   {timeUntilRelease}
                 </div>
               </div>
@@ -297,15 +306,15 @@ export default function PersonnelPayrollPage() {
         </Card>
       )}
 
-      {/* Release Ready Banner */}
-      {canRelease && currentPayroll?.status !== 'RELEASED' && (
-        <Card className="border-2 border-green-500 bg-green-50">
+      {/* Release Ready Banner - Only show if payroll exists (was generated) */}
+      {canRelease && currentPayroll && currentPayroll.status !== 'RELEASED' && (
+        <Card className="border-2 border-orange-500 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30">
           <CardContent className="p-6">
             <div className="flex items-center justify-center gap-3">
               <div className="text-4xl">✓</div>
               <div>
-                <p className="text-lg font-bold text-green-800">Payroll Release Available!</p>
-                <p className="text-sm text-green-600">Your payroll will be released soon</p>
+                <p className="text-lg font-bold text-orange-800 dark:text-orange-400">Payroll Release Available!</p>
+                <p className="text-sm text-orange-600 dark:text-orange-500">Your payroll will be released soon</p>
               </div>
             </div>
           </CardContent>
