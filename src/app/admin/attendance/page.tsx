@@ -546,7 +546,7 @@ export default function AttendancePage() {
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const liveStatus = getLiveStatus(record.status, record.timeIn, record.timeOut)
+                        const liveStatus = getLiveStatus(record.status as AttendanceStatus, record.timeIn, record.timeOut)
                         const isLive = liveStatus !== record.status
                         return getStatusBadge(liveStatus, isLive)
                       })()}
