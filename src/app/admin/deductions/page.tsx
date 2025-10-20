@@ -120,15 +120,19 @@ export default function DeductionsPage() {
   async function createType() {
     try {
       const res = await fetch("/api/admin/deduction-types", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newTypeName, description: newTypeDesc, amount: Number(newTypeAmount) }) })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || errorData.details || 'Failed to create type')
+      }
       toast.success("Deduction type created")
       setTypeOpen(false)
       setNewTypeName("")
       setNewTypeDesc("")
       setNewTypeAmount("")
       loadAll()
-    } catch {
-      toast.error("Failed to create type")
+    } catch (error) {
+      console.error('Error creating deduction type:', error)
+      toast.error(error instanceof Error ? error.message : "Failed to create type")
     }
   }
 
