@@ -48,6 +48,12 @@ import {
   UserX,
   RefreshCw
 } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { toast } from 'react-hot-toast'
 
 interface User {
@@ -62,6 +68,12 @@ interface User {
   personnelType?: {
     name: string
     basicSalary: number
+  } | null
+  currentLeave?: {
+    startDate: string
+    endDate: string
+    type: string
+    isPaid: boolean
   } | null
 }
 
@@ -296,10 +308,6 @@ export function UserManagement() {
     <div className="space-y-6">
       {/* Header Section */}
       <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-        <div>
-          <h1 className="text-2xl font-bold">User Management</h1>
-          <p className="text-muted-foreground">Manage system users and their permissions</p>
-        </div>
         <div className="flex items-center space-x-2">
           <Button onClick={fetchUsers} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -370,7 +378,7 @@ export function UserManagement() {
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="create-personnel-type">Personnel Type</Label>
+                  <Label htmlFor="create-personnel-type">Position</Label>
                   <Select
                     value={formData.personnel_types_id || 'none'}
                     onValueChange={(value) => 
@@ -378,10 +386,10 @@ export function UserManagement() {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select personnel type" />
+                      <SelectValue placeholder="Select position" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No personnel type</SelectItem>
+                      <SelectItem value="none">No position</SelectItem>
                       {personnelTypes.map((type) => (
                         <SelectItem key={type.personnel_types_id} value={type.personnel_types_id}>
                           {type.name}
@@ -463,7 +471,7 @@ export function UserManagement() {
                   <TableHead>User ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Personnel Type</TableHead>
+                  <TableHead>Position</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -499,9 +507,29 @@ export function UserManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.isActive ? 'default' : 'destructive'}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={user.isActive ? 'default' : 'destructive'}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                        {user.currentLeave && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 cursor-help">
+                                  🏖️ On Leave
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="text-xs">
+                                  <p className="font-semibold">{user.currentLeave.type}</p>
+                                  <p>{new Date(user.currentLeave.startDate).toLocaleDateString()} - {new Date(user.currentLeave.endDate).toLocaleDateString()}</p>
+                                  <p className="text-muted-foreground">{user.currentLeave.isPaid ? 'Paid' : 'Unpaid'}</p>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {new Date(user.createdAt).toLocaleDateString()}
@@ -604,7 +632,7 @@ export function UserManagement() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="edit-personnel-type">Personnel Type</Label>
+              <Label htmlFor="edit-personnel-type">Position</Label>
               <Select
                 value={formData.personnel_types_id || 'none'}
                 onValueChange={(value) => 
@@ -612,10 +640,10 @@ export function UserManagement() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select personnel type" />
+                  <SelectValue placeholder="Select position" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No personnel type</SelectItem>
+                  <SelectItem value="none">No position</SelectItem>
                   {personnelTypes.map((type) => (
                     <SelectItem key={type.personnel_types_id} value={type.personnel_types_id}>
                       {type.name}

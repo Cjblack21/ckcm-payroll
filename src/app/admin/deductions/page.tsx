@@ -346,8 +346,8 @@ export default function DeductionsPage() {
                             return (
                               <CommandItem key={e.employees_id} disabled={selectAll} onSelect={() => toggleEmployee(e.employees_id)}>
                                 <div className={`flex w-full items-center justify-between ${selectAll ? 'opacity-50' : ''}`}>
-                                  <span>{e.firstName} {e.lastName} — {e.email}</span>
-                                  <span className={`text-xs ${sel ? 'text-green-600' : 'text-muted-foreground'}`}>{sel ? 'Selected' : 'Click to select'}</span>
+                                  <span className="text-foreground">{e.firstName} {e.lastName} — {e.email}</span>
+                                  <span className={`text-xs font-medium ${sel ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>{sel ? 'Selected' : 'Click to select'}</span>
                                 </div>
                               </CommandItem>
                             )
@@ -407,8 +407,8 @@ export default function DeductionsPage() {
                                       updateEntry(row.key, { employeeIds: next })
                                     }}>
                                       <div className={`flex w-full items-center justify-between ${row.selectAll ? 'opacity-50' : ''}`}>
-                                        <span>{e.firstName} {e.lastName} — {e.email}</span>
-                                        <span className={`text-xs ${sel ? 'text-green-600' : 'text-muted-foreground'}`}>{sel ? 'Selected' : 'Click to select'}</span>
+                                        <span className="text-foreground">{e.firstName} {e.lastName} — {e.email}</span>
+                                        <span className={`text-xs font-medium ${sel ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>{sel ? 'Selected' : 'Click to select'}</span>
                                       </div>
                                     </CommandItem>
                                   )

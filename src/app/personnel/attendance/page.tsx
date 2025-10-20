@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
   Calendar, 
   Clock, 
@@ -85,17 +87,32 @@ export default function PersonnelAttendance() {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PRESENT':
-        return 'bg-green-100 text-green-800'
-      case 'ABSENT':
-        return 'bg-red-100 text-red-800'
-      case 'LATE':
-        return 'bg-yellow-100 text-yellow-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+  const getStatusBadge = (status: string) => {
+    const variants = {
+      PRESENT: "default" as const,
+      ABSENT: "destructive" as const,
+      LATE: "secondary" as const,
+      PARTIAL: "secondary" as const,
+      NON_WORKING: "outline" as const,
+      PENDING: "secondary" as const,
+      ON_LEAVE: "outline" as const,
     }
+
+    const labels = {
+      PRESENT: "Present",
+      ABSENT: "Absent",
+      LATE: "Late",
+      PARTIAL: "Partial",
+      NON_WORKING: "Non-Working",
+      PENDING: "Pending",
+      ON_LEAVE: "On Leave",
+    }
+
+    return (
+      <Badge variant={variants[status as keyof typeof variants] || "outline"}>
+        {labels[status as keyof typeof labels] || status}
+      </Badge>
+    )
   }
 
   const formatDate = (dateString: string) => {
@@ -107,12 +124,22 @@ export default function PersonnelAttendance() {
   }
 
   const formatTime = (timeString: string | null) => {
-    if (!timeString) return '--:--'
-    return new Date(timeString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
+    if (!timeString) return '—'
+    const date = new Date(timeString)
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit',
       hour12: true
     })
+  }
+
+  const formatWorkHours = (hours: string) => {
+    const numHours = parseFloat(hours) || 0
+    return `${numHours.toFixed(2)} hrs`
+  }
+
+  const formatCurrency = (amount: number) => {
+    return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
   }
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -264,52 +291,46 @@ export default function PersonnelAttendance() {
           <CardTitle>Attendance Records</CardTitle>
         </CardHeader>
         <CardContent>
-          {data.records.length > 0 ? (
-            <div className="space-y-4">
-              {data.records.map((record) => (
-                <div
-                  key={record.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex items-center gap-4">
-                    {getStatusIcon(record.status)}
-                    <div>
-                      <div className="font-medium">{formatDate(record.date)}</div>
-                      <div className="text-sm text-muted-foreground">{record.dayOfWeek}</div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-6">
-                    <div className="text-center">
-                      <div className="text-sm text-muted-foreground">Time In</div>
-                      <div className="font-medium">{formatTime(record.timeIn)}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-sm text-muted-foreground">Time Out</div>
-                      <div className="font-medium">{formatTime(record.timeOut)}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-sm text-muted-foreground">Hours</div>
-                      <div className="font-medium">{record.hours}h</div>
-                    </div>
-                    <div>
-                      <Badge className={getStatusColor(record.status)}>
-                        {record.status}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium">No attendance records</h3>
-              <p className="text-muted-foreground">
-                No attendance records found for {getMonthName(currentMonth)} {currentYear}
-              </p>
-            </div>
-          )}
+          <div className="w-full overflow-x-auto">
+            <Table className="w-full text-sm">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[120px]">Date</TableHead>
+                  <TableHead className="w-[100px]">Day</TableHead>
+                  <TableHead className="w-[100px]">Time In</TableHead>
+                  <TableHead className="w-[100px]">Time Out</TableHead>
+                  <TableHead className="w-[110px]">Status</TableHead>
+                  <TableHead className="w-[100px]">Work Hrs</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.records.length > 0 ? (
+                  data.records.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell className="font-medium">{formatDate(record.date)}</TableCell>
+                      <TableCell className="text-muted-foreground">{record.dayOfWeek}</TableCell>
+                      <TableCell>{formatTime(record.timeIn)}</TableCell>
+                      <TableCell>{formatTime(record.timeOut)}</TableCell>
+                      <TableCell>{getStatusBadge(record.status)}</TableCell>
+                      <TableCell>{formatWorkHours(record.hours)}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Calendar className="h-12 w-12 text-muted-foreground" />
+                        <h3 className="text-lg font-medium">No attendance records</h3>
+                        <p className="text-muted-foreground">
+                          No attendance records found for {getMonthName(currentMonth)} {currentYear}
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

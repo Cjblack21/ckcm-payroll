@@ -5,9 +5,11 @@
 
 /**
  * Calculate per-second salary based on personnel type and current period
+ * NOTE: basicSalary should be the SEMI-MONTHLY salary (monthly / 2)
  */
 export function calculatePerSecondSalarySync(basicSalary: number, workingDaysInPeriod?: number): number {
   const workingDays = workingDaysInPeriod || 22 // Default to 22 if no period set
+  // basicSalary is expected to be semi-monthly already (divided by 2)
   const perSecondRate = basicSalary / workingDays / 8 / 60 / 60
   
   console.log(`🔍 PER-SECOND RATE DEBUG - Basic Salary: ${basicSalary}`)
@@ -19,9 +21,11 @@ export function calculatePerSecondSalarySync(basicSalary: number, workingDaysInP
 
 /**
  * Calculate daily earnings based on current period
+ * NOTE: basicSalary should be the SEMI-MONTHLY salary (monthly / 2)
  */
 export function calculateDailyEarningsSync(basicSalary: number, workingDaysInPeriod?: number): number {
   const workingDays = workingDaysInPeriod || 22 // Default to 22 if no period set
+  // basicSalary is expected to be semi-monthly already (divided by 2)
   return basicSalary / workingDays
 }
 
@@ -55,9 +59,10 @@ export function calculateLateDeductionSync(basicSalary: number, timeIn: Date, ex
 
 /**
  * Calculate absence deduction with period-aware calculation
+ * NOTE: basicSalary should be the SEMI-MONTHLY salary (monthly / 2)
  */
 export function calculateAbsenceDeductionSync(basicSalary: number, workingDaysInPeriod?: number): number {
-  // Absence deduction = full daily earnings
+  // Absence deduction = full daily earnings (based on semi-monthly salary)
   return calculateDailyEarningsSync(basicSalary, workingDaysInPeriod)
 }
 

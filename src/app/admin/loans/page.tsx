@@ -52,6 +52,7 @@ export default function LoansPage() {
   const [users, setUsers] = useState<UserOption[]>([])
   const [form, setForm] = useState({ users_id: "", amount: "", purpose: "", monthlyPaymentPercent: "", termMonths: "" })
   const [saving, setSaving] = useState(false)
+  const [userSearch, setUserSearch] = useState("")
   const [selectedLoan, setSelectedLoan] = useState<LoanItem | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -264,6 +265,9 @@ export default function LoansPage() {
             setOpen(newOpen)
             if (newOpen) {
               loadUsers()
+              setUserSearch("")
+            } else {
+              setUserSearch("")
             }
           }}>
             <DialogTrigger asChild>
@@ -285,18 +289,51 @@ export default function LoansPage() {
                   <User className="h-4 w-4" />
                   Personnel
                 </label>
-                <Select value={form.users_id} onValueChange={(value) => setForm(f => ({ ...f, users_id: value }))}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select personnel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map(u => (
-                      <SelectItem key={u.users_id} value={u.users_id}>
-                        {u.name || u.email} ({u.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search employee by name or email..." 
+                      value={userSearch} 
+                      onChange={(e) => setUserSearch(e.target.value)} 
+                      className="w-full pl-10" 
+                    />
+                  </div>
+                  <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                    {users
+                      .filter(u => {
+                        const q = userSearch.toLowerCase()
+                        return (u.name || '').toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+                      })
+                      .map(u => (
+                        <div
+                          key={u.users_id}
+                          onClick={() => setForm(f => ({ ...f, users_id: u.users_id }))}
+                          className={`p-3 cursor-pointer hover:bg-accent transition-colors border-b last:border-b-0 ${
+                            form.users_id === u.users_id ? 'bg-blue-50 dark:bg-blue-950' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-foreground">{u.name || u.email}</p>
+                              <p className="text-sm text-muted-foreground">{u.email}</p>
+                            </div>
+                            {form.users_id === u.users_id && (
+                              <CheckCircle className="h-5 w-5 text-blue-600" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    {users.filter(u => {
+                      const q = userSearch.toLowerCase()
+                      return (u.name || '').toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+                    }).length === 0 && (
+                      <div className="text-sm text-muted-foreground text-center py-6">
+                        No employees found
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

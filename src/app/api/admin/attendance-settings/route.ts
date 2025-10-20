@@ -204,7 +204,6 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
 
     // Create attendance records for each personnel and working day
     const recordsToCreate = []
-    const absenceDeductions = []
     
     for (const person of activePersonnel) {
       for (const workingDay of workingDays) {
@@ -228,17 +227,8 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
           status: status as const
         })
         
-        // If marked as ABSENT, also create deduction
-        if (status === 'ABSENT' && person.personnelType?.basicSalary) {
-          const { calculateAbsenceDeduction } = await import('@/lib/attendance-calculations')
-          const deductionAmount = await calculateAbsenceDeduction(person.personnelType.basicSalary)
-          
-          absenceDeductions.push({
-            users_id: person.users_id,
-            deductionAmount,
-            date: workingDay
-          })
-        }
+        // Note: Absence deductions are now calculated in real-time by the payroll system
+        // No need to create deduction records here
       }
     }
 
@@ -249,41 +239,7 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
     })
 
     console.log(`Successfully created ${recordsToCreate.length} attendance records`)
-    
-    // Create absence deductions for users marked as ABSENT
-    if (absenceDeductions.length > 0) {
-      // Get or create "Absence" deduction type
-      let absenceDeductionType = await prisma.deductionType.findFirst({
-        where: { name: 'Absence' }
-      })
-      
-      if (!absenceDeductionType) {
-        absenceDeductionType = await prisma.deductionType.create({
-          data: {
-            name: 'Absence',
-            description: 'Automatic deduction for absence (no time in)',
-            amount: 0,
-            isActive: true
-          }
-        })
-      }
-      
-      // Create deduction records
-      const deductionsToCreate = absenceDeductions.map(deduction => ({
-        users_id: deduction.users_id,
-        deduction_types_id: absenceDeductionType.deduction_types_id,
-        amount: deduction.deductionAmount,
-        appliedAt: deduction.date,
-        notes: `Absence: No time in/out by cut-off time (₱${deduction.deductionAmount.toFixed(2)} deduction - full daily salary)`
-      }))
-      
-      await prisma.deduction.createMany({
-        data: deductionsToCreate,
-        skipDuplicates: true
-      })
-      
-      console.log(`✅ Created ${absenceDeductions.length} absence deductions`)
-    }
+    console.log(`Note: Absence deductions will be calculated in real-time by the payroll system`)
   } catch (error) {
     console.error('Error creating attendance records for period:', error)
     // Don't throw error here to avoid breaking the settings update

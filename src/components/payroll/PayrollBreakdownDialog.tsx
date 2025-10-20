@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Clock, TrendingDown, TrendingUp, Calendar, AlertCircle, DollarSign } from 'lucide-react'
+import { Clock, TrendingDown, TrendingUp, Calendar, AlertCircle } from 'lucide-react'
 import { formatDateForDisplay } from '@/lib/timezone'
 import { Progress } from '@/components/ui/progress'
 
@@ -33,6 +33,7 @@ type DeductionDetail = {
 
 type PayrollBreakdown = {
   basicSalary: number
+  monthlyBasicSalary?: number // Add optional monthly reference
   attendanceDeductions: number
   leaveDeductions: number
   loanDeductions: number
@@ -131,18 +132,29 @@ export default function PayrollBreakdownDialog({
       color: 'bg-yellow-500',
       description: 'Active Loan Payments'
     },
-    // Add individual other deductions as separate items
-    ...entry.breakdown.otherDeductionDetails.map((deduction) => ({
-      label: deduction.type,
-      amount: deduction.amount,
-      percentage: totalDeductions > 0 ? (deduction.amount / totalDeductions) * 100 : 0,
-      color: deduction.type.toLowerCase().includes('sss') ? 'bg-blue-500' :
-             deduction.type.toLowerCase().includes('philhealth') ? 'bg-green-500' :
-             deduction.type.toLowerCase().includes('pagibig') || deduction.type.toLowerCase().includes('pag-ibig') ? 'bg-teal-500' :
-             deduction.type.toLowerCase().includes('tax') ? 'bg-purple-500' :
-             'bg-gray-500',
-      description: deduction.description
-    }))
+    // Add individual other deductions as separate items (non-attendance only)
+    ...entry.breakdown.otherDeductionDetails
+      .filter((deduction) => {
+        // Exclude attendance-related deductions (already in attendanceDeductions)
+        const type = deduction.type.toLowerCase()
+        return !type.includes('late') && 
+               !type.includes('absent') && 
+               !type.includes('absence') &&
+               !type.includes('early') &&
+               !type.includes('tardiness') &&
+               !type.includes('partial')
+      })
+      .map((deduction) => ({
+        label: deduction.type,
+        amount: deduction.amount,
+        percentage: totalDeductions > 0 ? (deduction.amount / totalDeductions) * 100 : 0,
+        color: deduction.type.toLowerCase().includes('sss') ? 'bg-blue-500' :
+               deduction.type.toLowerCase().includes('philhealth') ? 'bg-green-500' :
+               deduction.type.toLowerCase().includes('pagibig') || deduction.type.toLowerCase().includes('pag-ibig') ? 'bg-teal-500' :
+               deduction.type.toLowerCase().includes('tax') ? 'bg-purple-500' :
+               'bg-gray-500',
+        description: deduction.description
+      }))
   ].filter(item => item.amount > 0)
 
   // Calculate net pay percentage
@@ -186,17 +198,41 @@ export default function PayrollBreakdownDialog({
         </div>
 
         <div className="px-6 py-6 space-y-6">
+          {/* Monthly Reference Card */}
+          {entry.breakdown.monthlyBasicSalary && (
+            <Card className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Monthly Basic Salary (Reference)</p>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+                      {formatCurrency(entry.breakdown.monthlyBasicSalary)}
+                    </p>
+                  </div>
+                  <div className="text-center border-l border-blue-300 dark:border-blue-700 pl-4">
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">Period Salary</p>
+                    <p className="text-lg font-semibold text-blue-800 dark:text-blue-300">
+                      {formatCurrency(entry.breakdown.basicSalary)}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">(÷ 2 for semi-monthly)</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Summary Cards - Larger Design */}
           <div className="grid grid-cols-4 gap-6">
             <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-muted-foreground">Basic Salary</p>
+                  <p className="text-sm font-medium text-muted-foreground">Period Salary</p>
                   <TrendingUp className="h-5 w-5 text-green-500" />
                 </div>
                 <p className="text-3xl font-bold">
                   {formatCurrency(entry.breakdown.basicSalary)}
                 </p>
+                <p className="text-xs text-muted-foreground mt-2">Semi-monthly calculation</p>
               </CardContent>
             </Card>
 
@@ -275,14 +311,20 @@ export default function PayrollBreakdownDialog({
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
+                  <span className="flex items-center justify-center w-5 h-5 text-lg font-bold">₱</span>
                   Salary Calculation
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                  {entry.breakdown.monthlyBasicSalary && (
+                    <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                      <span className="text-sm text-muted-foreground">Monthly Basic Salary</span>
+                      <span className="font-semibold">{formatCurrency(entry.breakdown.monthlyBasicSalary)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
-                    <span className="font-medium">Basic Salary</span>
+                    <span className="font-medium">Period Salary (Semi-Monthly)</span>
                     <span className="text-lg font-bold">{formatCurrency(entry.breakdown.basicSalary)}</span>
                   </div>
                   

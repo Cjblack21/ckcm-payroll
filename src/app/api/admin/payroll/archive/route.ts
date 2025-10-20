@@ -73,10 +73,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get archived payrolls grouped by period
+    // Get archived payrolls grouped by period (include both RELEASED and ARCHIVED)
     const archivedPayrolls = await prisma.payrollEntry.findMany({
       where: {
-        status: 'ARCHIVED'
+        status: {
+          in: ['RELEASED', 'ARCHIVED']
+        }
       },
       include: {
         user: {

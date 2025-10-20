@@ -72,65 +72,38 @@ export async function GET(request: NextRequest) {
     // Note: We no longer cap the period end to today, so personnel can see the full period countdown
     // This allows the countdown timer to work correctly even before the period end date
 
-    // Always prefer the user's latest RELEASED entry first (regardless of period)
+    // SIMPLIFIED: Just get the latest RELEASED payroll for this user, period!
+    console.log(`Searching for RELEASED payroll for user: ${userId}`)
+    
     let currentPayroll = await prisma.payrollEntry.findFirst({
-      where: { users_id: userId, status: 'RELEASED' },
+      where: { 
+        users_id: userId, 
+        status: 'RELEASED' 
+      },
       orderBy: { releasedAt: 'desc' },
       include: {
         user: { select: { name: true, email: true, personnelType: { select: { name: true, basicSalary: true } } } }
       }
     })
+    
+    console.log(`Found RELEASED payroll by userId:`, currentPayroll ? 'YES' : 'NO')
+    
+    // Fallback: Try by email if userId didn't work
     if (!currentPayroll && session.user.email) {
+      console.log(`Trying email fallback: ${session.user.email}`)
       currentPayroll = await prisma.payrollEntry.findFirst({
-        where: { status: 'RELEASED', user: { is: { email: session.user.email } } },
-        orderBy: { releasedAt: 'desc' },
-        include: {
-          user: { select: { name: true, email: true, personnelType: { select: { name: true, basicSalary: true } } } }
-        }
-      })
-    }
-
-    // If none, try RELEASED overlapping the settings window
-    if (!currentPayroll) currentPayroll = await prisma.payrollEntry.findFirst({
-      where: {
-        users_id: userId,
-        status: 'RELEASED',
-        AND: [
-          { periodStart: { lte: periodEnd } },
-          { periodEnd: { gte: periodStart } },
-        ],
-      },
-      orderBy: { releasedAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-            personnelType: {
-              select: {
-                name: true,
-                basicSalary: true
-              }
-            }
-          }
-        }
-      }
-    })
-
-    // Remove non-released fallbacks: personnel should only see RELEASED payroll
-    // Keep only RELEASED search by userId and by email relation as fallback
-    if (!currentPayroll && session.user.email) {
-      currentPayroll = await prisma.payrollEntry.findFirst({
-        where: {
-          status: 'RELEASED',
-          AND: [ { periodStart: { lte: periodEnd } }, { periodEnd: { gte: periodStart } } ],
-          user: { is: { email: session.user.email } },
+        where: { 
+          status: 'RELEASED', 
+          user: { 
+            email: session.user.email 
+          } 
         },
         orderBy: { releasedAt: 'desc' },
         include: {
           user: { select: { name: true, email: true, personnelType: { select: { name: true, basicSalary: true } } } }
         }
       })
+      console.log(`Found RELEASED payroll by email:`, currentPayroll ? 'YES' : 'NO')
     }
     
     console.log('Current payroll found:', currentPayroll ? 'Yes' : 'No')

@@ -290,6 +290,10 @@ export async function getCurrentDayAttendance(): Promise<{
       }
     })
 
+    // Get attendance settings FIRST (needed for period check)
+    const attendanceSettings = await prisma.attendanceSettings.findFirst()
+    const timeInEnd = attendanceSettings?.timeInEnd || '09:00'
+    
     // Get attendance records for today
     const todayAttendance = await prisma.attendance.findMany({
       where: {
@@ -315,6 +319,18 @@ export async function getCurrentDayAttendance(): Promise<{
       }
     })
     
+    // IMPORTANT: Check if system was just reset (no attendance records at all in the period)
+    const totalAttendanceInPeriod = await prisma.attendance.count({
+      where: attendanceSettings?.periodStart && attendanceSettings?.periodEnd ? {
+        date: {
+          gte: new Date(attendanceSettings.periodStart),
+          lte: new Date(attendanceSettings.periodEnd)
+        }
+      } : {}
+    })
+    const isSystemJustReset = totalAttendanceInPeriod === 0
+    console.log(`🔍 System Status - Total attendance records in period: ${totalAttendanceInPeriod}, Fresh reset: ${isSystemJustReset}`)
+    
     console.log(`🔍 Current Day Debug - Found ${todayAttendance.length} existing records for ${today.toISOString().split('T')[0]}`)
     
     // Debug: Show actual dates of found records
@@ -322,10 +338,6 @@ export async function getCurrentDayAttendance(): Promise<{
       const recordDates = todayAttendance.map(r => r.date.toISOString().split('T')[0])
       console.log(`🔍 Current Day Debug - Actual record dates: ${recordDates.join(', ')}`)
     }
-
-    // Get attendance settings for deduction calculations
-    const attendanceSettings = await prisma.attendanceSettings.findFirst()
-    const timeInEnd = attendanceSettings?.timeInEnd || '09:00'
 
     // Calculate working days in current period
     let workingDaysInPeriod = 22 // Default fallback
@@ -413,22 +425,22 @@ export async function getCurrentDayAttendance(): Promise<{
             status = 'ABSENT'
             console.log(`🚨 NO TIME-IN DEBUG - Past date with no time-in = ABSENT`)
           } else if (attendanceDate.getTime() === todayDate.getTime()) {
-            // Current date - check if we're past the time-out end
+            // Current date - check if we're past the TIME OUT END (final cutoff)
             const currentTime = getPhilippinesTimeString(currentPhilTime)
             const timeOutEnd = attendanceSettings?.timeOutEnd || '19:00' // Default 7:00 PM
             
             console.log(`🚨 NO TIME-IN DEBUG - Current Time: ${currentTime}`)
-            console.log(`🚨 NO TIME-IN DEBUG - TimeOut End: ${timeOutEnd}`)
-            console.log(`🚨 NO TIME-IN DEBUG - Past TimeOut End: ${currentTime > timeOutEnd}`)
+            console.log(`🚨 NO TIME-IN DEBUG - Time Out End (Cutoff): ${timeOutEnd}`)
+            console.log(`🚨 NO TIME-IN DEBUG - Past Cutoff: ${currentTime > timeOutEnd}`)
             
             if (currentTime > timeOutEnd) {
-              // Past time-out end (7:00 PM) with no time-in - mark as ABSENT
+              // Past cutoff time with no time-in - mark as ABSENT
               status = 'ABSENT'
-              console.log(`🚨 NO TIME-IN DEBUG - Past 7:00 PM with no time-in = ABSENT`)
+              console.log(`🚨 NO TIME-IN DEBUG - Past cutoff (${timeOutEnd}) with no time-in = ABSENT`)
             } else {
-              // Still within workday - remain PENDING (user can still time in)
+              // Still before cutoff - remain PENDING (user can still time in)
               status = 'PENDING'
-              console.log(`🚨 NO TIME-IN DEBUG - Before 7:00 PM, no time-in = PENDING (awaiting time-in)`)
+              console.log(`🚨 NO TIME-IN DEBUG - Before cutoff (${timeOutEnd}), no time-in = PENDING (can still time in)`)
             }
           } else {
             // Future date - should be PENDING
@@ -452,7 +464,11 @@ export async function getCurrentDayAttendance(): Promise<{
         }
 
         // Calculate deductions based on RECALCULATED status
-        if (status === 'LATE' && attendanceRecord.timeIn) {
+        // IMPORTANT: If system was just reset, don't charge any deductions
+        if (isSystemJustReset) {
+          deductions = 0
+          console.log(`⚠️ Current Day Debug - User: ${user.name}, System just reset - NO deductions`)
+        } else if (status === 'LATE' && attendanceRecord.timeIn) {
           const timeIn = new Date(attendanceRecord.timeIn)
           const expectedTimeIn = new Date(attendanceRecord.date)
           const [hours, minutes] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
@@ -475,7 +491,7 @@ export async function getCurrentDayAttendance(): Promise<{
           // Use period-based working days for per-second rate calculation
           deductions = calculateLateDeductionSync(monthlySalary, timeIn, expectedTimeIn, workingDaysInPeriod)
           console.log(`🔍 Current Day Debug - User: ${user.name}, Status: LATE, Deduction: ${deductions}`)
-        } else if (status === 'ABSENT') {
+        } else if (status === 'ABSENT' && !isSystemJustReset) {
           deductions = calculateAbsenceDeductionSync(monthlySalary, workingDaysInPeriod)
           console.log(`🔍 Current Day Debug - User: ${user.name}, Status: ABSENT, Deduction: ${deductions}`)
         } else if (status === 'PARTIAL') {
@@ -486,30 +502,35 @@ export async function getCurrentDayAttendance(): Promise<{
           console.log(`🔍 Current Day Debug - User: ${user.name}, Status: PENDING, Deduction: ${deductions}`)
         }
       } else {
-        // No attendance record at all - check current time vs time-in window  
+        // No attendance record at all - check current time vs cutoff time
         const now = getNowInPhilippines()
         // Use timezone library to extract proper Philippines time
         const currentTime = getPhilippinesTimeString(now)
         
-        // Get time-in window settings
-        const timeInStart = attendanceSettings?.timeInStart || '08:00'
-        const timeInEnd = attendanceSettings?.timeInEnd || '09:30'
+        // IMPORTANT: Use TIME OUT END as the cutoff for marking absent
+        // This is the final deadline - if no time-in by this time = ABSENT
+        const timeOutEnd = attendanceSettings?.timeOutEnd || '19:00' // Default 7:00 PM
         
         console.log(`🚨 NO RECORD DEBUG - User: ${user.name}`)
         console.log(`🚨 NO RECORD DEBUG - Current Time: ${currentTime}`)
-        console.log(`🚨 NO RECORD DEBUG - TimeIn Window: ${timeInStart} - ${timeInEnd}`)
-        console.log(`🚨 NO RECORD DEBUG - Within TimeIn Window: ${currentTime >= timeInStart && currentTime <= timeInEnd}`)
+        console.log(`🚨 NO RECORD DEBUG - Time Out End (Cutoff): ${timeOutEnd}`)
+        console.log(`🚨 NO RECORD DEBUG - Past Cutoff: ${currentTime > timeOutEnd}`)
         
-        if (currentTime >= timeInStart && currentTime <= timeInEnd) {
-          // Still within time-in window - mark as PENDING (user can still time in without penalty)
+        if (currentTime <= timeOutEnd) {
+          // Still before cutoff time - mark as PENDING (user can still time in)
           status = 'PENDING'
           deductions = 0
-          console.log(`🚨 NO RECORD DEBUG - SETTING STATUS: PENDING (can still time in)`)
+          console.log(`🚨 NO RECORD DEBUG - SETTING STATUS: PENDING (before cutoff, can still time in)`)
+        } else if (isSystemJustReset) {
+          // System was just reset - don't charge deductions yet
+          status = 'ABSENT'
+          deductions = 0
+          console.log(`⚠️ NO RECORD DEBUG - SETTING STATUS: ABSENT, but system just reset - NO deduction`)
         } else {
-          // Past time-in window OR before time-in starts - mark as ABSENT
+          // Past cutoff time (Time Out End) - mark as ABSENT with deduction
           status = 'ABSENT'
           deductions = calculateAbsenceDeductionSync(monthlySalary, workingDaysInPeriod)
-          console.log(`🚨 NO RECORD DEBUG - SETTING STATUS: ABSENT (missed time-in window)`)
+          console.log(`🚨 NO RECORD DEBUG - SETTING STATUS: ABSENT (past cutoff time ${timeOutEnd})`)
         }
       }
 
@@ -625,7 +646,7 @@ export async function getPersonnelAttendance(): Promise<{
     const startOfCurrentMonth = startOfMonth(now)
     const endOfCurrentMonth = endOfMonth(now)
 
-    // Get all personnel users with their attendance data for cumulative calculation
+    // Get all personnel users with their attendance data for current month up to today
     const users = await prisma.user.findMany({
       where: { isActive: true, role: 'PERSONNEL' },
       include: {
@@ -638,11 +659,12 @@ export async function getPersonnelAttendance(): Promise<{
         attendances: {
           where: {
             date: {
-              lte: new Date() // Get all attendance records up to today for cumulative calculation
+              gte: startOfCurrentMonth,
+              lte: new Date() // Only up to today to match Attendance History
             }
           },
           orderBy: {
-            date: 'asc' // Order by date for proper cumulative calculation
+            date: 'asc'
           }
         }
       }
@@ -712,15 +734,11 @@ export async function getPersonnelAttendance(): Promise<{
         }
       }
 
-      // Filter attendance records to current period only
-      const periodAttendances = attendanceSettings?.periodStart && attendanceSettings?.periodEnd 
-        ? user.attendances.filter(attendance => {
-            const attendanceDate = new Date(attendance.date)
-            const periodStart = new Date(attendanceSettings.periodStart!)
-            const periodEnd = new Date(attendanceSettings.periodEnd!)
-            return attendanceDate >= periodStart && attendanceDate <= periodEnd
-          })
-        : user.attendances // Fallback to all records if no period set
+      // Filter attendance records - use same logic as Attendance History (current month up to today)
+      const periodAttendances = user.attendances.filter(attendance => {
+        const attendanceDate = new Date(attendance.date)
+        return attendanceDate >= startOfCurrentMonth && attendanceDate <= today
+      })
 
       // Process attendance records with same logic as getPersonnelHistory
       periodAttendances.forEach(attendance => {
@@ -735,8 +753,8 @@ export async function getPersonnelAttendance(): Promise<{
           dayHours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
         } else if (attendance.timeIn && !attendance.timeOut) {
           const timeIn = new Date(attendance.timeIn)
-          const now = new Date()
-          dayHours = (now.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
+          const nowCalc = new Date()
+          dayHours = (nowCalc.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
         }
         
         totalHours += Math.max(0, dayHours)
@@ -755,8 +773,6 @@ export async function getPersonnelAttendance(): Promise<{
           } else {
             expectedTimeIn.setHours(hours, expectedMinutes, 0, 0)
           }
-          
-          console.log(`🔍 Personnel View Debug - User: ${user.name}, Date: ${attendance.date.toISOString().split('T')[0]}, TimeIn: ${timeIn.toISOString()}, Expected: ${expectedTimeIn.toISOString()}`)
           
           // Check if user was late
           if (timeIn > expectedTimeIn) {
@@ -783,7 +799,6 @@ export async function getPersonnelAttendance(): Promise<{
             dayEarnings = calculateEarningsSync(monthlySalary, timeIn, timeOut)
             const expectedTimeIn = new Date(attendance.date)
             const [hours, minutes] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
-            // Deductions start 1 minute after timeInEnd (09:31 AM instead of 09:30 AM)
             const expectedMinutes = minutes + 1
             if (expectedMinutes >= 60) {
               expectedTimeIn.setHours(hours + 1, expectedMinutes - 60, 0, 0)
@@ -796,12 +811,10 @@ export async function getPersonnelAttendance(): Promise<{
           dayEarnings = 0
           dayDeductions = 0
         } else if (calculatedStatus === 'ABSENT') {
-          // Don't count this as absent day here - it will be counted in absentDaysFromNoRecords logic
-          // absentDays++
+          // Explicitly marked absent day in the period
+          absentDays++
           dayEarnings = 0
-          // Don't calculate absence deduction here - it will be calculated in absentDaysFromNoRecords logic
-          // This prevents double counting of deductions
-          dayDeductions = 0
+          dayDeductions = calculateAbsenceDeductionSync(monthlySalary, workingDaysInPeriod)
         } else if (calculatedStatus === 'PARTIAL') {
           presentDays++
           if (attendance.timeIn) {
@@ -812,13 +825,7 @@ export async function getPersonnelAttendance(): Promise<{
           dayDeductions = calculatePartialDeduction(monthlySalary, dayHours)
         }
         
-        // For CUMULATIVE deductions: add ALL deductions from ALL records
         totalDeductions += dayDeductions
-        
-        // Debug logging for deduction calculation
-        if (dayDeductions > 0) {
-          console.log(`🔍 Personnel View Debug - User: ${user.name}, Date: ${attendance.date.toISOString().split('T')[0]}, Status: ${calculatedStatus}, Day Deduction: ₱${dayDeductions.toFixed(2)}, Total Deductions: ₱${totalDeductions.toFixed(2)}`)
-        }
         
         // For monthly metrics: only count current month
         if (attendance.date >= startOfCurrentMonth && attendance.date <= endOfCurrentMonth) {
@@ -826,102 +833,6 @@ export async function getPersonnelAttendance(): Promise<{
         }
       })
 
-      // Calculate absent days properly - days without attendance records in current period
-      let absentDaysFromNoRecords = 0
-      
-      if (attendanceSettings?.periodStart && attendanceSettings?.periodEnd) {
-        const checkDate = new Date(attendanceSettings.periodStart)
-        const periodEnd = new Date(attendanceSettings.periodEnd)
-        const today = getNowInPhilippines()
-        const workingDaysPassed = []
-        
-        // Only check dates up to today, not future dates
-        const endDate = today < periodEnd ? today : periodEnd
-        while (checkDate <= endDate) {
-          const dayOfWeek = checkDate.getDay()
-          if (dayOfWeek !== 0) { // Not Sunday (0) - include Saturdays and holidays per requirements
-            // Only include days that have actually "passed" - exclude current day if still within time window
-            const isCurrentDay = checkDate.toDateString() === today.toDateString()
-            console.log(`🔍 Personnel Debug - CheckDate: ${checkDate.toDateString()}, Today: ${today.toDateString()}, IsCurrentDay: ${isCurrentDay}`)
-            if (!isCurrentDay || checkDate < today) {
-              // Either not today, or today but we've passed the attendance window
-              const timeInEnd = attendanceSettings?.timeInEnd
-              if (isCurrentDay && timeInEnd) {
-                const timeInEndToday = new Date(today)
-                const [hours, minutes] = timeInEnd.split(':').map(Number)
-                timeInEndToday.setHours(hours, minutes, 0, 0)
-                
-                // Only count today as "passed" if we're past the time-in window
-                if (today > timeInEndToday) {
-                  workingDaysPassed.push(new Date(checkDate))
-                }
-              } else {
-                // Not today, so it has definitely passed
-                workingDaysPassed.push(new Date(checkDate))
-              }
-            }
-          }
-          checkDate.setDate(checkDate.getDate() + 1)
-        }
-        
-        // Count days that are actually marked as ABSENT (same logic as Personnel History)
-        // This should match exactly what the Personnel History shows
-        const periodAttendanceDates = periodAttendances.map(att => att.date.toISOString().split('T')[0])
-        const periodAttendanceDatesWithTimeIn = periodAttendances.filter(att => att.timeIn).map(att => att.date.toISOString().split('T')[0])
-        
-        absentDaysFromNoRecords = workingDaysPassed.filter(workingDay => {
-          const dayStr = workingDay.toISOString().split('T')[0]
-          
-          // Use the same logic as Personnel History:
-          // 1. If no attendance record at all = ABSENT
-          // 2. If attendance record exists but no time-in = ABSENT
-          // 3. If attendance record exists with time-in = NOT ABSENT (could be LATE, PRESENT, etc.)
-          
-          if (!periodAttendanceDates.includes(dayStr)) {
-            // No attendance record at all - this is definitely absent
-            return true
-          } else {
-            // Attendance record exists, but check if it has time-in
-            // Only count as absent if there's no time-in (meaning it's truly absent, not late)
-            return !periodAttendanceDatesWithTimeIn.includes(dayStr)
-          }
-        }).length
-        
-        console.log(`🔍 Personnel Debug - Working days passed: ${workingDaysPassed.length}, Attendance dates: [${periodAttendanceDates.join(', ')}], Attendance dates with time-in: [${periodAttendanceDatesWithTimeIn.join(', ')}], Absent from no records: ${absentDaysFromNoRecords}`)
-      } else {
-        // Fallback to current month calculation
-        const checkDate = new Date(startOfCurrentMonth)
-        const today = getNowInPhilippines()
-        const workingDaysPassed = []
-        
-        while (checkDate <= endOfCurrentMonth && checkDate <= today) {
-          const dayOfWeek = checkDate.getDay()
-          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday (0) or Saturday (6)
-            workingDaysPassed.push(new Date(checkDate))
-          }
-          checkDate.setDate(checkDate.getDate() + 1)
-        }
-        
-        // Count days without attendance records as absent days
-        const attendanceDates = user.attendances.map(att => att.date.toISOString().split('T')[0])
-        absentDaysFromNoRecords = workingDaysPassed.filter(workingDay => {
-          const dayStr = workingDay.toISOString().split('T')[0]
-          return !attendanceDates.includes(dayStr)
-        }).length
-      }
-      
-      // Update absent days count
-      // absentDays already includes days from attendance records marked as ABSENT
-      // absentDaysFromNoRecords includes days without attendance records
-      // Total absent days = both counts combined
-      absentDays += absentDaysFromNoRecords
-      
-      // Calculate deductions for absent days from no records
-      // Each absent day without attendance record should have absence deduction
-      const absentDaysDeductions = absentDaysFromNoRecords * calculateAbsenceDeductionSync(monthlySalary, workingDaysInPeriod)
-      totalDeductions += absentDaysDeductions
-      
-      console.log(`🔍 Personnel Debug - User: ${user.name}, Absent Days from No Records: ${absentDaysFromNoRecords}, Absent Days Deductions: ₱${absentDaysDeductions.toFixed(2)}, Total Deductions: ₱${totalDeductions.toFixed(2)}`)
 
       // For CUMULATIVE deductions, we count deductions from:
       // 1. Actual attendance events (late arrivals, early departures, etc.)
@@ -1028,9 +939,18 @@ export async function getPersonnelHistory(userId: string): Promise<{
 
     const basicSalary = user.personnelType?.basicSalary ? Number(user.personnelType.basicSalary) : 0
 
-    // Process attendance records and calculate cumulative deductions
-    let cumulativeDeductions = 0
-    const attendanceHistory = attendanceRecords.map(record => {
+    // IMPORTANT: Check if user has ANY attendance with actual time-in
+    // If there are NO attendance records with time-in at all, don't charge deductions (likely just reset)
+    const hasAnyAttendanceWithTimeIn = attendanceRecords.some(att => att.timeIn)
+    
+    console.log(`🔍 Personnel History Check - User: ${user.name}:`)
+    console.log(`  - Total Records: ${attendanceRecords.length}`)
+    console.log(`  - Has Time-In: ${hasAnyAttendanceWithTimeIn}`)
+    console.log(`  - Decision: ${hasAnyAttendanceWithTimeIn ? 'Calculate deductions normally' : 'Skip ALL deductions (no real attendance yet)'}`)
+
+    // Process attendance records and calculate DAILY deductions (not cumulative)
+    const attendanceHistory = attendanceRecords
+      .map(record => {
       let workHours = 0
       let earnings = 0
       let dailyDeductions = 0
@@ -1067,13 +987,41 @@ export async function getPersonnelHistory(userId: string): Promise<{
         }
       }
       
-      // Check if this is a past date with no time-in (should be ABSENT)
-      if (!record.timeIn && recordDateString < todayDateString) {
-        // Past dates with no time-in should be ABSENT
-        const dailyDeductions = calculateAbsenceDeductionSync(basicSalary, workingDaysInPeriod)
-        cumulativeDeductions += dailyDeductions
+      // Check if this is a date with no time-in
+      if (!record.timeIn) {
+        // Determine if we should mark as ABSENT or PENDING
+        let statusToShow: AttendanceStatus = 'PENDING'
+        let dailyDeductions = 0
         
-        console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: ABSENT, Daily Deduction: ₱${dailyDeductions.toFixed(2)}, Cumulative: ₱${cumulativeDeductions.toFixed(2)}`)
+        // For past dates: check if we're past the FINAL cutoff time (Time Out End)
+        if (recordDateString < todayDateString) {
+          // Definitely past date - mark as ABSENT and charge deduction
+          statusToShow = 'ABSENT'
+          dailyDeductions = calculateAbsenceDeductionSync(basicSalary, workingDaysInPeriod)
+          console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: ABSENT (past date), Daily Deduction: ₱${dailyDeductions.toFixed(2)}`)
+        } else if (recordDateString === todayDateString) {
+          // Current date - check if we're past the cutoff time (Time Out End)
+          const timeOutEnd = attendanceSettings?.timeOutEnd || '21:00' // Default 9:00 PM
+          const currentPhilTime = getNowInPhilippines()
+          const currentTime = getPhilippinesTimeString(currentPhilTime)
+          
+          console.log(`🔍 Personnel History Debug - User: ${user.name}, Current Date: ${recordDateString}, Current Time: ${currentTime}, Cutoff: ${timeOutEnd}`)
+          
+          if (currentTime > timeOutEnd) {
+            // Past cutoff - mark as ABSENT and charge deduction
+            statusToShow = 'ABSENT'
+            dailyDeductions = calculateAbsenceDeductionSync(basicSalary, workingDaysInPeriod)
+            console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: ABSENT (past cutoff ${timeOutEnd}), Daily Deduction: ₱${dailyDeductions.toFixed(2)}`)
+          } else {
+            // Still before cutoff - keep as PENDING
+            statusToShow = 'PENDING'
+            console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: PENDING (before cutoff ${timeOutEnd}), can still punch in`)
+          }
+        } else {
+          // Future date - keep as PENDING
+          statusToShow = 'PENDING'
+          console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: PENDING (future date)`)
+        }
         
         return {
           attendances_id: record.attendances_id,
@@ -1081,7 +1029,7 @@ export async function getPersonnelHistory(userId: string): Promise<{
           date: record.date.toISOString(),
           timeIn: null,
           timeOut: null,
-          status: 'ABSENT' as AttendanceStatus,
+          status: statusToShow,
           user: {
             users_id: user.users_id,
             name: user.name,
@@ -1093,7 +1041,7 @@ export async function getPersonnelHistory(userId: string): Promise<{
           },
           workHours: 0,
           earnings: 0,
-          deductions: cumulativeDeductions
+          deductions: dailyDeductions // DAILY deduction for this day only
         }
       }
 
@@ -1135,7 +1083,8 @@ export async function getPersonnelHistory(userId: string): Promise<{
       }
 
       // Calculate DAILY deductions based on RECALCULATED status
-      if (calculatedStatus === 'LATE' && record.timeIn) {
+      // IMPORTANT: Only calculate deductions if user has REAL attendance
+      if (calculatedStatus === 'LATE' && record.timeIn && hasAnyAttendanceWithTimeIn) {
         const timeIn = new Date(record.timeIn)
         const expectedTimeIn = new Date(record.date)
         const [hours, minutes] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
@@ -1147,16 +1096,13 @@ export async function getPersonnelHistory(userId: string): Promise<{
           expectedTimeIn.setHours(hours, expectedMinutes, 0, 0)
         }
         dailyDeductions = calculateLateDeductionSync(basicSalary, timeIn, expectedTimeIn, workingDaysInPeriod)
-      } else if (calculatedStatus === 'ABSENT') {
+      } else if (calculatedStatus === 'ABSENT' && hasAnyAttendanceWithTimeIn) {
         dailyDeductions = calculateAbsenceDeductionSync(basicSalary, workingDaysInPeriod)
-      } else if (calculatedStatus === 'PARTIAL') {
+      } else if (calculatedStatus === 'PARTIAL' && hasAnyAttendanceWithTimeIn) {
         dailyDeductions = calculatePartialDeduction(basicSalary, workHours, 8, workingDaysInPeriod)
       }
 
-      // Add daily deductions to cumulative total
-      cumulativeDeductions += dailyDeductions
-
-      console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${record.date.toISOString().split('T')[0]}, Status: ${calculatedStatus}, Daily Deduction: ₱${dailyDeductions.toFixed(2)}, Cumulative: ₱${cumulativeDeductions.toFixed(2)}`)
+      console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${record.date.toISOString().split('T')[0]}, Status: ${calculatedStatus}, Daily Deduction: ₱${dailyDeductions.toFixed(2)}`)
 
       return {
         attendances_id: record.attendances_id,
@@ -1176,8 +1122,15 @@ export async function getPersonnelHistory(userId: string): Promise<{
         },
         workHours,
         earnings,
-        deductions: cumulativeDeductions // Return CUMULATIVE deductions instead of daily
+        deductions: dailyDeductions // Return DAILY deductions for this day only
       }
+    })
+    .filter(record => {
+      // Only show records that have ACTUAL data:
+      // - Has time-in (PRESENT, LATE, or PARTIAL)
+      // - OR is confirmed ABSENT (past cutoff time or past date)
+      // Don't show PENDING records (no time-in and still before cutoff)
+      return record.timeIn !== null || record.status === 'ABSENT'
     })
 
     return { success: true, attendance: attendanceHistory }

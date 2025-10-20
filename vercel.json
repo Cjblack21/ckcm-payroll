@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/check-absent",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/auto-release-payroll",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

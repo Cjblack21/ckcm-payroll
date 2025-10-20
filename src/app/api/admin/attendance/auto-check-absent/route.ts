@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { startOfDay, endOfDay } from "date-fns"
-import { toZonedTime } from "date-fns-tz"
-import { calculateAbsenceDeduction } from "@/lib/attendance-calculations"
+import { getNowInPhilippines } from "@/lib/timezone"
 
 /**
  * Auto-check and mark users as absent if past cut-off time
@@ -22,15 +21,24 @@ export async function POST() {
     }
 
     // Use Philippine timezone for all date calculations
-    const timezone = 'Asia/Manila'
-    const nowPhilippines = toZonedTime(new Date(), timezone)
+    const nowPhilippines = getNowInPhilippines()
     const today = new Date(nowPhilippines)
     today.setHours(0, 0, 0, 0)
     
     // Parse cut-off time (timeOutEnd)
     const [cutoffHours, cutoffMinutes] = settings.timeOutEnd.split(':').map(Number)
-    const cutoffTime = new Date(today)
+    const cutoffTime = new Date(nowPhilippines)
     cutoffTime.setHours(cutoffHours, cutoffMinutes, 0, 0)
+    
+    console.log('🔍 Auto-check Debug:', {
+      nowPhilippines: nowPhilippines.toISOString(),
+      nowHours: nowPhilippines.getHours(),
+      nowMinutes: nowPhilippines.getMinutes(),
+      cutoffTime: cutoffTime.toISOString(),
+      cutoffHours,
+      cutoffMinutes,
+      isPastCutoff: nowPhilippines >= cutoffTime
+    })
     
     // Only proceed if current time is past cut-off time
     if (nowPhilippines < cutoffTime) {
@@ -103,39 +111,9 @@ export async function POST() {
             data: { status: 'ABSENT' }
           })
           
-          // Calculate and create absence deduction
-          if (basicSalary > 0) {
-            const deductionAmount = await calculateAbsenceDeduction(basicSalary)
-            
-            // Get or create "Absence" deduction type
-            let absenceDeductionType = await prisma.deductionType.findFirst({
-              where: { name: 'Absence' }
-            })
-            
-            if (!absenceDeductionType) {
-              absenceDeductionType = await prisma.deductionType.create({
-                data: {
-                  name: 'Absence',
-                  description: 'Automatic deduction for absence (no time in)',
-                  amount: 0,
-                  isActive: true
-                }
-              })
-            }
-            
-            // Create absence deduction record
-            await prisma.deduction.create({
-              data: {
-                users_id: user.users_id,
-                deduction_types_id: absenceDeductionType.deduction_types_id,
-                amount: deductionAmount,
-                appliedAt: today,
-                notes: `Absence: No time in/out by cut-off time (₱${deductionAmount.toFixed(2)} deduction - full daily salary)`
-              }
-            })
-            
-            console.log(`✅ Created absence deduction: ₱${deductionAmount.toFixed(2)} for ${user.name}`)
-          }
+          console.log(`✅ Marked ${user.name} as ABSENT (was PENDING)`)
+          // Note: Absence deductions are now calculated in real-time by the payroll system
+          // No database deduction records are created for attendance-related deductions
           
           markedCount++
         } else if (!existingStatus) {
@@ -148,39 +126,9 @@ export async function POST() {
             }
           })
           
-          // Calculate and create absence deduction
-          if (basicSalary > 0) {
-            const deductionAmount = await calculateAbsenceDeduction(basicSalary)
-            
-            // Get or create "Absence" deduction type
-            let absenceDeductionType = await prisma.deductionType.findFirst({
-              where: { name: 'Absence' }
-            })
-            
-            if (!absenceDeductionType) {
-              absenceDeductionType = await prisma.deductionType.create({
-                data: {
-                  name: 'Absence',
-                  description: 'Automatic deduction for absence (no time in)',
-                  amount: 0,
-                  isActive: true
-                }
-              })
-            }
-            
-            // Create absence deduction record
-            await prisma.deduction.create({
-              data: {
-                users_id: user.users_id,
-                deduction_types_id: absenceDeductionType.deduction_types_id,
-                amount: deductionAmount,
-                appliedAt: today,
-                notes: `Absence: No time in/out by cut-off time (₱${deductionAmount.toFixed(2)} deduction - full daily salary)`
-              }
-            })
-            
-            console.log(`✅ Created absence deduction: ₱${deductionAmount.toFixed(2)} for ${user.name}`)
-          }
+          console.log(`✅ Created ABSENT record for ${user.name} (no attendance record)`)
+          // Note: Absence deductions are now calculated in real-time by the payroll system
+          // No database deduction records are created for attendance-related deductions
           
           markedCount++
         }

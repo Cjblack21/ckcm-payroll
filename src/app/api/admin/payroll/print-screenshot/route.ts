@@ -79,10 +79,11 @@ export async function POST(request: NextRequest) {
     console.log('📋 Header settings found:', !!headerSettings)
 
     // Get stored payroll entries for the period (same as archive route)
+    // Use date range to handle timezone differences
     const payrollEntries = await prisma.payrollEntry.findMany({
       where: { 
-        periodStart: periodStart, 
-        periodEnd: periodEnd 
+        periodStart: { gte: new Date(periodStart.getTime() - 86400000), lte: new Date(periodStart.getTime() + 86400000) },
+        periodEnd: { gte: new Date(periodEnd.getTime() - 86400000), lte: new Date(periodEnd.getTime() + 86400000) }
       },
       include: {
         user: { 

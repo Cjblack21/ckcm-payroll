@@ -92,7 +92,6 @@ async function main() {
   // Seed default deduction types if not present
   const defaultTypes = [
     { name: 'Late Penalty', description: 'Penalty for late arrival' },
-    { name: 'Absence Deduction', description: 'Deduction for absences' },
     { name: 'Uniform', description: 'Uniform payment deduction' },
   ]
   for (const t of defaultTypes) {

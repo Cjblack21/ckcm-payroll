@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { startOfDay, endOfDay } from "date-fns"
+import { getTodayRangeInPhilippines } from "@/lib/timezone"
 import { calculateLateDeduction, calculateAbsenceDeduction, calculatePartialDeduction, calculateEarnings } from "@/lib/attendance-calculations"
 
 export async function GET() {
@@ -13,9 +13,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const today = new Date()
-    const startOfToday = startOfDay(today)
-    const endOfToday = endOfDay(today)
+    // Use Philippines timezone for current day
+    const { start: startOfToday, end: endOfToday } = getTodayRangeInPhilippines()
+    const today = new Date(startOfToday)
     const isSunday = today.getDay() === 0
     const holiday = await prisma.holiday.findFirst({
       where: {
@@ -153,15 +153,8 @@ export async function GET() {
         
         let earnings = 0
         let deductions = 0
+        // Use the status stored in the database (already calculated during punch)
         let status = attendanceRecord.status
-
-        // Derive status from settings if we have a timeIn
-        if (attendanceRecord.timeIn) {
-          const [endH, endM] = (attendanceSettings?.timeInEnd || '09:00').split(':').map(Number)
-          const inEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), endH, endM || 0, 0, 0)
-          const actualIn = new Date(attendanceRecord.timeIn)
-          status = actualIn.getTime() > inEnd.getTime() ? 'LATE' : 'PRESENT'
-        }
 
         if (status === 'PRESENT') {
           // Earnings based on actual seconds worked

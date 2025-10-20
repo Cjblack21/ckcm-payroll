@@ -312,7 +312,13 @@ export default function AdminProfile() {
       }
 
       const typeLabel = resetType === 'payroll' ? 'Payroll' : resetType === 'attendance' ? 'Attendance' : resetType === 'positions' ? 'Positions' : resetType === 'countdown' ? 'Payroll Release Countdown' : 'All'
-      toast.success(`${typeLabel} data has been reset successfully!`)
+      
+      // Show detailed feedback for attendance reset
+      if (resetType === 'attendance' && result.deletedCount) {
+        toast.success(`${typeLabel} reset complete! Deleted ${result.deletedCount.attendance} attendance records and ${result.deletedCount.deductions} related deductions.`)
+      } else {
+        toast.success(`${typeLabel} data has been reset successfully!`)
+      }
       setShowResetModal(false)
       setResetPassword('')
       setResetType(null)

@@ -27,12 +27,15 @@ export async function POST() {
     const timeOutEnd = settings.timeOutEnd
 
     // Calculate release time (period end date at time-out end time)
+    // Use Philippines timezone (Asia/Manila, UTC+8) for accurate comparison
     const periodEnd = new Date(periodEndDate)
     const [hours, minutes] = timeOutEnd.split(':').map(Number)
     periodEnd.setHours(hours, minutes, 0, 0)
     
+    // Get current time in Philippines timezone
     const now = new Date()
-    const canRelease = now >= periodEnd
+    const phTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+    const canRelease = phTime >= periodEnd
     
     // Calculate time differences
     const timeUntilRelease = periodEnd.getTime() - now.getTime()

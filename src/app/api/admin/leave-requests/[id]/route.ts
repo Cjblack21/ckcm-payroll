@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getPhilippinesDayOfWeek, generateWorkingDaysInPhilippines, toPhilippinesDateString, toZonedTime } from "@/lib/timezone"
+import { toPhilippinesDateString } from "@/lib/timezone"
 
 export async function PATCH(
   request: NextRequest,
@@ -113,56 +113,9 @@ export async function PATCH(
         }
       }
       
-      // If UNPAID leave, also create deduction
-      if (!leaveRequest.isPaid) {
-        console.log(`💰 Processing unpaid leave deduction...`)
-        
-        // Get or create "Unpaid Leave" deduction type
-        let deductionType = await prisma.deductionType.findFirst({
-          where: { name: "Unpaid Leave" }
-        })
-
-        if (!deductionType) {
-          deductionType = await prisma.deductionType.create({
-            data: {
-              name: "Unpaid Leave",
-              description: "Automatic deduction for approved unpaid leave",
-              amount: 0, // Amount varies per employee
-              isActive: true
-            }
-          })
-        }
-
-        // Calculate working days in leave period (exclude Sundays)
-        const workingDays = generateWorkingDaysInPhilippines(leaveRequest.startDate, leaveRequest.endDate).length
-
-        // Calculate deduction amount
-        const basicSalary = leaveRequest.user.personnelType?.basicSalary 
-          ? Number(leaveRequest.user.personnelType.basicSalary) 
-          : 0
-        
-        if (basicSalary > 0 && workingDays > 0) {
-          // Get attendance settings to calculate working days in period
-          const attendanceSettings = await prisma.attendanceSettings.findFirst()
-          const workingDaysInPeriod = attendanceSettings ? 22 : 22 // Default to 22 if no settings
-          
-          const dailySalary = basicSalary / workingDaysInPeriod
-          const deductionAmount = dailySalary * workingDays
-
-          // Create deduction record
-          await prisma.deduction.create({
-            data: {
-              users_id: leaveRequest.users_id,
-              deduction_types_id: deductionType.deduction_types_id,
-              amount: deductionAmount,
-              appliedAt: new Date(),
-              notes: `Unpaid leave: ${leaveRequest.startDate.toISOString().split('T')[0]} to ${leaveRequest.endDate.toISOString().split('T')[0]} (${workingDays} working days) - Leave ID: ${leaveRequest.leave_requests_id}`
-            }
-          })
-
-          console.log(`✅ Auto-created unpaid leave deduction: ₱${deductionAmount.toFixed(2)} for ${workingDays} working days`)
-        }
-      }
+      // Note: Unpaid leave deductions are calculated dynamically during payroll generation
+      // This prevents double deduction and allows proper pro-rating across multiple pay periods
+      console.log(`✅ Leave approved successfully. Unpaid leave deductions (if applicable) will be calculated during payroll.`)
     }
 
     return NextResponse.json(updated)

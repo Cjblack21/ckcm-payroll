@@ -135,7 +135,7 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link href="/admin/payroll">
-                    <Receipt />
+                    <span className="flex items-center justify-center w-4 h-4 text-lg font-bold">₱</span>
                     <span>Payroll</span>
                   </Link>
                 </SidebarMenuButton>

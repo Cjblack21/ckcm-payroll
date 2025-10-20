@@ -157,50 +157,22 @@ export async function getPayrollSummary(): Promise<{
     const settingsPeriodEnd = new Date(periodEnd)
 
     // Decide which period to DISPLAY in the summary:
-    // - If the settings period has generated entries, display the settings period
-    // - Else, fall back to latest non-archived period with stored entries (so release doesn't blank the page)
-    const settingsHasEntries = await prisma.payrollEntry.count({
-      where: { periodStart: settingsPeriodStart, periodEnd: settingsPeriodEnd }
-    })
-    
-    if (!settingsHasEntries) {
-      // Check if we're in a fresh generation context (settings were recently updated)
-      const isRecentGeneration = attendanceSettings?.updatedAt && 
-        (new Date().getTime() - new Date(attendanceSettings.updatedAt).getTime()) < 300000 // Within last 5 minutes
-      
-      if (isRecentGeneration) {
-        // If settings were recently updated (likely from Generate Payroll), use the settings period
-        console.log('🔧 Using settings period for fresh generation context')
-        // periodStart and periodEnd are already set to settings period above
-      } else {
-        // Look for the most recent period with entries, prioritizing RELEASED over PENDING
-        const latestReleased = await prisma.payrollEntry.findFirst({
-          where: { status: 'RELEASED' },
-          orderBy: { periodEnd: 'desc' },
-          select: { periodStart: true, periodEnd: true }
-        })
-        
-        const latestPending = await prisma.payrollEntry.findFirst({
-          where: { status: 'PENDING' },
-          orderBy: { periodEnd: 'desc' },
-          select: { periodStart: true, periodEnd: true }
-        })
-        
-        // Prefer RELEASED entries over PENDING entries
-        const latestNonArchived = latestReleased || latestPending
-        if (latestNonArchived) {
-          periodStart = latestNonArchived.periodStart
-          periodEnd = latestNonArchived.periodEnd
-        }
-      }
-    }
+    // - Always show the settings period (what admin configured)
+    // - This ensures after release, the UI shows the NEW period ready for generation
+    console.log('🔧 Using settings period as configured by admin')
+    // periodStart and periodEnd are already set to settings period above
 
     console.log('Period dates:', {
       periodStart: periodStart.toISOString(),
       periodEnd: periodEnd.toISOString()
     })
     const periodDays = calculatePeriodDurationInPhilippines(periodStart, periodEnd)
-    const perPayrollFactor = periodDays <= 16 ? 0.5 : 1.0
+    // ALWAYS use semi-monthly calculation (divide by 2) regardless of period length
+    const perPayrollFactor = 0.5
+    
+    console.log(`💰 SALARY CALCULATION - Period Days: ${periodDays}`)
+    console.log(`💰 SALARY CALCULATION - Payroll Factor: ${perPayrollFactor}x (ALWAYS Semi-Monthly)`)
+    console.log(`💰 SALARY CALCULATION - Salary will ALWAYS be DIVIDED BY 2`)
 
     // Get all active personnel users
     console.log('🔍 Payroll Summary - Fetching users')
@@ -273,17 +245,20 @@ export async function getPayrollSummary(): Promise<{
     const hasGenerated = existingPayrollEntries.length > 0
     const hasReleased = existingPayrollEntries.some(e => e.status === 'RELEASED')
 
-    // Use Philippines timezone for working days calculation
-    let workingDaysInPeriod = 22 // Default fallback
-    if (attendanceSettings?.periodStart && attendanceSettings?.periodEnd) {
-      workingDaysInPeriod = calculateWorkingDaysInPhilippines(
-        new Date(attendanceSettings.periodStart), 
-        new Date(attendanceSettings.periodEnd)
-      )
-    }
+    // Calculate working days for MONTHLY rate (not period)
+    // For absence deduction: use total working days in the MONTH to get consistent daily rate
+    const currentMonth = periodStart.getMonth()
+    const currentYear = periodStart.getFullYear()
+    const monthStart = new Date(currentYear, currentMonth, 1)
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0) // Last day of month
+    const workingDaysInMonth = calculateWorkingDaysInPhilippines(monthStart, monthEnd)
     
-    console.log('🔍 WORKING DAYS DEBUG - Using Same Logic as Attendance System')
-    console.log('🔍 WORKING DAYS DEBUG - Working Days in Period:', workingDaysInPeriod)
+    // For payroll period tracking
+    const workingDaysInPeriod = calculateWorkingDaysInPhilippines(periodStart, periodEnd)
+    
+    console.log('🔍 WORKING DAYS DEBUG - Month:', `${currentYear}-${currentMonth + 1}`)
+    console.log('🔍 WORKING DAYS DEBUG - Working Days in MONTH:', workingDaysInMonth, '(used for daily rate)')
+    console.log('🔍 WORKING DAYS DEBUG - Working Days in PERIOD:', workingDaysInPeriod, '(for tracking only)')
     
     // Generate working days array for the period using Philippines timezone
     const today = getNowInPhilippines() // Use Philippines timezone
@@ -322,17 +297,17 @@ export async function getPayrollSummary(): Promise<{
       // Freeze to stored amounts, but reconstruct supporting breakdown (work hours, attendance, deductions, loans)
       const attendanceSettings = await prisma.attendanceSettings.findFirst()
 
-      // Working days in period using Philippines timezone
-      let workingDaysInPeriod = 22
-      if (attendanceSettings?.periodStart && attendanceSettings?.periodEnd) {
-        workingDaysInPeriod = calculateWorkingDaysInPhilippines(
-          new Date(attendanceSettings.periodStart), 
-          new Date(attendanceSettings.periodEnd)
-        )
-      }
+      // Calculate working days for MONTHLY rate (not period)
+      // For absence deduction: use total working days in the MONTH to get consistent daily rate
+      const currentMonth = periodStart.getMonth()
+      const currentYear = periodStart.getFullYear()
+      const monthStart = new Date(currentYear, currentMonth, 1)
+      const monthEnd = new Date(currentYear, currentMonth + 1, 0) // Last day of month
+      const workingDaysInMonth = calculateWorkingDaysInPhilippines(monthStart, monthEnd)
 
       const periodDays = calculatePeriodDurationInPhilippines(periodStart, periodEnd)
-      const perPayrollFactor = periodDays <= 16 ? 0.5 : 1.0
+      // ALWAYS use semi-monthly calculation (divide by 2) regardless of period length
+      const perPayrollFactor = 0.5
 
       const rebuilt: PayrollEntry[] = []
       for (const se of storedEntriesForPeriod) {
@@ -362,20 +337,27 @@ export async function getPayrollSummary(): Promise<{
             const ti = new Date(r.timeIn)
             const expected = new Date(r.date)
             const [h, m] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
-            // Keep the +1 minute tolerance used by stored-entry path to match older logic
-            const m2 = m + 1
-            if (m2 >= 60) expected.setHours(h + 1, m2 - 60, 0, 0)
-            else expected.setHours(h, m2, 0, 0)
-            const perSec = (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) / workingDaysInPeriod / 8 / 60 / 60
+            // Use exact timeInEnd to match attendance system (removed +1 minute tolerance)
+            expected.setHours(h, m, 0, 0)
+            // Use monthly salary divided by monthly working days for consistent daily rate
+            const monthlyBasic = se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)
+            const perSec = monthlyBasic / workingDaysInMonth / 8 / 60 / 60
             const seconds = Math.max(0, (ti.getTime() - expected.getTime()) / 1000)
-            const daily = (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) / workingDaysInPeriod
+            const daily = monthlyBasic / workingDaysInMonth
             recordDeduction = Math.min(seconds * perSec, daily * 0.5)
           } else if (r.status === 'ABSENT') {
-            const daily = (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) / workingDaysInPeriod
+            // Use monthly salary divided by monthly working days for consistent daily rate
+            const monthlyBasic = se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)
+            const daily = monthlyBasic / workingDaysInMonth
             recordDeduction = daily
+            console.log(`💰 ABSENCE DEDUCTION - User: ${se.user?.name}`)
+            console.log(`💰 Monthly Basic: ₱${monthlyBasic.toFixed(2)}`)
+            console.log(`💰 Working Days in Month: ${workingDaysInMonth}, Daily Rate: ₱${daily.toFixed(2)}`)
+            console.log(`💰 Absence Deduction: ₱${recordDeduction.toFixed(2)}`)
           } else if (r.status === 'PARTIAL') {
-            const basic = se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)
-            const daily = basic / workingDaysInPeriod
+            // Use monthly salary divided by monthly working days for consistent daily rate
+            const monthlyBasic = se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)
+            const daily = monthlyBasic / workingDaysInMonth
             const hourly = daily / 8
             // Hours short from expected 8
             const hoursShort = Math.max(0, 8 - hours)
@@ -383,7 +365,7 @@ export async function getPayrollSummary(): Promise<{
           }
 
           return {
-            date: r.date.toISOString().split('T')[0],
+            date: toPhilippinesDateString(r.date),
             timeIn: r.timeIn?.toISOString() || null,
             timeOut: r.timeOut?.toISOString() || null,
             status: r.status,
@@ -458,34 +440,11 @@ export async function getPayrollSummary(): Promise<{
           return sum + monthly * perPayrollFactor
         }, 0)
 
-        // Attendance deductions estimate using stored user's salary and timeInEnd
-        const basicSalary = se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)
-        const timeInEnd = attendanceSettings?.timeInEnd || '09:30'
+        // Sum attendance deductions from the attendance records (already calculated above)
         let attendanceDeductions = 0
-        for (const r of att) {
-          if (r.status === 'LATE' && r.timeIn) {
-            const ti = new Date(r.timeIn)
-            const expected = new Date(r.date)
-            const [h, m] = timeInEnd.split(':').map(Number)
-            const m2 = m + 1
-            if (m2 >= 60) expected.setHours(h + 1, m2 - 60, 0, 0)
-            else expected.setHours(h, m2, 0, 0)
-            const perSec = basicSalary / workingDaysInPeriod / 8 / 60 / 60
-            const seconds = Math.max(0, (ti.getTime() - expected.getTime()) / 1000)
-            const daily = basicSalary / workingDaysInPeriod
-            attendanceDeductions += Math.min(seconds * perSec, daily * 0.5)
-          } else if (r.status === 'ABSENT') {
-            attendanceDeductions += basicSalary / workingDaysInPeriod
-          } else if (r.status === 'PARTIAL') {
-            let hoursShort = 8
-            if (r.timeIn && r.timeOut) {
-              const ti = new Date(r.timeIn)
-              const to = new Date(r.timeOut)
-              const hours = Math.max(0, (to.getTime() - ti.getTime()) / (1000 * 60 * 60))
-              hoursShort = Math.max(0, 8 - hours)
-            }
-            const hourly = (basicSalary / workingDaysInPeriod) / 8
-            attendanceDeductions += hoursShort * hourly
+        for (const record of attendanceRecords) {
+          if (record.deductions > 0) {
+            attendanceDeductions += record.deductions
           }
         }
 
@@ -503,7 +462,7 @@ export async function getPayrollSummary(): Promise<{
           absentDays: 0,
           lateDays: 0,
           totalWorkHours,
-          grossSalary: se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary),
+          grossSalary: (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) * perPayrollFactor,
           totalDeductions: Number(se.deductions),
           netSalary: Number(se.netPay),
           status: se.status === 'RELEASED' ? 'Released' : se.status === 'ARCHIVED' ? 'Archived' : 'Pending',
@@ -532,12 +491,14 @@ export async function getPayrollSummary(): Promise<{
     for (const user of users) {
       if (!user.personnelType?.basicSalary) continue
 
-      const basicSalary = parseFloat(user.personnelType.basicSalary.toString())
-      // Calculate daily salary based on actual working days in the period
+      const monthlyBasicSalary = parseFloat(user.personnelType.basicSalary.toString())
+      // For semi-monthly payroll, use half of monthly salary for deduction calculations
+      const basicSalary = monthlyBasicSalary * 0.5
+      // Fixed daily rate: monthly salary ÷ 22 standard working days (simple and consistent)
       const totalWorkingDaysInPeriod = workingDaysInPeriod
-      const dailySalary = totalWorkingDaysInPeriod > 0 ? basicSalary / totalWorkingDaysInPeriod : 0
+      const dailySalary = monthlyBasicSalary / 22 // 1 absent day = monthly salary ÷ 22
       
-      console.log(`🔍 Payroll Debug - User: ${user.name}, Basic Salary: ₱${basicSalary.toFixed(2)}, Daily Salary: ₱${dailySalary.toFixed(2)}, Working Days: ${totalWorkingDaysInPeriod}`)
+      console.log(`🔍 Payroll Debug - User: ${user.name}, Monthly Basic Salary: ₱${monthlyBasicSalary.toFixed(2)}, Period Basic Salary: ₱${basicSalary.toFixed(2)}, Daily Salary: ₱${dailySalary.toFixed(2)}, Working Days: ${totalWorkingDaysInPeriod}`)
       
       let totalDays = 0
       let presentDays = 0
@@ -580,13 +541,22 @@ export async function getPayrollSummary(): Promise<{
             // RECALCULATE STATUS and deductions using same logic as attendance system
             let calculatedStatus = attendance.status
             
-            // First check if this is a past day with PENDING status - should be ABSENT
-            const isPastDay = checkDate < todayForUser
-            if (isPastDay && attendance.status === 'PENDING') {
-              calculatedStatus = 'ABSENT'
-              console.log(`🔍 Payroll Status Check - User: ${user.name}, Date: ${dateKey}`)
-              console.log(`🔍 Payroll Status Check - Status: ABSENT (past day with PENDING status)`)
-            } else if (attendance.timeIn) {
+            // Check if PENDING should be converted to ABSENT (only if past cut-off time)
+            if (attendance.status === 'PENDING' && attendanceSettings?.timeOutEnd) {
+              const currentTime = getNowInPhilippines()
+              const cutoffTime = new Date(checkDate)
+              const [hours, minutes] = attendanceSettings.timeOutEnd.split(':').map(Number)
+              cutoffTime.setHours(hours, minutes, 0, 0)
+              
+              // Only mark as ABSENT if current time is past the cutoff for this date
+              if (currentTime > cutoffTime) {
+                calculatedStatus = 'ABSENT'
+                console.log(`🔍 Payroll Status Check - User: ${user.name}, Date: ${dateKey}`)
+                console.log(`🔍 Payroll Status Check - Status: ABSENT (past cut-off time: ${cutoffTime.toISOString()})`)
+              }
+            }
+            
+            if (attendance.timeIn) {
               const timeIn = new Date(attendance.timeIn)
               // Create expected time-in using Philippines timezone for the specific date
               const expectedTimeIn = new Date(checkDate)
@@ -629,35 +599,26 @@ export async function getPayrollSummary(): Promise<{
               } else {
                 earnings = dailySalary
               }
-              // Calculate late deduction using the same logic as attendance system
+              // Calculate late deduction: per-second rate × seconds late (capped at 50% daily)
               const timeIn = new Date(attendance.timeIn!)
               const expectedTimeIn = new Date(checkDate)
               const [hours, minutes] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
-              // Use the exact timeInEnd for payroll calculations (consistent with status check above)
               expectedTimeIn.setHours(hours, minutes, 0, 0)
               
-              // Use the same calculation function as attendance system
-              deductions = calculateLateDeductionSync(basicSalary, timeIn, expectedTimeIn, totalWorkingDaysInPeriod)
+              const perSecondRate = dailySalary / 8 / 60 / 60
+              const secondsLate = Math.max(0, (timeIn.getTime() - expectedTimeIn.getTime()) / 1000)
+              deductions = Math.min(secondsLate * perSecondRate, dailySalary * 0.5)
               lateDays++
-              
-              console.log(`🔍 Payroll Late Debug - User: ${user.name}, Date: ${dateKey}, Calculated Deduction: ₱${deductions.toFixed(2)}`)
-              console.log(`🔍 Payroll Late Debug - Basic Salary: ₱${basicSalary}, Working Days: ${totalWorkingDaysInPeriod}`)
-              console.log(`🔍 Payroll Late Debug - TimeIn: ${timeIn.toISOString()}, Expected: ${expectedTimeIn.toISOString()}`)
-              console.log(`🔍 Payroll Late Debug - Seconds Late: ${Math.max(0, (timeIn.getTime() - expectedTimeIn.getTime()) / 1000)}`)
-              console.log(`🔍 Payroll Late Debug - Per Second Rate: ₱${(basicSalary / totalWorkingDaysInPeriod / 8 / 60 / 60).toFixed(6)}`)
             } else if (calculatedStatus === 'ABSENT') {
               earnings = 0
-              // Calculate absence deduction using the same logic as attendance system
-              deductions = calculateAbsenceDeductionSync(basicSalary, totalWorkingDaysInPeriod)
+              // Deduct daily salary for absent day
+              deductions = dailySalary
               absentDays++
             } else if (calculatedStatus === 'PARTIAL') {
               // Pro-rated earnings based on actual work hours
               earnings = dailySalary * (workHours / 8)
-              // Calculate partial deduction using the same logic as attendance system
-              // deductions = calculatePartialDeduction(basicSalary, workHours, 8, totalWorkingDaysInPeriod)
-              // Temporary simple calculation
-              const dailyEarnings = basicSalary / totalWorkingDaysInPeriod
-              const hourlyRate = dailyEarnings / 8
+              // Deduct hourly rate for hours short of 8
+              const hourlyRate = dailySalary / 8
               const hoursShort = Math.max(0, 8 - workHours)
               deductions = hoursShort * hourlyRate
             }
@@ -684,11 +645,13 @@ export async function getPayrollSummary(): Promise<{
             let deductionsForNoRecord = 0
             
             // Check if current day and still within time-out window (should be PENDING)
-            const isCurrentDay = checkDate.toDateString() === todayForUser.toDateString()
+            const checkDateString = toPhilippinesDateString(checkDate)
+            const todayString = toPhilippinesDateString(todayForUser)
+            const isCurrentDay = checkDateString === todayString
             if (isCurrentDay && attendanceSettings?.timeOutEnd) {
               const currentTime = getNowInPhilippines()
               // Create time-out end time for today in Philippines timezone
-              const timeOutEnd = new Date(checkDate)
+              const timeOutEnd = new Date(todayForUser)
               const [hours, minutes] = attendanceSettings.timeOutEnd.split(':').map(Number)
               timeOutEnd.setHours(hours, minutes, 0, 0)
               
@@ -705,14 +668,16 @@ export async function getPayrollSummary(): Promise<{
               } else {
                 // Past time-out window - should be ABSENT
                 statusForNoRecord = 'ABSENT'
-                deductionsForNoRecord = calculateAbsenceDeductionSync(basicSalary, totalWorkingDaysInPeriod)
+                // Deduct daily salary for absent day
+                deductionsForNoRecord = dailySalary
                 absentDays++
                 console.log(`🔍 Payroll PENDING Check - Status: ABSENT (past time-out window), Deduction: ₱${deductionsForNoRecord.toFixed(2)}`)
               }
             } else {
               // Not current day - should be ABSENT
               statusForNoRecord = 'ABSENT'
-              deductionsForNoRecord = calculateAbsenceDeductionSync(basicSalary, totalWorkingDaysInPeriod)
+              // Deduct daily salary for absent day
+              deductionsForNoRecord = dailySalary
               absentDays++
               console.log(`🔍 Payroll No Record - Status: ABSENT (not current day), Deduction: ₱${deductionsForNoRecord.toFixed(2)}`)
             }
@@ -758,8 +723,13 @@ export async function getPayrollSummary(): Promise<{
         }
       })
 
-      // Set gross salary to basic salary for the full duration period
-      grossSalary = basicSalary // Full period salary (not split in half)
+      // Set gross salary to semi-monthly (basicSalary already divided by 2 above)
+      grossSalary = basicSalary // basicSalary is already the semi-monthly amount
+      
+      console.log(`💰 GROSS SALARY CALCULATION - User: ${user.name}`)
+      console.log(`💰 Monthly Basic Salary: ₱${monthlyBasicSalary.toFixed(2)}`)
+      console.log(`💰 Semi-Monthly Calculation: ALWAYS ÷ 2`)
+      console.log(`💰 GROSS SALARY FOR THIS PERIOD: ₱${grossSalary.toFixed(2)} = ₱${monthlyBasicSalary.toFixed(2)} × 0.5`)
       
       // Calculate total deductions from database (excluding attendance deductions)
       // Maintain full decimal precision by using parseFloat instead of Number()
@@ -805,21 +775,17 @@ export async function getPayrollSummary(): Promise<{
         }
       }
 
-      // Calculate real-time attendance deductions from attendance records
-      // IMPORTANT: Use the deductions that were already calculated in the attendance system
-      // Don't recalculate them here to avoid inconsistencies
+      // Sum up ONLY the daily deductions from attendance records (calculated above)
       let totalAttendanceDeductions = 0
-      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - User: ${user.name}`)
-      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Basic Salary: ₱${basicSalary}`)
-      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Working Days in Period: ${totalWorkingDaysInPeriod}`)
-      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Attendance Records Count: ${userAttendanceRecords.length}`)
-      
       for (const record of userAttendanceRecords) {
-        if (record.deductions && record.deductions > 0) {
-          console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Record Date: ${record.date}, Status: ${record.status}, Deduction: ₱${record.deductions}`)
+        if (record.deductions > 0) {
           totalAttendanceDeductions += record.deductions
         }
       }
+      
+      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - User: ${user.name}`)
+      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Attendance Records: ${userAttendanceRecords.length}`)
+      console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Total Attendance Deductions (from daily records): ₱${totalAttendanceDeductions.toFixed(2)}`)
       
       console.log(`🔍 PAYROLL ATTENDANCE DEBUG - Total Attendance Deductions: ₱${totalAttendanceDeductions}`)
       
@@ -924,7 +890,7 @@ export async function getPayrollSummary(): Promise<{
         email: user.email,
         personnelType: {
           name: user.personnelType.name,
-          basicSalary: basicSalary
+          basicSalary: monthlyBasicSalary // Store monthly salary in personnel type for reference
         },
         totalDays,
         presentDays,

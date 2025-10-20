@@ -66,6 +66,20 @@ export async function GET(request: NextRequest) {
             name: true,
             basicSalary: true
           }
+        },
+        leaveRequests: {
+          where: {
+            status: 'APPROVED',
+            startDate: { lte: new Date() },
+            endDate: { gte: new Date() }
+          },
+          select: {
+            startDate: true,
+            endDate: true,
+            type: true,
+            isPaid: true
+          },
+          take: 1
         }
       },
       orderBy: {
@@ -73,7 +87,19 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ users })
+    // Transform the data to add currentLeave field
+    const usersWithLeaveStatus = users.map(user => ({
+      ...user,
+      currentLeave: user.leaveRequests && user.leaveRequests.length > 0 ? {
+        startDate: user.leaveRequests[0].startDate.toISOString(),
+        endDate: user.leaveRequests[0].endDate.toISOString(),
+        type: user.leaveRequests[0].type,
+        isPaid: user.leaveRequests[0].isPaid
+      } : null,
+      leaveRequests: undefined // Remove from response
+    }))
+
+    return NextResponse.json({ users: usersWithLeaveStatus })
   } catch (error) {
     console.error('Error fetching users:', error)
     return NextResponse.json(

@@ -279,6 +279,17 @@ export default function AttendancePage() {
     return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
   }
 
+  // Convert 24-hour time string to 12-hour format with AM/PM
+  const format24To12Hour = (time24: string | null | undefined): string => {
+    if (!time24) return 'N/A'
+    
+    const [hours, minutes] = time24.split(':').map(Number)
+    const period = hours >= 12 ? 'PM' : 'AM'
+    const hours12 = hours % 12 || 12
+    
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`
+  }
+
   const getInitials = (name: string | null, email: string) => {
     if (name) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase()
@@ -495,21 +506,22 @@ export default function AttendancePage() {
 
           {/* Current Day View */}
           {viewMode === "current-day" && (
-            <Table>
+            <div className="w-full overflow-x-auto">
+            <Table className="w-full text-sm">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Profile</TableHead>
-                  <TableHead>School ID</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Personnel Type</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time In</TableHead>
-                  <TableHead>Time Out</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Work Hours</TableHead>
-                  <TableHead>Earnings</TableHead>
-                  <TableHead>Deductions</TableHead>
+                  <TableHead className="w-[50px]">Profile</TableHead>
+                  <TableHead className="w-[100px]">School ID</TableHead>
+                  <TableHead className="w-[180px]">Name</TableHead>
+                  <TableHead className="w-[200px]">Email</TableHead>
+                  <TableHead className="w-[140px]">Position</TableHead>
+                  <TableHead className="w-[120px]">Date</TableHead>
+                  <TableHead className="w-[100px]">Time In</TableHead>
+                  <TableHead className="w-[100px]">Time Out</TableHead>
+                  <TableHead className="w-[110px]">Status</TableHead>
+                  <TableHead className="w-[100px]">Work Hrs</TableHead>
+                  <TableHead className="w-[120px] text-green-600">Earnings</TableHead>
+                  <TableHead className="w-[120px] text-red-600">Deductions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -565,26 +577,27 @@ export default function AttendancePage() {
                 )}
               </TableBody>
             </Table>
+            </div>
           )}
 
           {/* Personnel View */}
           {viewMode === "personnel" && (
             <div className="w-full overflow-x-auto">
-              <Table className="w-full table-auto text-sm">
+              <Table className="w-full text-sm">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Profile</TableHead>
-                    <TableHead>School ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Personnel Type</TableHead>
-                    <TableHead>Total Days</TableHead>
-                    <TableHead>Present</TableHead>
-                    <TableHead>Absent</TableHead>
-                    <TableHead>Total Hours</TableHead>
-                    <TableHead>Earnings</TableHead>
-                    <TableHead>Deductions</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="w-[50px]">Profile</TableHead>
+                    <TableHead className="w-[100px]">School ID</TableHead>
+                    <TableHead className="w-[180px]">Name</TableHead>
+                    <TableHead className="w-[200px]">Email</TableHead>
+                    <TableHead className="w-[140px]">Position</TableHead>
+                    <TableHead className="w-[80px] text-center text-green-600">Present</TableHead>
+                    <TableHead className="w-[80px] text-center text-red-600">Absent</TableHead>
+                    <TableHead className="w-[100px] text-right">Total Hrs</TableHead>
+                    <TableHead className="w-[120px] text-right text-blue-600">Basic Salary</TableHead>
+                    <TableHead className="w-[120px] text-right text-red-600">Deductions</TableHead>
+                    <TableHead className="w-[120px] text-right text-green-600 font-bold">Net Pay</TableHead>
+                    <TableHead className="w-[140px] text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -612,20 +625,20 @@ export default function AttendancePage() {
                         {person.name || person.email}
                       </TableCell>
                       <TableCell>
-                        <div className="max-w-[260px] truncate">{person.email}</div>
+                        <div className="max-w-[200px] truncate" title={person.email}>{person.email}</div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
+                        <Badge variant="outline" className="whitespace-nowrap">
                           {person.personnelType?.name || 'N/A'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{person.totalDays}</TableCell>
-                      <TableCell className="text-green-600 whitespace-nowrap">{person.presentDays}</TableCell>
-                      <TableCell className="text-red-600 whitespace-nowrap">{person.absentDays}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatWorkHours(person.totalHours)}</TableCell>
-                      <TableCell className="text-green-600 whitespace-nowrap">{formatCurrency(person.totalEarnings)}</TableCell>
-                      <TableCell className="text-red-600 whitespace-nowrap">{formatCurrency(person.totalDeductions)}</TableCell>
-                      <TableCell className="whitespace-nowrap">
+                      <TableCell className="text-center text-green-600 whitespace-nowrap font-semibold">{person.presentDays}</TableCell>
+                      <TableCell className="text-center text-red-600 whitespace-nowrap font-semibold">{person.absentDays}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{formatWorkHours(person.totalHours)}</TableCell>
+                      <TableCell className="text-right text-blue-600 whitespace-nowrap font-semibold">{formatCurrency(person.personnelType?.basicSalary || 0)}</TableCell>
+                      <TableCell className="text-right text-red-600 whitespace-nowrap font-semibold">{formatCurrency(person.totalDeductions)}</TableCell>
+                      <TableCell className="text-right text-green-600 whitespace-nowrap font-bold text-lg">{formatCurrency((person.personnelType?.basicSalary || 0) - person.totalDeductions)}</TableCell>
+                      <TableCell className="text-center whitespace-nowrap">
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button 
@@ -639,13 +652,39 @@ export default function AttendancePage() {
                               View Attendance
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                          <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
                             <DialogHeader>
                               <DialogTitle>Attendance History - {person.name || person.email}</DialogTitle>
                               <DialogDescription>
                                 Complete attendance record for this personnel
                               </DialogDescription>
                             </DialogHeader>
+                            
+                            {/* Attendance Settings Summary */}
+                            {attendanceSettings && (
+                              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                                <h3 className="font-semibold text-sm">Attendance Settings</h3>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <span className="text-muted-foreground">Time In Window:</span>
+                                    <span className="ml-2 font-medium">{format24To12Hour(attendanceSettings.timeInStart)} - {format24To12Hour(attendanceSettings.timeInEnd)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Time Out Window:</span>
+                                    <span className="ml-2 font-medium">{format24To12Hour(attendanceSettings.timeOutStart)} - {format24To12Hour(attendanceSettings.timeOutEnd)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Late Deductions Start:</span>
+                                    <span className="ml-2 font-medium">After {format24To12Hour(attendanceSettings.timeInEnd)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Absent Cutoff:</span>
+                                    <span className="ml-2 font-medium">After {format24To12Hour(attendanceSettings.timeOutEnd)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
                             <div className="space-y-4 w-full overflow-x-auto">
                               <Table className="w-full table-fixed">
                                   <TableHeader>
@@ -656,7 +695,7 @@ export default function AttendancePage() {
                                       <TableHead className="w-[120px]">Status</TableHead>
                                       <TableHead className="w-[130px]">Work Hours</TableHead>
                                       <TableHead className="w-[140px]">Earnings</TableHead>
-                                      <TableHead className="w-[150px]">Cumulative Deductions</TableHead>
+                                      <TableHead className="w-[150px]">Daily Deductions</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -687,21 +726,22 @@ export default function AttendancePage() {
           {/* All Attendance View */}
           {viewMode === "all-attendance" && (
             <>
-              <Table>
+            <div className="w-full overflow-x-auto">
+              <Table className="w-full text-sm">
                 <TableHeader>
                 <TableRow>
-                  <TableHead>Profile</TableHead>
-                  <TableHead>School ID</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Personnel Type</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time In</TableHead>
-                  <TableHead>Time Out</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Work Hours</TableHead>
-                  <TableHead>Earnings</TableHead>
-                  <TableHead>Deductions</TableHead>
+                  <TableHead className="w-[50px]">Profile</TableHead>
+                  <TableHead className="w-[100px]">School ID</TableHead>
+                  <TableHead className="w-[180px]">Name</TableHead>
+                  <TableHead className="w-[200px]">Email</TableHead>
+                  <TableHead className="w-[140px]">Position</TableHead>
+                  <TableHead className="w-[120px]">Date</TableHead>
+                  <TableHead className="w-[100px]">Time In</TableHead>
+                  <TableHead className="w-[100px]">Time Out</TableHead>
+                  <TableHead className="w-[110px]">Status</TableHead>
+                  <TableHead className="w-[100px]">Work Hrs</TableHead>
+                  <TableHead className="w-[120px] text-green-600">Earnings</TableHead>
+                  <TableHead className="w-[120px] text-red-600">Deductions</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -747,7 +787,8 @@ export default function AttendancePage() {
                   )}
                 </TableBody>
               </Table>
-
+              </div>
+              
               {/* Pagination */}
               <div className="flex items-center justify-between mt-4">
                 <div className="text-sm text-muted-foreground">

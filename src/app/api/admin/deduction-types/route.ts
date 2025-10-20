@@ -16,7 +16,14 @@ export async function GET() {
   if (!session || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  // Exclude attendance-related deduction types - these are automatically managed by the attendance system
+  const attendanceRelatedTypes = ['Late Arrival', 'Late Penalty', 'Absence Deduction', 'Absent', 'Late', 'Tardiness', 'Partial Attendance', 'Early Time-Out']
   const types = await prisma.deductionType.findMany({
+    where: {
+      name: {
+        notIn: attendanceRelatedTypes
+      }
+    },
     orderBy: { createdAt: "desc" },
   })
   return NextResponse.json(types)
@@ -30,6 +37,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = typeSchema.parse(body)
+    
+    // Prevent creation of attendance-related deduction types
+    const attendanceRelatedTypes = ['Late Arrival', 'Late Penalty', 'Absence Deduction', 'Absent', 'Late', 'Tardiness', 'Partial Attendance', 'Early Time-Out']
+    if (attendanceRelatedTypes.some(type => data.name.toLowerCase().includes(type.toLowerCase()))) {
+      return NextResponse.json({ error: 'Cannot create attendance-related deduction types. These are automatically managed by the attendance system.' }, { status: 400 })
+    }
+    
     const created = await prisma.deductionType.create({ data })
     return NextResponse.json(created, { status: 201 })
   } catch (error) {

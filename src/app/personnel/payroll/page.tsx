@@ -357,21 +357,12 @@ export default function PersonnelPayrollPage() {
           </CardHeader>
           <CardContent className="pt-6">
             {/* Summary Cards - Clean Design */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
               <Card className="border-l-4 border-l-green-500">
                 <CardContent className="p-4">
                   <p className="text-xs text-muted-foreground mb-1">Basic Salary</p>
                   <p className="text-xl font-semibold">
                     {formatCurrency(Number(currentPayroll.basicSalary))}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-l-4 border-l-blue-500">
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Overtime</p>
-                  <p className="text-xl font-semibold">
-                    {formatCurrency(Number(currentPayroll.overtime))}
                   </p>
                 </CardContent>
               </Card>
@@ -479,16 +470,10 @@ export default function PersonnelPayrollPage() {
                         {formatCurrency(Number(selectedPayroll.basicSalary))}
                       </TableCell>
                     </TableRow>
-                    <TableRow>
-                      <TableCell>Overtime Pay</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(Number(selectedPayroll.overtime))}
-                      </TableCell>
-                    </TableRow>
                     <TableRow className="font-medium">
                       <TableCell>Total Earnings</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(Number(selectedPayroll.basicSalary) + Number(selectedPayroll.overtime))}
+                        {formatCurrency(Number(selectedPayroll.basicSalary))}
                       </TableCell>
                     </TableRow>
                   </TableBody>

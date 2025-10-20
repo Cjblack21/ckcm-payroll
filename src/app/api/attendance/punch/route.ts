@@ -167,16 +167,22 @@ export async function POST(request: NextRequest) {
         
         if (userWithSalary?.personnelType?.basicSalary) {
           const basicSalary = Number(userWithSalary.personnelType.basicSalary)
-          // Create expected time from settings using TODAY's date
-          const expectedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          // Create expected time from settings using TODAY's date in Philippines timezone
+          // Extract date components from the Philippines time
+          const phTimeString = now.toLocaleString('en-US', { timeZone: 'Asia/Manila' })
+          const phDate = new Date(phTimeString)
+          const year = phDate.getFullYear()
+          const month = phDate.getMonth()
+          const date = phDate.getDate()
+          
           const [hours, minutes] = settings.timeInEnd.split(':').map(Number)
-          // Deductions start 1 minute after timeInEnd (09:31 AM instead of 09:30 AM)
+          // Deductions start 1 minute after timeInEnd (05:31 AM instead of 05:30 AM)
           const expectedMinutes = minutes + 1
-          if (expectedMinutes >= 60) {
-            expectedTime.setHours(hours + 1, expectedMinutes - 60, 0, 0)
-          } else {
-            expectedTime.setHours(hours, expectedMinutes, 0, 0)
-          }
+          const expectedHours = expectedMinutes >= 60 ? hours + 1 : hours
+          const finalMinutes = expectedMinutes >= 60 ? expectedMinutes - 60 : expectedMinutes
+          
+          // Create expected time in Philippines timezone
+          const expectedTime = new Date(year, month, date, expectedHours, finalMinutes, 0, 0)
           
           const lateDeductionAmount = await calculateLateDeduction(basicSalary, now, expectedTime)
           lateSeconds = Math.max(0, (now.getTime() - expectedTime.getTime()) / 1000)
@@ -232,16 +238,22 @@ export async function POST(request: NextRequest) {
         
         if (userWithSalary?.personnelType?.basicSalary) {
           const basicSalary = Number(userWithSalary.personnelType.basicSalary)
-          // Create expected time from settings using TODAY's date
-          const expectedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          // Create expected time from settings using TODAY's date in Philippines timezone
+          // Extract date components from the Philippines time
+          const phTimeString = now.toLocaleString('en-US', { timeZone: 'Asia/Manila' })
+          const phDate = new Date(phTimeString)
+          const year = phDate.getFullYear()
+          const month = phDate.getMonth()
+          const date = phDate.getDate()
+          
           const [hours, minutes] = settings.timeInEnd.split(':').map(Number)
-          // Deductions start 1 minute after timeInEnd (09:31 AM instead of 09:30 AM)
+          // Deductions start 1 minute after timeInEnd (05:31 AM instead of 05:30 AM)
           const expectedMinutes = minutes + 1
-          if (expectedMinutes >= 60) {
-            expectedTime.setHours(hours + 1, expectedMinutes - 60, 0, 0)
-          } else {
-            expectedTime.setHours(hours, expectedMinutes, 0, 0)
-          }
+          const expectedHours = expectedMinutes >= 60 ? hours + 1 : hours
+          const finalMinutes = expectedMinutes >= 60 ? expectedMinutes - 60 : expectedMinutes
+          
+          // Create expected time in Philippines timezone
+          const expectedTime = new Date(year, month, date, expectedHours, finalMinutes, 0, 0)
           
           const lateDeductionAmount = await calculateLateDeduction(basicSalary, now, expectedTime)
           lateSeconds = Math.max(0, (now.getTime() - expectedTime.getTime()) / 1000)

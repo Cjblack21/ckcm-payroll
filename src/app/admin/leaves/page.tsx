@@ -175,8 +175,25 @@ export default function LeavesPage() {
     return status.charAt(0) + status.slice(1).toLowerCase()
   }
 
+  // Get today's date for comparison
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
   const pendingLeaves = leaves.filter(l => l.status === "PENDING")
-  const processedLeaves = leaves.filter(l => l.status !== "PENDING")
+  
+  // Active leaves: Approved and ongoing (end date >= today)
+  const activeLeaves = leaves.filter(l => {
+    const endDate = new Date(l.endDate)
+    endDate.setHours(0, 0, 0, 0)
+    return l.status === "APPROVED" && endDate >= today
+  })
+  
+  // Archived leaves: Leave period has ended OR denied
+  const archivedLeaves = leaves.filter(l => {
+    const endDate = new Date(l.endDate)
+    endDate.setHours(0, 0, 0, 0)
+    return (l.status === "APPROVED" && endDate < today) || l.status === "DENIED"
+  })
 
   return (
     <div className="flex-1 space-y-6 p-4 pt-6">
@@ -283,12 +300,89 @@ export default function LeavesPage() {
         </CardContent>
       </Card>
 
-      {/* All Leave Requests History */}
+      {/* Active Leave Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            Active Leaves
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading...</div>
+          ) : error ? (
+            <div className="py-8 text-center">
+              <p className="text-red-600 font-semibold">Error loading leave requests</p>
+              <p className="text-sm text-muted-foreground mt-2">{error}</p>
+              <Button onClick={fetchLeaveRequests} className="mt-4" variant="outline">
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>End Date</TableHead>
+                  <TableHead>Days</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeLeaves.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No active approved leaves
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  activeLeaves.map((leave) => (
+                    <TableRow key={leave.leave_requests_id}>
+                      <TableCell className="font-medium">{leave.empName}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{formatLeaveType(leave.type)}</Badge>
+                      </TableCell>
+                      <TableCell>{leave.startDate}</TableCell>
+                      <TableCell>{leave.endDate}</TableCell>
+                      <TableCell className="font-semibold">{leave.days}</TableCell>
+                      <TableCell>
+                        <Badge className={leave.isPaid ? "bg-blue-100 text-blue-800" : "bg-orange-100 text-orange-800"}>
+                          {leave.isPaid ? "Paid" : "Unpaid"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedLeave(leave)
+                              setViewDialogOpen(true)
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+      </Card>
+
+      {/* Archived Leave Requests */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle className="flex items-center gap-2">
             <History className="h-5 w-5" />
-            Leave History
+            Archived Leaves
           </CardTitle>
           <Button
             variant="outline"
@@ -299,12 +393,12 @@ export default function LeavesPage() {
             {showHistory ? (
               <>
                 <ChevronUp className="h-4 w-4" />
-                Hide History
+                Hide Archives
               </>
             ) : (
               <>
                 <ChevronDown className="h-4 w-4" />
-                Show History ({processedLeaves.length})
+                Show Archives ({archivedLeaves.length})
               </>
             )}
           </Button>
@@ -336,15 +430,15 @@ export default function LeavesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {processedLeaves.length === 0 ? (
+                {archivedLeaves.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No processed leave requests
+                      No archived leave requests
                     </TableCell>
                   </TableRow>
                 ) : (
-                  processedLeaves.map((leave) => (
-                    <TableRow key={leave.leave_requests_id}>
+                  archivedLeaves.map((leave) => (
+                    <TableRow key={leave.leave_requests_id} className="opacity-75">
                       <TableCell className="font-medium">{leave.empName}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{formatLeaveType(leave.type)}</Badge>
@@ -378,7 +472,7 @@ export default function LeavesPage() {
                             size="sm"
                             variant="destructive"
                             onClick={async () => {
-                              if (confirm(`Are you sure you want to delete this leave request from ${leave.empName}?`)) {
+                              if (confirm(`Are you sure you want to delete this archived leave request from ${leave.empName}?`)) {
                                 try {
                                   const response = await fetch(`/api/leave-requests/${leave.leave_requests_id}`, {
                                     method: "DELETE"

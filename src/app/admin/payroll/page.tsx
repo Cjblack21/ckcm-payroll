@@ -31,6 +31,7 @@ type PayrollEntry = {
   status: 'Pending' | 'Released' | 'Archived'
   breakdown: {
     basicSalary: number
+    monthlyBasicSalary?: number // Monthly reference (optional)
     attendanceDeductions: number
     leaveDeductions: number
     loanDeductions: number
@@ -188,18 +189,22 @@ export default function PayrollPage() {
   const [canRelease, setCanRelease] = useState(false)
   const [settingsCustomDays, setSettingsCustomDays] = useState('')
   const [timeUntilRelease, setTimeUntilRelease] = useState('')
-  const [useTestingMode, setUseTestingMode] = useState(false)
-  const [testingMinutes, setTestingMinutes] = useState('2')
+  const [customSeconds, setCustomSeconds] = useState('10')
   const [now, setNow] = useState(new Date())
   const [hasShownReleaseModal, setHasShownReleaseModal] = useState(false)
+  const [hasAutoReleased, setHasAutoReleased] = useState(false)
 
   // Load payroll data
   const loadPayrollData = async () => {
     try {
       setLoading(true)
+      console.log('🔍 Loading payroll data...')
       const result = await getPayrollSummary()
       
+      console.log('🔍 Payroll result:', result)
+      
       if (!result.success) {
+        console.error('❌ Payroll load failed:', result.error)
         throw new Error(result.error || 'Failed to load payroll data')
       }
 
@@ -217,18 +222,20 @@ export default function PayrollPage() {
           !d.type.includes('Partial')
         ).map((d: any) => `${d.type}: ₱${d.amount}`))
 
-        // Coerce numeric fields and compute a reliable net pay fallback
-        const basicSalary = Number(entry?.personnelType?.basicSalary ?? entry?.grossSalary ?? 0)
+        // Use grossSalary (semi-monthly) as the base, not the monthly basicSalary
+        const monthlyBasicSalary = Number(entry?.personnelType?.basicSalary ?? 0) // Monthly reference
+        const grossSalary = Number(entry?.grossSalary ?? 0) // Semi-monthly (already divided by 2)
         const attendanceDeductions = Number(entry?.attendanceDeductions ?? 0)
         const leaveDeductions = Number(entry?.unpaidLeaveDeduction ?? 0) // Map from backend
         const loanDeductions = Number(entry?.loanPayments ?? 0)
         const otherDeductions = Number(entry?.databaseDeductions ?? 0)
-        const computedNet = basicSalary - (attendanceDeductions + leaveDeductions + loanDeductions + otherDeductions)
+        const computedNet = grossSalary - (attendanceDeductions + leaveDeductions + loanDeductions + otherDeductions)
         const netFromServer = Number(entry?.netSalary ?? entry?.netPay ?? NaN)
         const finalNet = Number.isFinite(netFromServer) ? netFromServer : computedNet
         
         console.log(`💰 Net Pay Calculation - ${entry.name}:`, {
-          basicSalary,
+          monthlyBasicSalary,
+          grossSalary,
           attendanceDeductions,
           leaveDeductions,
           loanDeductions,
@@ -248,7 +255,8 @@ export default function PayrollPage() {
           finalNetPay: finalNet,
           status: entry.status || 'Pending',
           breakdown: {
-            basicSalary,
+            basicSalary: grossSalary, // Semi-monthly period salary (for calculations)
+            monthlyBasicSalary, // Add monthly reference for display
             attendanceDeductions, // Real-time calculated attendance deductions
             leaveDeductions, // Leave deductions
             loanDeductions,
@@ -323,8 +331,10 @@ export default function PayrollPage() {
         setCanRelease(false)
       }
     } catch (error) {
-      console.error('Error loading payroll data:', error)
-      toast.error('Failed to load payroll data')
+      console.error('❌ Error loading payroll data:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load payroll data'
+      console.error('❌ Error details:', errorMessage)
+      toast.error(`Failed to load payroll: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
@@ -387,13 +397,7 @@ export default function PayrollPage() {
       } : null)
 
       setHasGeneratedForSettings(false)
-      
-      // If in testing mode, reset back to original release time and disable testing mode
-      if (useTestingMode) {
-        setPayrollReleaseTime(originalReleaseTime)
-        setUseTestingMode(false)
-        toast.success('Testing mode disabled. Release time reset to automatic time-out end.', { duration: 3000 })
-      }
+      setHasAutoReleased(false) // Reset for next period
       
       // Reload payroll data
       await loadPayrollData()
@@ -482,6 +486,7 @@ export default function PayrollPage() {
       setTimeUntilRelease('')
       setCanRelease(false)
       setHasShownReleaseModal(false)
+      setHasAutoReleased(false) // Reset for next period
       
       // Reload payroll data to get the updated state with new period
       await loadPayrollData()
@@ -560,9 +565,15 @@ export default function PayrollPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('❌ Payslip generation error:', errorData)
-        throw new Error(errorData.error || errorData.details || 'Failed to generate payslips')
+        const errorText = await response.text()
+        console.error('❌ Payslip generation error - Status:', response.status, 'Response:', errorText)
+        let errorData: any = {}
+        try {
+          errorData = JSON.parse(errorText)
+        } catch (e) {
+          console.error('Failed to parse error response as JSON')
+        }
+        throw new Error(errorData.error || errorData.details || `Failed to generate payslips (Status: ${response.status})`)
       }
 
       // Get the HTML content from the response
@@ -748,21 +759,9 @@ export default function PayrollPage() {
       const now = new Date()
       const [hours, minutes] = payrollReleaseTime.split(':').map(Number)
       
-      // In testing mode, use today's date with the manual time
-      // Otherwise, use period end date with the release time
-      let releaseDateTime: Date
-      if (useTestingMode) {
-        // Testing mode: use the exact time set (could be future or past)
-        releaseDateTime = new Date()
-        releaseDateTime.setHours(hours, minutes, 0, 0)
-        
-        // IMPORTANT: Don't move to tomorrow in testing mode
-        // This allows testing with times that are coming up soon
-      } else {
-        // Normal mode: use period end date
-        releaseDateTime = new Date(currentPeriod.periodEnd)
-        releaseDateTime.setHours(hours, minutes, 0, 0)
-      }
+      // Use period end date with the release time
+      const releaseDateTime = new Date(currentPeriod.periodEnd)
+      releaseDateTime.setHours(hours, minutes, 0, 0)
       
       const diff = releaseDateTime.getTime() - now.getTime()
       
@@ -771,6 +770,13 @@ export default function PayrollPage() {
         if (!canRelease) {
           setCanRelease(true)
           console.log('🚀 Countdown complete - Release button now enabled')
+          
+          // Auto-release payroll when countdown hits zero (only once)
+          if (hasGeneratedForSettings && currentPeriod.status !== 'Released' && !hasAutoReleased) {
+            console.log('🚀 Auto-releasing payroll after cutoff...')
+            setHasAutoReleased(true)
+            handleAutoReleasePayroll()
+          }
         }
         return
       }
@@ -796,7 +802,7 @@ export default function PayrollPage() {
     const interval = setInterval(updateCountdown, 1000)
     
     return () => clearInterval(interval)
-  }, [currentPeriod?.periodEnd, payrollReleaseTime, canRelease, useTestingMode])
+  }, [currentPeriod?.periodEnd, payrollReleaseTime, canRelease])
 
   // Load archived payrolls when archive tab is accessed
   useEffect(() => {
@@ -953,54 +959,73 @@ export default function PayrollPage() {
 
         {/* Current Payroll Tab */}
         <TabsContent value="current" className="space-y-4">
-          {/* Search */}
-          <div className="flex justify-between items-center">
-            <Input
-              placeholder="Search employees..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-            <div className="text-sm text-muted-foreground">
-              {filteredEntries.length} employee(s) found
-            </div>
-          </div>
+          {!hasGeneratedForSettings ? (
+            /* Empty State - Payroll Not Generated */
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="text-center space-y-4">
+                  <h3 className="text-2xl font-bold">Payroll Waiting to be Generated...</h3>
+                  <p className="text-muted-foreground max-w-md">
+                    Click to generate payroll
+                  </p>
+                  <Button onClick={handleGeneratePayroll} disabled={loading} size="lg" className="mt-4">
+                    <FileText className="h-5 w-5 mr-2" />
+                    Generate Payroll Now
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Payroll Generated - Show Table */
+            <>
+              {/* Search */}
+              <div className="flex justify-between items-center">
+                <Input
+                  placeholder="Search employees..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="max-w-sm"
+                />
+                <div className="text-sm text-muted-foreground">
+                  {filteredEntries.length} employee(s) found
+                </div>
+              </div>
 
-          {/* Payroll Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Payroll Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Personnel Type</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Total Work Hours</TableHead>
-                    <TableHead>Final Net Pay</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
-                        Loading payroll data...
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredEntries.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                        No payroll entries found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
+              {/* Payroll Table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payroll Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Personnel Type</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Total Work Hours</TableHead>
+                        <TableHead>Final Net Pay</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-8">
+                            Loading payroll data...
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredEntries.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                            No payroll entries found
+                          </TableCell>
+                        </TableRow>
+                      ) : (
                     filteredEntries.map((entry) => (
-                      <TableRow key={entry.users_id} className={entry.status === 'Released' ? 'bg-green-50' : ''}>
+                      <TableRow key={entry.users_id}>
                         <TableCell className="font-mono text-sm text-muted-foreground">{entry.users_id}</TableCell>
                         <TableCell className="font-medium">{entry.name}</TableCell>
                         <TableCell>
@@ -1055,6 +1080,8 @@ export default function PayrollPage() {
               </Table>
             </CardContent>
           </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* Archived Payrolls Tab */}
@@ -1311,121 +1338,11 @@ export default function PayrollPage() {
                       type="time"
                       value={payrollReleaseTime}
                       onChange={(e) => setPayrollReleaseTime(e.target.value)}
-                      disabled={!useTestingMode}
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      {useTestingMode ? 'Manual override for testing' : 'Automatically set to time-out end time from attendance settings'}
+                      Automatically set to time-out end time from attendance settings
                     </p>
                   </div>
-                </div>
-                
-                {/* Testing Mode */}
-                <div className="border-t pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="testingMode" className="text-base font-semibold">🧪 Testing Mode</Label>
-                      <p className="text-xs text-muted-foreground mt-1">Enable to manually set release time for testing (normally auto-set to time-out end)</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        id="testingMode"
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={useTestingMode}
-                        onChange={(e) => setUseTestingMode(e.target.checked)}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-600"></div>
-                    </label>
-                  </div>
-                  
-                  {useTestingMode && (
-                    <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 space-y-4">
-                      <div>
-                        <Label>Quick Test: Release in X Minutes</Label>
-                        <div className="flex gap-2 mt-2">
-                          <Input
-                            type="number"
-                            placeholder="Minutes"
-                            value={testingMinutes}
-                            onChange={(e) => setTestingMinutes(e.target.value)}
-                            min="1"
-                            max="60"
-                            className="w-24"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const minutes = parseInt(testingMinutes)
-                              if (minutes > 0) {
-                                const now = new Date()
-                                now.setMinutes(now.getMinutes() + minutes)
-                                const hours = now.getHours().toString().padStart(2, '0')
-                                const mins = now.getMinutes().toString().padStart(2, '0')
-                                setPayrollReleaseTime(`${hours}:${mins}`)
-                                toast.success(`Release time set to ${minutes} minute(s) from now: ${hours}:${mins}`)
-                              }
-                            }}
-                            disabled={!testingMinutes || parseInt(testingMinutes) <= 0}
-                          >
-                            Set Release Time
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const now = new Date()
-                              now.setMinutes(now.getMinutes() + 1)
-                              const hours = now.getHours().toString().padStart(2, '0')
-                              const mins = now.getMinutes().toString().padStart(2, '0')
-                              setPayrollReleaseTime(`${hours}:${mins}`)
-                              toast.success(`Release time set to 1 minute from now: ${hours}:${mins}`)
-                            }}
-                          >
-                            1 min
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const now = new Date()
-                              now.setMinutes(now.getMinutes() + 2)
-                              const hours = now.getHours().toString().padStart(2, '0')
-                              const mins = now.getMinutes().toString().padStart(2, '0')
-                              setPayrollReleaseTime(`${hours}:${mins}`)
-                              toast.success(`Release time set to 2 minutes from now: ${hours}:${mins}`)
-                            }}
-                          >
-                            2 min
-                          </Button>
-                        </div>
-                      </div>
-                      
-                      <div className="border-t border-orange-200 dark:border-orange-800 pt-3">
-                        <Label>Or Set Custom Time Directly</Label>
-                        <p className="text-xs text-muted-foreground mb-2">You can edit the Release Time field above or click the button below to set it to now</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const now = new Date()
-                            const hours = now.getHours().toString().padStart(2, '0')
-                            const mins = now.getMinutes().toString().padStart(2, '0')
-                            setPayrollReleaseTime(`${hours}:${mins}`)
-                            toast.success(`Release time set to now: ${hours}:${mins}`)
-                          }}
-                        >
-                          Set to Current Time
-                        </Button>
-                      </div>
-                      
-                      <p className="text-xs text-orange-600 dark:text-orange-400">⚠️ Remember to disable testing mode and save to use automatic time-out end time</p>
-                    </div>
-                  )}
                 </div>
                 
                 {payrollPeriodStart && payrollPeriodEnd && (
@@ -1435,6 +1352,27 @@ export default function PayrollPage() {
                     } days (excludes Sundays)
                   </div>
                 )}
+                
+                {/* Testing Release Button */}
+                {hasGeneratedForSettings && currentPeriod?.status !== 'Released' && (
+                  <div className="border-t pt-4">
+                    <Label className="text-base font-semibold">🧪 Testing Controls</Label>
+                    <p className="text-xs text-muted-foreground mt-1 mb-3">Development mode only - bypass time restrictions</p>
+                    <Button 
+                      onClick={handleReleasePayroll} 
+                      disabled={loading}
+                      variant="destructive"
+                      className="bg-purple-600 hover:bg-purple-700 w-full"
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Release Payroll Now (Bypass Time Check)
+                    </Button>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                      ⚠️ This will immediately release payroll and generate payslips, bypassing the countdown timer.
+                    </p>
+                  </div>
+                )}
+                
                 <div className="flex gap-2">
                   <Button 
                     onClick={handleSavePayrollPeriod} 
