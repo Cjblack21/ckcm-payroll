@@ -4,6 +4,36 @@ import { prisma } from "@/lib/prisma"
 // This endpoint should be called by a cron job or scheduled task
 // to automatically release payroll when the scheduled time is reached
 
+// Helper function to update loan balances and auto-archive completed loans
+async function updateLoanBalances(loans: any[], releaseTime: Date) {
+  for (const loan of loans) {
+    const loanAmount = Number(loan.amount)
+    const monthlyPaymentPercent = Number(loan.monthlyPaymentPercent)
+    const monthlyPayment = (loanAmount * monthlyPaymentPercent) / 100
+    const biweeklyPayment = monthlyPayment / 2
+    
+    // Calculate new balance
+    const currentBalance = Number(loan.balance)
+    const newBalance = Math.max(0, currentBalance - biweeklyPayment)
+    
+    // Update loan balance and auto-archive if completed
+    await prisma.loan.update({
+      where: { loans_id: loan.loans_id },
+      data: { 
+        balance: newBalance,
+        status: newBalance <= 0 ? 'COMPLETED' : 'ACTIVE',
+        archivedAt: newBalance <= 0 ? releaseTime : null
+      }
+    })
+    
+    if (newBalance <= 0) {
+      console.log(`✅ Loan ${loan.loans_id} for user ${loan.users_id} is now COMPLETED and ARCHIVED (balance: ₱0)`)
+    } else {
+      console.log(`Updated loan ${loan.loans_id}: balance reduced from ₱${currentBalance.toFixed(2)} to ₱${newBalance.toFixed(2)}`)
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const now = new Date()
@@ -223,6 +253,9 @@ export async function POST(request: NextRequest) {
           }
         })
         console.log(`Successfully updated ${existingPayrolls.length} existing payroll entries to released`)
+        
+        // Update loan balances after releasing payroll
+        await updateLoanBalances(loans, now)
       } catch (dbError) {
         console.error('Database error updating payroll entries:', dbError)
         const msg = dbError instanceof Error ? dbError.message : String(dbError)
@@ -243,6 +276,9 @@ export async function POST(request: NextRequest) {
           data: entriesToCreate
         })
         console.log(`Successfully created ${payrollEntries.length} new payroll entries`)
+        
+        // Update loan balances after releasing payroll
+        await updateLoanBalances(loans, now)
       } catch (dbError) {
         console.error('Database error creating payroll entries:', dbError)
         if (dbError && typeof dbError === 'object') {

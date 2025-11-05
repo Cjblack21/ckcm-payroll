@@ -46,7 +46,8 @@ import {
   Eye, 
   UserCheck, 
   UserX,
-  RefreshCw
+  Archive,
+  Trash2
 } from 'lucide-react'
 import {
   Tooltip,
@@ -55,6 +56,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { toast } from 'react-hot-toast'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface User {
   users_id: string
@@ -67,7 +69,9 @@ interface User {
   personnel_types_id?: string | null
   personnelType?: {
     name: string
+    type?: 'TEACHING' | 'NON_TEACHING' | null
     basicSalary: number
+    department?: string | null
   } | null
   currentLeave?: {
     startDate: string
@@ -75,6 +79,13 @@ interface User {
     type: string
     isPaid: boolean
   } | null
+}
+
+interface PersonnelTypeWithDept {
+  personnel_types_id: string
+  name: string
+  type?: 'TEACHING' | 'NON_TEACHING' | null
+  department?: string | null
 }
 
 interface UserFormData {
@@ -100,16 +111,23 @@ function getInitials(name: string | null, email: string): string {
 }
 
 export function UserManagement() {
-  const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
+  const [personnel, setPersonnel] = useState<User[]>([])
+  const [filteredPersonnel, setFilteredPersonnel] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('ALL')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [personnelTypes, setPersonnelTypes] = useState<Array<{ personnel_types_id: string; name: string }>>([])
+  const [selectedPersonnel, setSelectedPersonnel] = useState<User | null>(null)
+  const [personnelTypes, setPersonnelTypes] = useState<PersonnelTypeWithDept[]>([])
+  const [selectedPersonnelIds, setSelectedPersonnelIds] = useState<Set<string>>(new Set())
+  const [showDeactivated, setShowDeactivated] = useState(false)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [adminPassword, setAdminPassword] = useState('')
+  const [pendingDeactivation, setPendingDeactivation] = useState<User | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<User | null>(null)
   const [formData, setFormData] = useState<UserFormData>({
     email: '',
     name: '',
@@ -118,58 +136,85 @@ export function UserManagement() {
     isActive: true
   })
 
-  // Fetch users
-  const fetchUsers = async () => {
+  // Fetch personnel
+  const fetchPersonnel = async () => {
     try {
       setLoading(true)
       const response = await fetch('/api/admin/users')
-      if (!response.ok) throw new Error('Failed to fetch users')
+      if (!response.ok) throw new Error('Failed to fetch personnel')
       const data = await response.json()
-      const usersArray = data.users || data || []
-      setUsers(usersArray)
-      setFilteredUsers(usersArray)
+      const personnelArray = data.users || data || []
+      setPersonnel(personnelArray)
+      setFilteredPersonnel(personnelArray)
     } catch (error) {
-      console.error('Error fetching users:', error)
-      toast.error('Failed to fetch users')
+      console.error('Error fetching personnel:', error)
+      toast.error('Failed to fetch personnel')
     } finally {
       setLoading(false)
     }
   }
 
-  // Filter users based on search and role
+  // Filter personnel based on search and role
   useEffect(() => {
-    let filtered = users
+    let filtered = personnel
+
+    // Filter by active/deactivated status
+    if (showDeactivated) {
+      filtered = filtered.filter(person => !person.isActive)
+    } else {
+      filtered = filtered.filter(person => person.isActive)
+    }
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(user => 
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(person => 
+        person.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        person.name?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
     // Apply role filter
     if (roleFilter !== 'ALL') {
-      filtered = filtered.filter(user => user.role === roleFilter)
+      filtered = filtered.filter(person => person.role === roleFilter)
     }
 
-    setFilteredUsers(filtered)
-  }, [users, searchTerm, roleFilter])
+    setFilteredPersonnel(filtered)
+  }, [personnel, searchTerm, roleFilter, showDeactivated])
 
-  // Load users on mount
+  // Load personnel on mount
   useEffect(() => {
-    fetchUsers()
+    fetchPersonnel()
     ;(async () => {
       try {
-        const res = await fetch('/api/admin/personnel-types')
+        console.log('Fetching personnel types from /api/admin/personnel-types...')
+        const res = await fetch('/api/admin/personnel-types', { cache: 'no-store' })
+        console.log('Personnel types response status:', res.status)
+        
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error('Failed to fetch personnel types:', res.status, errorText)
+          toast.error('Failed to load personnel types')
+          return
+        }
+        
         const data = await res.json()
+        console.log('Loaded personnel types:', data)
+        console.log('Number of personnel types:', data.length)
         setPersonnelTypes(data)
-      } catch {}
+        
+        if (data.length === 0) {
+          console.warn('No personnel types found. Please create some in Personnel Types page.')
+          toast.error('No personnel types found. Please create personnel types first.')
+        }
+      } catch (error) {
+        console.error('Error loading personnel types:', error)
+        toast.error('Failed to load personnel types')
+      }
     })()
   }, [])
 
-  // Handle create user
-  const handleCreateUser = async () => {
+  // Handle create personnel
+  const handleCreatePersonnel = async () => {
     // Validate required fields
     if (!formData.email || !formData.email.includes('@')) {
       toast.error('Please enter a valid email address')
@@ -192,7 +237,7 @@ export function UserManagement() {
       })
 
       if (!response.ok) {
-        let message = 'Failed to create user'
+        let message = 'Failed to create personnel'
         try {
           const data = await response.json()
           console.error('API Error Response:', data)
@@ -206,23 +251,23 @@ export function UserManagement() {
           message = await response.text()
         }
         toast.error(message)
-        console.error('Create user error:', message)
+        console.error('Create personnel error:', message)
         return
       }
 
-      toast.success('User created successfully')
+      toast.success('Personnel created successfully')
       setIsCreateDialogOpen(false)
       setFormData({ email: '', name: '', role: 'PERSONNEL', password: '', isActive: true })
-      fetchUsers()
+      fetchPersonnel()
     } catch (error) {
-      console.error('Error creating user:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to create user')
+      console.error('Error creating personnel:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create personnel')
     }
   }
 
-  // Handle update user
-  const handleUpdateUser = async () => {
-    if (!selectedUser) return
+  // Handle update personnel
+  const handleUpdatePersonnel = async () => {
+    if (!selectedPersonnel) return
 
     try {
       const updateData: Record<string, unknown> = { ...formData }
@@ -234,14 +279,14 @@ export function UserManagement() {
         ;(updateData as Record<string, unknown>).personnel_types_id = ''
       }
 
-      const response = await fetch(`/api/admin/users/${selectedUser.users_id}`, {
+      const response = await fetch(`/api/admin/users/${selectedPersonnel.users_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData)
       })
 
       if (!response.ok) {
-        let message = 'Failed to update user'
+        let message = 'Failed to update personnel'
         try {
           const data = await response.json()
           message = data.error || message
@@ -251,24 +296,37 @@ export function UserManagement() {
         throw new Error(message)
       }
 
-      toast.success('User updated successfully')
+      toast.success('Personnel updated successfully')
       setIsEditDialogOpen(false)
-      setSelectedUser(null)
-      fetchUsers()
+      setSelectedPersonnel(null)
+      fetchPersonnel()
     } catch (error) {
-      console.error('Error updating user:', error)
-      toast.error('Failed to update user')
+      console.error('Error updating personnel:', error)
+      toast.error('Failed to update personnel')
     }
   }
 
 
-  // Handle toggle user status
-  const handleToggleUserStatus = async (user: User) => {
+  // Handle toggle personnel status
+  const handleTogglePersonnelStatus = async (person: User) => {
+    // If trying to deactivate an ADMIN, require password confirmation
+    if (person.role === 'ADMIN' && person.isActive) {
+      setPendingDeactivation(person)
+      setShowPasswordDialog(true)
+      return
+    }
+
+    // For non-admin or reactivation, proceed directly
+    await performStatusToggle(person)
+  }
+
+  // Perform the actual status toggle
+  const performStatusToggle = async (person: User) => {
     try {
-      const response = await fetch(`/api/admin/users/${user.users_id}`, {
+      const response = await fetch(`/api/admin/users/${person.users_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...user, isActive: !user.isActive })
+        body: JSON.stringify({ ...person, isActive: !person.isActive })
       })
 
       if (!response.ok) {
@@ -276,56 +334,269 @@ export function UserManagement() {
         throw new Error(error)
       }
 
-      toast.success(`User ${!user.isActive ? 'activated' : 'deactivated'} successfully`)
-      fetchUsers()
+      toast.success(`Personnel ${!person.isActive ? 'activated' : 'deactivated'} successfully`)
+      fetchPersonnel()
     } catch (error) {
-      console.error('Error toggling user status:', error)
-      toast.error('Failed to update user status')
+      console.error('Error toggling personnel status:', error)
+      toast.error('Failed to update personnel status')
+    }
+  }
+
+  // Verify admin password and proceed with deactivation
+  const handleConfirmDeactivation = async () => {
+    if (!pendingDeactivation || !adminPassword) {
+      toast.error('Please enter your admin password')
+      return
+    }
+
+    try {
+      // Verify admin password
+      const verifyResponse = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword })
+      })
+
+      if (!verifyResponse.ok) {
+        toast.error('Incorrect admin password')
+        return
+      }
+
+      // Password verified, proceed with deactivation
+      await performStatusToggle(pendingDeactivation)
+      
+      // Close dialog and reset
+      setShowPasswordDialog(false)
+      setAdminPassword('')
+      setPendingDeactivation(null)
+    } catch (error) {
+      console.error('Error verifying password:', error)
+      toast.error('Failed to verify password')
     }
   }
 
   // Open edit dialog
-  const openEditDialog = (user: User) => {
-    setSelectedUser(user)
+  const openEditDialog = (person: User) => {
+    setSelectedPersonnel(person)
     setFormData({
-      email: user.email,
-      name: user.name || '',
-      role: user.role,
+      email: person.email,
+      name: person.name || '',
+      role: person.role,
       password: '',
-      isActive: user.isActive,
-      personnel_types_id: user.personnel_types_id || undefined
+      isActive: person.isActive,
+      personnel_types_id: person.personnel_types_id || undefined
     })
     setIsEditDialogOpen(true)
   }
 
   // Open view dialog
-  const openViewDialog = (user: User) => {
-    setSelectedUser(user)
+  const openViewDialog = (person: User) => {
+    setSelectedPersonnel(person)
     setIsViewDialogOpen(true)
+  }
+
+  // Handle select all
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedPersonnelIds(new Set(filteredPersonnel.map(p => p.users_id)))
+    } else {
+      setSelectedPersonnelIds(new Set())
+    }
+  }
+
+  // Handle individual selection
+  const handleSelectPersonnel = (personnelId: string, checked: boolean) => {
+    const newSelected = new Set(selectedPersonnelIds)
+    if (checked) {
+      newSelected.add(personnelId)
+    } else {
+      newSelected.delete(personnelId)
+    }
+    setSelectedPersonnelIds(newSelected)
+  }
+
+  // Handle bulk activate
+  const handleBulkActivate = async () => {
+    if (selectedPersonnelIds.size === 0) return
+    
+    try {
+      const promises = Array.from(selectedPersonnelIds).map(personnelId => {
+        const person = personnel.find(p => p.users_id === personnelId)
+        if (!person) return Promise.resolve()
+        
+        return fetch(`/api/admin/users/${personnelId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...person, isActive: true })
+        })
+      })
+
+      await Promise.all(promises)
+      toast.success(`Activated ${selectedPersonnelIds.size} personnel`)
+      setSelectedPersonnelIds(new Set())
+      fetchPersonnel()
+    } catch (error) {
+      console.error('Error activating personnel:', error)
+      toast.error('Failed to activate some personnel')
+    }
+  }
+
+  // Handle bulk deactivate
+  const handleBulkDeactivate = async () => {
+    if (selectedPersonnelIds.size === 0) return
+    
+    try {
+      const promises = Array.from(selectedPersonnelIds).map(personnelId => {
+        const person = personnel.find(p => p.users_id === personnelId)
+        if (!person) return Promise.resolve()
+        
+        return fetch(`/api/admin/users/${personnelId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...person, isActive: false })
+        })
+      })
+
+      await Promise.all(promises)
+      toast.success(`Deactivated ${selectedPersonnelIds.size} personnel`)
+      setSelectedPersonnelIds(new Set())
+      fetchPersonnel()
+    } catch (error) {
+      console.error('Error deactivating personnel:', error)
+      toast.error('Failed to deactivate some personnel')
+    }
+  }
+
+  // Delete flow handlers
+  const [deleteRecordCounts, setDeleteRecordCounts] = useState<{
+    attendance: number
+    payroll: number
+    loans: number
+    deductions: number
+  } | null>(null)
+
+  const handleDeleteRequest = async (person: User) => {
+    setPendingDelete(person)
+    setDeleteRecordCounts(null)
+    
+    // First check if there are related records
+    try {
+      const response = await fetch(`/api/admin/users/${person.users_id}`, {
+        method: 'DELETE'
+      })
+      
+      if (!response.ok) {
+        const data = await response.json()
+        if (data.needsForce && data.counts) {
+          setDeleteRecordCounts(data.counts)
+        }
+      }
+    } catch (error) {
+      console.error('Error checking delete:', error)
+    }
+    
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = async (force: boolean = false) => {
+    if (!pendingDelete) return
+    try {
+      const url = force 
+        ? `/api/admin/users/${pendingDelete.users_id}?force=true`
+        : `/api/admin/users/${pendingDelete.users_id}`
+        
+      const response = await fetch(url, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        let message = 'Failed to delete personnel'
+        try {
+          const data = await response.json()
+          if (data.needsForce && !force) {
+            // This shouldn't happen as we check first, but handle it
+            setDeleteRecordCounts(data.counts)
+            return
+          }
+          message = data.error || message
+        } catch {
+          message = await response.text()
+        }
+        throw new Error(message)
+      }
+
+      toast.success('Personnel deleted successfully')
+      setIsDeleteDialogOpen(false)
+      setPendingDelete(null)
+      setDeleteRecordCounts(null)
+      fetchPersonnel()
+    } catch (error) {
+      console.error('Error deleting personnel:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete personnel')
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setIsDeleteDialogOpen(false)
+    setPendingDelete(null)
+    setDeleteRecordCounts(null)
   }
 
   return (
     <div className="space-y-6">
       {/* Header Section */}
       <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-        <div className="flex items-center space-x-2">
-          <Button onClick={fetchUsers} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+        <div className="flex items-center space-x-2 flex-wrap gap-2">
+          {selectedPersonnelIds.size > 0 && (
+            <Badge variant="secondary" className="px-3 py-1">
+              {selectedPersonnelIds.size} selected
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center space-x-2 flex-wrap gap-2">
+          {selectedPersonnelIds.size > 0 && (
+            <>
+              <Button 
+                onClick={handleBulkActivate} 
+                variant="outline" 
+                size="sm"
+                className="text-green-600 hover:text-green-700"
+              >
+                <UserCheck className="h-4 w-4 mr-2" />
+                Activate
+              </Button>
+              <Button 
+                onClick={handleBulkDeactivate} 
+                variant="outline" 
+                size="sm"
+                className="text-red-600 hover:text-red-700"
+              >
+                <UserX className="h-4 w-4 mr-2" />
+                Deactivate
+              </Button>
+            </>
+          )}
+          <Button 
+            onClick={() => setShowDeactivated(!showDeactivated)} 
+            variant={showDeactivated ? "default" : "outline"}
+            size="sm"
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            {showDeactivated ? 'Show Active' : 'Show Deactivated'}
           </Button>
           <SSRSafe>
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add User
+                  Add Personnel
                 </Button>
               </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>Create New Personnel</DialogTitle>
                 <DialogDescription>
-                  Add a new user to the system with their role and permissions.
+                  Add new personnel to the system with their role and permissions.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -381,9 +652,12 @@ export function UserManagement() {
                   <Label htmlFor="create-personnel-type">Position</Label>
                   <Select
                     value={formData.personnel_types_id || 'none'}
-                    onValueChange={(value) => 
+                    onValueChange={(value) => {
+                      console.log('Selected position:', value)
+                      const selectedType = personnelTypes.find(t => t.personnel_types_id === value)
+                      console.log('Selected type details:', selectedType)
                       setFormData({ ...formData, personnel_types_id: value === "none" ? undefined : value })
-                    }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select position" />
@@ -398,13 +672,22 @@ export function UserManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="create-department">Department</Label>
+                  <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                    {formData.personnel_types_id && formData.personnel_types_id !== 'none' 
+                      ? (personnelTypes.find(t => t.personnel_types_id === formData.personnel_types_id)?.department || 'No department assigned')
+                      : 'Select a position first'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Department is set by the position. To change it, update the position settings.</p>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreateUser}>
-                  Create User
+                <Button onClick={handleCreatePersonnel}>
+                  Create Personnel
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -421,7 +704,7 @@ export function UserManagement() {
         <CardContent>
           <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-x-4 md:space-y-0">
             <div className="flex-1">
-              <Label htmlFor="search">Search Users</Label>
+              <Label htmlFor="search">Search Personnel</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -452,26 +735,37 @@ export function UserManagement() {
         </CardContent>
       </Card>
 
-      {/* Users Table */}
+      {/* Personnel Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Users ({filteredUsers.length})</CardTitle>
+          <CardTitle>
+            {showDeactivated ? 'Deactivated Personnel' : 'Active Personnel'} ({filteredPersonnel.length})
+          </CardTitle>
           <CardDescription>
-            Showing {filteredUsers.length} of {users.length} users
+            Showing {filteredPersonnel.length} of {showDeactivated ? personnel.filter(p => !p.isActive).length : personnel.filter(p => p.isActive).length} {showDeactivated ? 'deactivated' : 'active'} personnel
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-8">Loading users...</div>
+            <div className="flex justify-center py-8">Loading personnel...</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={filteredPersonnel.length > 0 && selectedPersonnelIds.size === filteredPersonnel.length}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead>Profile</TableHead>
-                  <TableHead>User ID</TableHead>
+                  <TableHead>Personnel ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead>Position</TableHead>
+                  <TableHead>Personnel Type</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -479,39 +773,66 @@ export function UserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.users_id}>
+                {filteredPersonnel.map((person) => (
+                  <TableRow key={person.users_id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedPersonnelIds.has(person.users_id)}
+                        onCheckedChange={(checked) => handleSelectPersonnel(person.users_id, checked as boolean)}
+                        aria-label={`Select ${person.name || person.email}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="" />
                         <AvatarFallback className="text-xs">
-                          {getInitials(user.name, user.email)}
+                          {getInitials(person.name, person.email)}
                         </AvatarFallback>
                       </Avatar>
                     </TableCell>
                     <TableCell className="font-mono text-sm">
-                      {user.users_id}
+                      {person.users_id}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {user.name || 'No name set'}
+                      {person.name || 'No name set'}
                     </TableCell>
-                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{person.email}</TableCell>
+                    <TableCell>
+                      <div className="max-w-[220px] truncate text-muted-foreground text-xs">
+                        {person.personnelType?.department || '-'}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {user.personnelType?.name || 'N/A'}
+                        {person.personnelType?.name || 'N/A'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'}>
-                        {user.role}
+                      {person.personnelType?.type ? (
+                        <Badge 
+                          variant={person.personnelType.type === 'TEACHING' ? 'default' : 'secondary'}
+                          className={person.personnelType.type === 'TEACHING' 
+                            ? 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' 
+                            : 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800'
+                          }
+                        >
+                          {person.personnelType.type === 'TEACHING' ? 'Teaching' : 'Non-Teaching'}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={person.role === 'ADMIN' ? 'default' : 'secondary'}>
+                        {person.role}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        <Badge variant={user.isActive ? 'default' : 'destructive'}>
-                          {user.isActive ? 'Active' : 'Inactive'}
+                        <Badge variant={person.isActive ? 'default' : 'destructive'}>
+                          {person.isActive ? 'Active' : 'Inactive'}
                         </Badge>
-                        {user.currentLeave && (
+                        {person.currentLeave && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -521,9 +842,9 @@ export function UserManagement() {
                               </TooltipTrigger>
                               <TooltipContent>
                                 <div className="text-xs">
-                                  <p className="font-semibold">{user.currentLeave.type}</p>
-                                  <p>{new Date(user.currentLeave.startDate).toLocaleDateString()} - {new Date(user.currentLeave.endDate).toLocaleDateString()}</p>
-                                  <p className="text-muted-foreground">{user.currentLeave.isPaid ? 'Paid' : 'Unpaid'}</p>
+                                  <p className="font-semibold">{person.currentLeave.type}</p>
+                                  <p>{new Date(person.currentLeave.startDate).toLocaleDateString()} - {new Date(person.currentLeave.endDate).toLocaleDateString()}</p>
+                                  <p className="text-muted-foreground">{person.currentLeave.isPaid ? 'Paid' : 'Unpaid'}</p>
                                 </div>
                               </TooltipContent>
                             </Tooltip>
@@ -532,7 +853,7 @@ export function UserManagement() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {new Date(user.createdAt).toLocaleDateString()}
+                      {new Date(person.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -542,31 +863,35 @@ export function UserManagement() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openViewDialog(user)}>
+                          <DropdownMenuItem onClick={() => openViewDialog(person)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEditDialog(user)}>
+                          <DropdownMenuItem onClick={() => openEditDialog(person)}>
                             <Edit className="mr-2 h-4 w-4" />
-                            Edit User
+                            Edit Personnel
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleUserStatus(user)}>
-                            {user.isActive ? (
+                          <DropdownMenuItem onClick={() => handleTogglePersonnelStatus(person)}>
+                            {person.isActive ? (
                               <UserX className="mr-2 h-4 w-4" />
                             ) : (
                               <UserCheck className="mr-2 h-4 w-4" />
                             )}
-                            {user.isActive ? 'Deactivate' : 'Activate'}
+                            {person.isActive ? 'Deactivate' : 'Activate'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDeleteRequest(person)} className="text-red-600 focus:text-red-700">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredUsers.length === 0 && (
+                {filteredPersonnel.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">
-                      No users found matching your criteria.
+                    <TableCell colSpan={12} className="text-center py-8">
+                      No personnel found matching your criteria.
                     </TableCell>
                   </TableRow>
                 )}
@@ -576,14 +901,14 @@ export function UserManagement() {
         </CardContent>
       </Card>
 
-      {/* Edit User Dialog */}
+      {/* Edit Personnel Dialog */}
       <SSRSafe>
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Edit Personnel</DialogTitle>
             <DialogDescription>
-              Update user information and permissions.
+              Update personnel information and permissions.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -652,64 +977,73 @@ export function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-department">Department</Label>
+              <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                {formData.personnel_types_id && formData.personnel_types_id !== 'none' 
+                  ? (personnelTypes.find(t => t.personnel_types_id === formData.personnel_types_id)?.department || 'No department assigned')
+                  : 'Select a position first'}
+              </div>
+              <p className="text-xs text-muted-foreground">Department is set by the position. To change it, update the position settings.</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateUser}>
-              Update User
+            <Button onClick={handleUpdatePersonnel}>
+              Update Personnel
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       </SSRSafe>
 
-      {/* View User Dialog */}
+      {/* View Personnel Dialog */}
       <SSRSafe>
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
+            <DialogTitle>Personnel Details</DialogTitle>
             <DialogDescription>
-              View detailed information about this user.
+              View detailed information about this personnel.
             </DialogDescription>
           </DialogHeader>
-          {selectedUser && (
+          {selectedPersonnel && (
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label>User ID</Label>
+                <Label>Personnel ID</Label>
                 <div className="text-sm text-muted-foreground font-mono">
-                  {selectedUser.users_id}
+                  {selectedPersonnel.users_id}
                 </div>
               </div>
               <div className="grid gap-2">
                 <Label>Email</Label>
-                <div>{selectedUser.email}</div>
+                <div>{selectedPersonnel.email}</div>
               </div>
               <div className="grid gap-2">
                 <Label>Full Name</Label>
-                <div>{selectedUser.name || 'No name set'}</div>
+                <div>{selectedPersonnel.name || 'No name set'}</div>
               </div>
               <div className="grid gap-2">
                 <Label>Role</Label>
-                <Badge variant={selectedUser.role === 'ADMIN' ? 'default' : 'secondary'}>
-                  {selectedUser.role}
+                <Badge variant={selectedPersonnel.role === 'ADMIN' ? 'default' : 'secondary'}>
+                  {selectedPersonnel.role}
                 </Badge>
               </div>
               <div className="grid gap-2">
                 <Label>Status</Label>
-                <Badge variant={selectedUser.isActive ? 'default' : 'destructive'}>
-                  {selectedUser.isActive ? 'Active' : 'Inactive'}
+                <Badge variant={selectedPersonnel.isActive ? 'default' : 'destructive'}>
+                  {selectedPersonnel.isActive ? 'Active' : 'Inactive'}
                 </Badge>
               </div>
               <div className="grid gap-2">
                 <Label>Created</Label>
-                <div>{new Date(selectedUser.createdAt).toLocaleString()}</div>
+                <div>{new Date(selectedPersonnel.createdAt).toLocaleString()}</div>
               </div>
               <div className="grid gap-2">
                 <Label>Last Updated</Label>
-                <div>{new Date(selectedUser.updatedAt).toLocaleString()}</div>
+                <div>{new Date(selectedPersonnel.updatedAt).toLocaleString()}</div>
               </div>
             </div>
           )}
@@ -721,6 +1055,196 @@ export function UserManagement() {
         </DialogContent>
       </Dialog>
       </SSRSafe>
+
+      {/* Delete Confirmation Dialog */}
+      <SSRSafe>
+        <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open)
+          if (!open) {
+            setPendingDelete(null)
+            setDeleteRecordCounts(null)
+          }
+        }}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+                Delete Personnel
+              </DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. This will permanently delete the personnel account.
+              </DialogDescription>
+            </DialogHeader>
+            {pendingDelete && (
+              <div className="space-y-4 py-2">
+                <div className="text-sm">
+                  Are you sure you want to delete
+                  {' '}
+                  <span className="font-semibold">{pendingDelete.name || pendingDelete.email}</span>
+                  ?
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  ID: <span className="font-mono">{pendingDelete.users_id}</span>
+                </div>
+                
+                {deleteRecordCounts && (
+                  <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <p className="text-sm font-semibold text-red-900 dark:text-red-100 mb-3">
+                      ⚠️ Warning: This personnel has existing records
+                    </p>
+                    <div className="space-y-2 text-sm text-red-800 dark:text-red-200">
+                      {deleteRecordCounts.attendance > 0 && (
+                        <div className="flex justify-between">
+                          <span>Attendance records:</span>
+                          <span className="font-semibold">{deleteRecordCounts.attendance}</span>
+                        </div>
+                      )}
+                      {deleteRecordCounts.payroll > 0 && (
+                        <div className="flex justify-between">
+                          <span>Payroll entries:</span>
+                          <span className="font-semibold">{deleteRecordCounts.payroll}</span>
+                        </div>
+                      )}
+                      {deleteRecordCounts.loans > 0 && (
+                        <div className="flex justify-between">
+                          <span>Loans:</span>
+                          <span className="font-semibold">{deleteRecordCounts.loans}</span>
+                        </div>
+                      )}
+                      {deleteRecordCounts.deductions > 0 && (
+                        <div className="flex justify-between">
+                          <span>Deductions:</span>
+                          <span className="font-semibold">{deleteRecordCounts.deductions}</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-red-700 dark:text-red-300 mt-3 font-medium">
+                      All of these records will be permanently deleted. This action cannot be undone.
+                    </p>
+                  </div>
+                )}
+                
+                {!deleteRecordCounts && (
+                  <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                      This personnel has no attendance, payroll, loan, or deduction records.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={handleCancelDelete} className="w-full sm:w-auto">
+                Cancel
+              </Button>
+              {deleteRecordCounts ? (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => handleConfirmDelete(true)}
+                  className="w-full sm:w-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Force Delete All
+                </Button>
+              ) : (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => handleConfirmDelete(false)}
+                  className="w-full sm:w-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Personnel
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </SSRSafe>
+
+      {/* Admin Password Confirmation Dialog */}
+      <SSRSafe>
+        <Dialog open={showPasswordDialog} onOpenChange={(open) => {
+          setShowPasswordDialog(open)
+          if (!open) {
+            setAdminPassword('')
+            setPendingDeactivation(null)
+          }
+        }}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <UserX className="h-5 w-5" />
+                Deactivate Admin Account
+              </DialogTitle>
+              <DialogDescription>
+                You are about to deactivate an <strong>ADMIN</strong> account. This is a sensitive action that requires verification.
+              </DialogDescription>
+            </DialogHeader>
+            {pendingDeactivation && (
+              <div className="space-y-4 py-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-amber-900 mb-2">Account to be deactivated:</p>
+                  <div className="flex items-center gap-3">
+                    <Avatar>
+                      <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${pendingDeactivation.name || pendingDeactivation.email}`} />
+                      <AvatarFallback>{getInitials(pendingDeactivation.name, pendingDeactivation.email)}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-amber-900">{pendingDeactivation.name || pendingDeactivation.email}</p>
+                      <p className="text-sm text-amber-700">{pendingDeactivation.email}</p>
+                      <Badge variant="destructive" className="mt-1">ADMIN</Badge>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="admin-password" className="text-sm font-medium">
+                    Enter your admin password to confirm
+                  </Label>
+                  <Input
+                    id="admin-password"
+                    type="password"
+                    placeholder="Admin password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleConfirmDeactivation()
+                      }
+                    }}
+                    className="border-red-200 focus:border-red-500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This verification ensures only authorized admins can deactivate admin accounts.
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowPasswordDialog(false)
+                  setAdminPassword('')
+                  setPendingDeactivation(null)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={handleConfirmDeactivation}
+                disabled={!adminPassword}
+              >
+                <UserX className="h-4 w-4 mr-2" />
+                Confirm Deactivation
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </SSRSafe>
     </div>
   )
 }
+
+

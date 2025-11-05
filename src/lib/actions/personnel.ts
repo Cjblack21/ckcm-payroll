@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache"
 export type PersonnelType = {
   personnel_types_id: string
   name: string
+  type?: string | null
+  department?: string | null
   basicSalary: number
   isActive: boolean
   createdAt: Date
@@ -274,6 +276,8 @@ export async function getPersonnelTypes(): Promise<{
 // Server Action: Create personnel type
 export async function createPersonnelType(data: {
   name: string
+  type?: string
+  department?: string
   basicSalary: number
   isActive?: boolean
 }): Promise<{
@@ -291,6 +295,8 @@ export async function createPersonnelType(data: {
     const personnelType = await prisma.personnelType.create({
       data: {
         name: data.name,
+        type: data.type,
+        department: data.department,
         basicSalary: data.basicSalary,
         isActive: data.isActive ?? true
       }
@@ -306,7 +312,14 @@ export async function createPersonnelType(data: {
     return { success: true, personnelType: serializedPersonnelType }
   } catch (error) {
     console.error('Error in createPersonnelType:', error)
-    return { success: false, error: 'Failed to create personnel type' }
+    
+    // Handle duplicate name error
+    if (error instanceof Error && error.message.includes('Unique constraint failed') && error.message.includes('personnel_types_name_key')) {
+      return { success: false, error: `A position named "${data.name}" already exists. Please use a different name.` }
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create personnel type'
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -315,6 +328,8 @@ export async function updatePersonnelType(
   personnelTypesId: string,
   data: {
     name?: string
+    type?: string
+    department?: string
     basicSalary?: number
     isActive?: boolean
   }
@@ -334,6 +349,8 @@ export async function updatePersonnelType(
       where: { personnel_types_id: personnelTypesId },
       data: {
         ...(data.name && { name: data.name }),
+        ...(data.type !== undefined && { type: data.type }),
+        ...(data.department !== undefined && { department: data.department }),
         ...(data.basicSalary !== undefined && { basicSalary: data.basicSalary }),
         ...(data.isActive !== undefined && { isActive: data.isActive })
       }

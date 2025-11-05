@@ -1,0 +1,97 @@
+import { PrismaClient } from '@prisma/client'
+import { getTodayRangeInPhilippines, getNowInPhilippines } from '../src/lib/timezone'
+import { calculateAbsenceDeduction } from '../src/lib/attendance-calculations'
+
+const prisma = new PrismaClient()
+
+async function triggerAutoMarkAbsent() {
+  try {
+    console.log('🔧 Manually triggering auto-mark-absent logic...\n')
+    
+    // Get attendance settings
+    const settings = await prisma.attendanceSettings.findFirst()
+    if (!settings || !settings.timeOutEnd) {
+      console.log('❌ No attendance settings or timeOutEnd found')
+      return
+    }
+    
+    console.log(`✅ Cutoff time: ${settings.timeOutEnd}`)
+    
+    // Get current time in Philippines
+    const nowPH = getNowInPhilippines()
+    const nowHH = nowPH.getHours().toString().padStart(2, '0')
+    const nowMM = nowPH.getMinutes().toString().padStart(2, '0')
+    const nowHHmm = `${nowHH}:${nowMM}`
+    
+    console.log(`⏰ Current time (PH): ${nowHHmm}`)
+    
+    // Check if we're past cutoff
+    const isPastCutoff = nowHHmm > settings.timeOutEnd
+    
+    if (!isPastCutoff) {
+      console.log('✅ Current time is BEFORE cutoff, no action needed')
+      return
+    }
+    
+    console.log('⚠️  Current time is AFTER cutoff - marking absent...\n')
+    
+    // Get today's date range
+    const { start: startOfToday, end: endOfToday } = getTodayRangeInPhilippines()
+    
+    console.log(`📅 Today: ${startOfToday.toISOString().split('T')[0]}`)
+    
+    // Get all active personnel
+    const activeUsers = await prisma.user.findMany({
+      where: { isActive: true, role: 'PERSONNEL' },
+      include: { personnelType: true }
+    })
+    
+    // Get attendance records for today
+    const todayRecords = await prisma.attendance.findMany({
+      where: {
+        date: { gte: startOfToday, lte: endOfToday }
+      }
+    })
+    
+    const recordMap = new Map(todayRecords.map(r => [r.users_id, r]))
+    
+    let markedCount = 0
+    
+    for (const user of activeUsers) {
+      const record = recordMap.get(user.users_id)
+      const basicSalary = Number(user.personnelType?.basicSalary || 0)
+      
+      if (!record || record.status === 'PENDING') {
+        // Mark as absent
+        if (record) {
+          await prisma.attendance.update({
+            where: { attendances_id: record.attendances_id },
+            data: { status: 'ABSENT' }
+          })
+          console.log(`✅ Updated ${user.name}: PENDING → ABSENT`)
+        } else {
+          await prisma.attendance.create({
+            data: {
+              users_id: user.users_id,
+              date: new Date(startOfToday),
+              status: 'ABSENT'
+            }
+          })
+          console.log(`✅ Created ABSENT record for ${user.name}`)
+        }
+        
+        markedCount++
+      }
+    }
+    
+    console.log(`\n✅ Marked ${markedCount} user(s) as ABSENT`)
+    console.log('💡 Refresh your pages to see the updated status')
+    
+  } catch (error) {
+    console.error('❌ Error:', error)
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
+triggerAutoMarkAbsent()

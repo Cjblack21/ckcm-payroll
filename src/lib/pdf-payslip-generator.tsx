@@ -175,13 +175,13 @@ export interface PayslipData {
     overtimePay: number
     attendanceDeductions: number
     nonAttendanceDeductions: number
-    unpaidLeaveDeduction?: number
-    unpaidLeaveDays?: number
     loanPayments: number
     grossPay: number
     totalDeductions: number
     netPay: number
     deductionDetails: any[]
+    loanDetails?: any[]
+    otherDeductionDetails?: any[]
   }
 }
 
@@ -282,35 +282,66 @@ const Payslip: React.FC<PayslipProps> = ({ employee, period, headerSettings }) =
                 -₱{(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </Text>
             </View>
-            {breakdown.unpaidLeaveDeduction && breakdown.unpaidLeaveDeduction > 0 && (
-              <View style={styles.payrollRow}>
-                <Text style={styles.payrollLabel}>Unpaid Leave ({breakdown.unpaidLeaveDays}d):</Text>
-                <Text style={styles.payrollValue}>
-                  -₱{(breakdown.unpaidLeaveDeduction || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </Text>
-              </View>
-            )}
-            <View style={styles.payrollRow}>
-              <Text style={styles.payrollLabel}>Loans:</Text>
-              <Text style={styles.payrollValue}>
-                -₱{(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-            {breakdown.deductionDetails && breakdown.deductionDetails.length > 0 && (
+            {/* Loan Details Section */}
+            {breakdown.loanDetails && breakdown.loanDetails.length > 0 ? (
               <View style={{ marginTop: 2, paddingTop: 2, borderTop: '1pt solid #eee' }}>
-                <Text style={{ fontSize: 5, fontWeight: 'bold', marginBottom: 1 }}>Deduction Details:</Text>
-                {breakdown.deductionDetails.map((deduction: any, index: number) => (
+                <Text style={{ fontSize: 6, fontWeight: 'bold', marginBottom: 1, color: '#d97706' }}>Loan Payments:</Text>
+                {breakdown.loanDetails.map((loan: any, index: number) => (
                   <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 0.5 }}>
-                    <Text style={{ fontSize: 5, maxWidth: '60%' }}>
-                      {deduction.type}:
+                    <Text style={{ fontSize: 5, maxWidth: '65%', color: '#666' }}>
+                      {loan.description || loan.type || 'Loan Payment'}
                     </Text>
-                    <Text style={{ fontSize: 5 }}>
-                      -₱{deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    <Text style={{ fontSize: 5, fontWeight: 'bold', color: '#d97706' }}>
+                      -₱{(loan.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </Text>
                   </View>
                 ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 1, paddingTop: 1, borderTop: '0.5pt solid #ddd' }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>Total Loans:</Text>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold', color: '#d97706' }}>
+                    -₱{(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.payrollRow}>
+                <Text style={styles.payrollLabel}>Loans:</Text>
+                <Text style={styles.payrollValue}>
+                  -₱{(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </Text>
               </View>
             )}
+            
+            {/* Other Deductions Section */}
+            {(breakdown.otherDeductionDetails && breakdown.otherDeductionDetails.length > 0) || 
+             (breakdown.deductionDetails && breakdown.deductionDetails.length > 0) ? (
+              <View style={{ marginTop: 2, paddingTop: 2, borderTop: '1pt solid #eee' }}>
+                <Text style={{ fontSize: 6, fontWeight: 'bold', marginBottom: 1, color: '#7c3aed' }}>Other Deductions:</Text>
+                {(breakdown.otherDeductionDetails || breakdown.deductionDetails || []).map((deduction: any, index: number) => (
+                  <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 0.5 }}>
+                    <Text style={{ fontSize: 5, maxWidth: '65%', color: '#666' }}>
+                      {deduction.type || deduction.description || 'Deduction'}
+                    </Text>
+                    <Text style={{ fontSize: 5, fontWeight: 'bold', color: '#7c3aed' }}>
+                      -₱{(deduction.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 1, paddingTop: 1, borderTop: '0.5pt solid #ddd' }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>Total Other Ded:</Text>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold', color: '#7c3aed' }}>
+                    -₱{(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              </View>
+            ) : breakdown.nonAttendanceDeductions > 0 ? (
+              <View style={styles.payrollRow}>
+                <Text style={styles.payrollLabel}>Other Ded:</Text>
+                <Text style={styles.payrollValue}>
+                  -₱{(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.totalDeductionsRow}>
               <Text style={styles.payrollLabel}>Total Ded:</Text>
               <Text style={styles.payrollValue}>

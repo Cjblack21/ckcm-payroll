@@ -38,6 +38,8 @@ export async function GET() {
       select: {
         personnel_types_id: true,
         name: true,
+        type: true,
+        department: true,
         basicSalary: true,
         isActive: true
       }

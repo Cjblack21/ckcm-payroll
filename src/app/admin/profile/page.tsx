@@ -172,12 +172,10 @@ export default function AdminProfile() {
       }
 
       toast.success('Profile picture updated successfully!')
-      // Refresh profile data
-      const res = await fetch('/api/admin/profile')
-      if (res.ok) {
-        const profileData = await res.json()
-        setData(profileData)
-      }
+      // Reload the page to update sidebar avatar and session
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error) {
       console.error('Error uploading photo:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to upload photo')
@@ -202,12 +200,10 @@ export default function AdminProfile() {
       }
 
       toast.success('Profile picture removed successfully!')
-      // Refresh profile data
-      const res = await fetch('/api/admin/profile')
-      if (res.ok) {
-        const profileData = await res.json()
-        setData(profileData)
-      }
+      // Reload the page to update sidebar avatar and session
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error) {
       console.error('Error removing photo:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to remove photo')
@@ -489,7 +485,7 @@ export default function AdminProfile() {
                     <div className="text-sm text-muted-foreground">Choose your display theme</div>
                   </div>
                   <select 
-                    className="border rounded-md px-3 py-2"
+                    className="border rounded-md px-3 py-2 bg-card text-card-foreground dark:border-border"
                     value={settings.theme}
                     onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
                   >
@@ -504,9 +500,14 @@ export default function AdminProfile() {
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Notifications</Label>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center justify-between p-4 border rounded-lg opacity-60">
                     <div>
-                      <div className="font-medium">Email Notifications</div>
+                      <div className="font-medium flex items-center gap-2">
+                        Email Notifications
+                        <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 px-2 py-0.5 rounded">
+                          Work in progress
+                        </span>
+                      </div>
                       <div className="text-sm text-muted-foreground">Receive email updates about your account</div>
                     </div>
                     <input 
@@ -514,6 +515,7 @@ export default function AdminProfile() {
                       className="h-4 w-4" 
                       checked={settings.emailNotifications}
                       onChange={(e) => setSettings({ ...settings, emailNotifications: e.target.checked })}
+                      disabled
                     />
                   </div>
                   <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -553,7 +555,7 @@ export default function AdminProfile() {
                       <div className="text-sm text-muted-foreground">Select your preferred language</div>
                     </div>
                     <select 
-                      className="border rounded-md px-3 py-2"
+                      className="border rounded-md px-3 py-2 bg-card text-card-foreground dark:border-border"
                       value={settings.language}
                       onChange={(e) => setSettings({ ...settings, language: e.target.value })}
                     >

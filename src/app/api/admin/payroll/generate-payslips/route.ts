@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { generatePayslipsHTML, getHeaderSettings } from '@/lib/payslip-generator'
 
-export async function POST(request: NextRequest) {
+async function handlePayslipGeneration(periodStart: string | null, periodEnd: string | null, userId: string | null) {
   try {
     const session = await getServerSession(authOptions)
     
@@ -11,10 +12,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { periodStart, periodEnd } = await request.json()
-
     // Get header settings for payslip generation
-    const headerSettings = await prisma.headerSettings.findFirst()
+    const headerSettings = await getHeaderSettings()
     
     if (!headerSettings) {
       return NextResponse.json({ error: 'Header settings not configured' }, { status: 400 })
@@ -42,12 +41,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get released payroll entries
+    // Get released payroll entries with all necessary data
     const payrollEntries = await prisma.payrollEntry.findMany({
       where: {
         periodStart: startDate,
         periodEnd: endDate,
-        status: 'RELEASED'
+        status: 'RELEASED',
+        ...(userId ? { users_id: userId } : {})
       },
       include: {
         user: {
@@ -62,233 +62,147 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No released payroll entries found for this period' }, { status: 400 })
     }
 
-    // Generate payslips HTML for Long Bond Paper (8.5 × 13 in)
-    const payslipsPerPage = 6
-    const payslipHeight = 2.1 // inches
-    const pageMargin = 0.2 // inches
-    
-    let html = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Payslips - ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}</title>
-    <style>
-        @page {
-            size: 8.5in 13in;
-            margin: 0.2in;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            font-size: 8px;
-        }
-        
-        .payslip {
-            width: 3.7in;
-            height: 2.1in;
-            border: 1px solid #000;
-            margin-bottom: 0.05in;
-            margin-right: 0.1in;
-            page-break-inside: avoid;
-            display: flex;
-            flex-direction: column;
-            padding: 0.05in;
-            box-sizing: border-box;
-            float: left;
-        }
-        
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #000;
-            padding-bottom: 0.05in;
-            margin-bottom: 0.05in;
-        }
-        
-        .company-info {
-            text-align: center;
-            flex: 1;
-        }
-        
-        .company-logo {
-            width: 0.5in;
-            height: 0.5in;
-            object-fit: contain;
-        }
-        
-        .company-name {
-            font-size: 12px;
-            font-weight: bold;
-            margin: 0;
-        }
-        
-        .company-address {
-            font-size: 8px;
-            margin: 0;
-        }
-        
-        .payslip-title {
-            font-size: 14px;
-            font-weight: bold;
-            text-align: center;
-        }
-        
-        .employee-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.05in;
-        }
-        
-        .info-section {
-            flex: 1;
-        }
-        
-        .info-row {
-            display: flex;
-            margin-bottom: 0.02in;
-        }
-        
-        .info-label {
-            font-weight: bold;
-            width: 1.2in;
-        }
-        
-        .info-value {
-            flex: 1;
-        }
-        
-        .earnings-deductions {
-            display: flex;
-            flex: 1;
-        }
-        
-        .earnings, .deductions {
-            flex: 1;
-            margin: 0 0.05in;
-        }
-        
-        .section-title {
-            font-weight: bold;
-            border-bottom: 1px solid #000;
-            margin-bottom: 0.03in;
-            padding-bottom: 0.02in;
-        }
-        
-        .amount-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.02in;
-        }
-        
-        .net-pay {
-            border-top: 2px solid #000;
-            padding-top: 0.03in;
-            margin-top: 0.05in;
-            font-weight: bold;
-            font-size: 11px;
-        }
-        
-        .net-pay-row {
-            display: flex;
-            justify-content: space-between;
-            background-color: #f0f0f0;
-            padding: 0.02in;
-        }
-        
-        .page-break {
-            page-break-before: always;
-        }
-    </style>
-</head>
-<body>`
-
-    // Generate payslips in groups of 6
-    for (let i = 0; i < payrollEntries.length; i += payslipsPerPage) {
-      const pageEntries = payrollEntries.slice(i, i + payslipsPerPage)
-      
-      pageEntries.forEach((entry, index) => {
-        html += `
-        <div class="payslip">
-            <div class="header">
-                <div class="company-info">
-                    ${headerSettings.showLogo ? `<img src="${headerSettings.logoUrl}" alt="Logo" class="company-logo">` : ''}
-                    <div class="company-name">${headerSettings.schoolName}</div>
-                    <div class="company-address">${headerSettings.schoolAddress}</div>
-                </div>
-                <div class="payslip-title">PAYSLIP</div>
-            </div>
-            
-            <div class="employee-info">
-                <div class="info-section">
-                    <div class="info-row">
-                        <div class="info-label">Employee:</div>
-                        <div class="info-value">${entry.user.name || entry.user.email}</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Email:</div>
-                        <div class="info-value">${entry.user.email}</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">Period:</div>
-                        <div class="info-value">${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="earnings-deductions">
-                <div class="earnings">
-                    <div class="section-title">EARNINGS</div>
-                    <div class="amount-row">
-                        <span>Total Work Hours:</span>
-                        <span>8h</span>
-                    </div>
-                    <div class="amount-row">
-                        <span>Basic Salary:</span>
-                        <span>₱${Number(entry.basicSalary).toLocaleString()}</span>
-                    </div>
-                </div>
-                
-                <div class="deductions">
-                    <div class="section-title">DEDUCTIONS</div>
-                    <div class="amount-row">
-                        <span>Attendance Deductions:</span>
-                        <span>₱${Number(entry.deductions).toLocaleString()}</span>
-                    </div>
-                    <div class="amount-row">
-                        <span>Loan Payments:</span>
-                        <span>₱0</span>
-                    </div>
-                    <div class="amount-row">
-                        <span>Total Deductions:</span>
-                        <span>₱${Number(entry.deductions).toLocaleString()}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="net-pay">
-                <div class="net-pay-row">
-                    <span>FINAL NET PAY:</span>
-                    <span>₱${Number(entry.netPay).toLocaleString()}</span>
-                </div>
-            </div>
-        </div>`
+    // Fetch detailed breakdown data for each employee
+    const payslipData = await Promise.all(payrollEntries.map(async (entry) => {
+      // Get attendance records for the period
+      const attendanceRecords = await prisma.attendance.findMany({
+        where: {
+          users_id: entry.users_id,
+          date: {
+            gte: startDate,
+            lte: endDate
+          }
+        },
+        orderBy: { date: 'asc' }
       })
+
+      // Get deductions for this user
+      // For mandatory deductions (PhilHealth, SSS, Pag-IBIG), don't filter by date - they apply to every period
+      // For other deductions, only include those within the current period
+      const deductionRecords = await prisma.deduction.findMany({
+        where: {
+          users_id: entry.users_id,
+          OR: [
+            // Mandatory deductions - always include
+            {
+              deductionType: {
+                isMandatory: true
+              }
+            },
+            // Other deductions - only within period
+            {
+              deductionType: {
+                isMandatory: false
+              },
+              appliedAt: {
+                gte: startDate,
+                lte: endDate
+              }
+            }
+          ]
+        },
+        include: {
+          deductionType: true
+        }
+      })
+
+      // Get active loans
+      const loanRecords = await prisma.loan.findMany({
+        where: {
+          users_id: entry.users_id,
+          status: 'ACTIVE'
+        }
+      })
+
+      // Calculate period factor for loan payments
+      const periodDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      const loanFactor = periodDays <= 16 ? 0.5 : 1.0
+
+      // Build loan details
+      const loanDetails = loanRecords.map(loan => {
+        const monthlyPayment = Number(loan.amount) * Number(loan.monthlyPaymentPercent) / 100
+        const periodPayment = monthlyPayment * loanFactor
+        return {
+          type: 'Loan Payment',
+          amount: periodPayment,
+          description: `${loan.purpose} (${loan.monthlyPaymentPercent}% of ₱${Number(loan.amount).toLocaleString()})`,
+          remainingBalance: Number(loan.balance)
+        }
+      })
+
+      // Build deduction details (excluding attendance-related deductions)
+      const otherDeductionDetails = deductionRecords
+        .filter(d => 
+          !d.deductionType.name.includes('Late') &&
+          !d.deductionType.name.includes('Absent') &&
+          !d.deductionType.name.includes('Early') &&
+          !d.deductionType.name.includes('Partial') &&
+          !d.deductionType.name.includes('Tardiness')
+        )
+        .map(deduction => ({
+          type: deduction.deductionType.name,
+          amount: Number(deduction.amount),
+          description: deduction.deductionType.description || deduction.notes || '',
+          calculationType: deduction.deductionType.calculationType,
+          percentageValue: deduction.deductionType.percentageValue ? Number(deduction.deductionType.percentageValue) : undefined,
+          isMandatory: deduction.deductionType.isMandatory
+        }))
+
+      // USE BREAKDOWN DATA ONLY - NO RECALCULATION
+      const storedBreakdown = entry.breakdown as any
+      const attendanceDeductionDetails = storedBreakdown?.attendanceDeductionDetails || []
+      const totalAttendanceDeductions = storedBreakdown?.totalAttendanceDeductions || 0
       
-      // Add page break if there are more pages
-      if (i + payslipsPerPage < payrollEntries.length) {
-        html += '<div class="page-break"></div>'
+      // Calculate total work hours from attendance records
+      const totalWorkHours = attendanceRecords.reduce((sum, record) => {
+        let hours = 0
+        if (record.timeIn && record.timeOut) {
+          const timeIn = new Date(record.timeIn)
+          const timeOut = new Date(record.timeOut)
+          hours = Math.max(0, (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60))
+        }
+        return sum + hours
+      }, 0)
+
+      const totalLoanPayments = loanDetails.reduce((sum, loan) => sum + loan.amount, 0)
+      const totalOtherDeductions = otherDeductionDetails.reduce((sum, ded) => sum + ded.amount, 0)
+
+      return {
+        users_id: entry.users_id,
+        name: entry.user.name,
+        email: entry.user.email,
+        totalHours: totalWorkHours,
+        totalSalary: Number(entry.netPay),
+        released: entry.status === 'RELEASED',
+        breakdown: {
+          biweeklyBasicSalary: Number(entry.basicSalary),
+          realTimeEarnings: Number(entry.basicSalary) + Number(entry.overtime),
+          realWorkHours: totalWorkHours,
+          overtimePay: Number(entry.overtime),
+          attendanceDeductions: totalAttendanceDeductions,
+          nonAttendanceDeductions: totalOtherDeductions,
+          loanPayments: totalLoanPayments,
+          grossPay: Number(entry.basicSalary) + Number(entry.overtime),
+          totalDeductions: Number(entry.deductions),
+          netPay: Number(entry.netPay),
+          deductionDetails: otherDeductionDetails,
+          loanDetails: loanDetails,
+          otherDeductionDetails: otherDeductionDetails,
+          attendanceDeductionDetails: attendanceDeductionDetails
+        }
       }
-    }
+    }))
 
-    html += `
-</body>
-</html>`
-
-    // Note: Audit logging would require adding auditLog model to schema
+    // Generate HTML using the full-featured payslip generator
+    const html = generatePayslipsHTML(
+      payslipData,
+      {
+        periodStart: startDate.toISOString(),
+        periodEnd: endDate.toISOString()
+      },
+      headerSettings,
+      6 // 6 payslips per page for Long Bond Paper
+    )
 
     return new NextResponse(html, {
       headers: {
@@ -301,4 +215,17 @@ export async function POST(request: NextRequest) {
     console.error('Error generating payslips:', error)
     return NextResponse.json({ error: 'Failed to generate payslips' }, { status: 500 })
   }
+}
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const periodStart = searchParams.get('periodStart')
+  const periodEnd = searchParams.get('periodEnd')
+  const userId = searchParams.get('userId')
+  return handlePayslipGeneration(periodStart, periodEnd, userId)
+}
+
+export async function POST(request: NextRequest) {
+  const { periodStart, periodEnd, userId } = await request.json()
+  return handlePayslipGeneration(periodStart, periodEnd, userId)
 }

@@ -1,0 +1,57 @@
+### Test Percentage Deductions
+### Use this file with REST Client extension in VS Code or Postman
+
+@baseUrl = http://localhost:3000
+
+### 1. Create a Fixed Deduction (₱500 for everyone)
+POST {{baseUrl}}/api/admin/deduction-types
+Content-Type: application/json
+
+{
+  "name": "Uniform Fee Test",
+  "description": "Fixed ₱500 uniform fee",
+  "amount": 500,
+  "calculationType": "FIXED",
+  "isMandatory": false,
+  "isActive": true
+}
+
+###
+
+### 2. Create a Percentage Deduction (20% of salary)
+POST {{baseUrl}}/api/admin/deduction-types
+Content-Type: application/json
+
+{
+  "name": "Health Insurance Test",
+  "description": "20% of basic salary for health insurance",
+  "amount": 0,
+  "calculationType": "PERCENTAGE",
+  "percentageValue": 20,
+  "isMandatory": false,
+  "isActive": true
+}
+
+###
+
+### 3. Get all deduction types
+GET {{baseUrl}}/api/admin/deduction-types
+
+###
+
+### 4. Apply deduction to employees
+POST {{baseUrl}}/api/admin/deductions
+Content-Type: application/json
+
+{
+  "deduction_types_id": "YOUR_DEDUCTION_TYPE_ID_HERE",
+  "selectAll": true,
+  "notes": "Testing percentage calculation"
+}
+
+###
+
+### 5. View all deductions
+GET {{baseUrl}}/api/admin/deductions
+
+###

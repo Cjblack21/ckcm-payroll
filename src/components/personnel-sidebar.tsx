@@ -8,6 +8,7 @@ import {
   CreditCard,
   User,
   Calendar,
+  Banknote,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -98,9 +99,36 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
 
         <SidebarSeparator />
 
-        {/* My Information */}
+        {/* Financial */}
+        <SidebarGroup key="personnel-financial-v2">
+          <SidebarGroupLabel>Payroll</SidebarGroupLabel>
+          <SidebarGroupContent className="w-full min-w-0">
+            <SidebarMenu key="personnel-menu-fin-v2">
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/personnel/payroll">
+                    <span className="flex items-center justify-center w-4 h-4 text-lg font-normal">₱</span>
+                    <span>Payroll</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/personnel/loans">
+                    <Banknote />
+                    <span>Loans & Deductions</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* Attendance */}
         <SidebarGroup key="personnel-info-v2">
-          <SidebarGroupLabel>My Information</SidebarGroupLabel>
+          <SidebarGroupLabel>Attendance</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
             <SidebarMenu key="personnel-menu-info-v2">
               <SidebarMenuItem>
@@ -111,38 +139,22 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/personnel/leaves">
-                    <Calendar />
-                    <span>Leave</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarSeparator />
 
-        {/* Financial */}
-        <SidebarGroup key="personnel-financial-v2">
-          <SidebarGroupLabel>Financial</SidebarGroupLabel>
+        {/* Holidays */}
+        <SidebarGroup key="personnel-holidays-v2">
+          <SidebarGroupLabel>Holidays</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
-            <SidebarMenu key="personnel-menu-fin-v2">
+            <SidebarMenu key="personnel-menu-holidays-v2">
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <Link href="/personnel/payroll">
-                    <span className="flex items-center justify-center w-4 h-4 text-lg font-bold">₱</span>
-                    <span>Payroll</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/personnel/loans">
-                    <CreditCard />
-                    <span>Loans</span>
+                  <Link href="/personnel/holidays">
+                    <Calendar />
+                    <span>Holidays</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

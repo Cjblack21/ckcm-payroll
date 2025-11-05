@@ -19,11 +19,15 @@ const createSchema = z.union([
 type Entry = z.infer<typeof entrySchema>
 type CreatePayload = Entry | { entries: Entry[] }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  
+  const { searchParams } = new URL(request.url)
+  const showArchived = searchParams.get('archived') === 'true'
+  
   // Exclude attendance-related deductions - these are automatically calculated and managed by the attendance system
   const attendanceRelatedTypes = ['Late Arrival', 'Late Penalty', 'Absence Deduction', 'Absent', 'Late', 'Tardiness', 'Partial Attendance']
   
@@ -33,10 +37,23 @@ export async function GET() {
         name: {
           notIn: attendanceRelatedTypes
         }
-      }
+      },
+      archivedAt: showArchived ? { not: null } : null
     },
     include: {
-      user: { select: { users_id: true, name: true, email: true } },
+      user: { 
+        select: { 
+          users_id: true, 
+          name: true, 
+          email: true,
+          personnelType: {
+            select: {
+              department: true,
+              basicSalary: true
+            }
+          }
+        } 
+      },
       deductionType: true,
     },
     orderBy: { createdAt: "desc" },
@@ -67,26 +84,57 @@ export async function POST(req: NextRequest) {
         throw new Error("No employees selected. Please select employees or enable 'Select All'")
       }
 
-      // Get the amount from the deduction type
+      // Get the deduction type with calculation details
       const deductionType = await prisma.deductionType.findUnique({
         where: { deduction_types_id: entry.deduction_types_id },
-        select: { amount: true }
+        select: { 
+          amount: true, 
+          isMandatory: true,
+          calculationType: true,
+          percentageValue: true
+        }
       })
 
       if (!deductionType) {
         throw new Error("Deduction type not found")
       }
 
-      return targetEmployeeIds.map((eid) =>
-        prisma.deduction.create({
+      // Note: Removed automatic duplicate prevention for mandatory deductions
+      // Admins can now manually create deductions even if they already exist
+      // This allows for multiple instances of the same deduction type per employee if needed
+
+      // Get user salaries for percentage calculation
+      const users = await prisma.user.findMany({
+        where: { users_id: { in: targetEmployeeIds } },
+        select: { 
+          users_id: true,
+          personnelType: {
+            select: { basicSalary: true }
+          }
+        }
+      })
+
+      return targetEmployeeIds.map((eid) => {
+        const user = users.find(u => u.users_id === eid)
+        
+        // Calculate deduction amount based on type
+        let deductionAmount = deductionType.amount
+        
+        if (deductionType.calculationType === 'PERCENTAGE' && deductionType.percentageValue && user?.personnelType) {
+          // Calculate percentage of basic salary
+          const salary = user.personnelType.basicSalary
+          deductionAmount = salary.mul(deductionType.percentageValue).div(100)
+        }
+
+        return prisma.deduction.create({
           data: {
             users_id: eid,
             deduction_types_id: entry.deduction_types_id,
-            amount: deductionType.amount,
+            amount: deductionAmount,
             notes: entry.notes,
           },
         })
-      )
+      })
     }
 
     const tx = 'entries' in data

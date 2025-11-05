@@ -2,8 +2,8 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { AppSidebar } from "@/components/app-sidebar"
-import { Header } from "@/components/header"
 import { AdminLayoutClient } from "@/components/admin-layout-client"
+import { DynamicBreadcrumb } from "@/components/dynamic-breadcrumb"
 import {
   SidebarInset,
   SidebarProvider,
@@ -20,16 +20,11 @@ export default async function AdminLayout({
     redirect("/")
   }
 
-  const breadcrumbs = [
-    { href: "/admin/dashboard", label: "Admin Dashboard" },
-    { label: "Dashboard", isCurrentPage: true }
-  ]
-
   return (
     <SidebarProvider>
       <AppSidebar user={session.user} />
       <SidebarInset>
-        <Header breadcrumbs={breadcrumbs} />
+        <DynamicBreadcrumb />
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
           <AdminLayoutClient>
             {children}

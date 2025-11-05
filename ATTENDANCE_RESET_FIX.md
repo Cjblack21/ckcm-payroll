@@ -134,7 +134,6 @@ After reset, personnel will show these statuses based on their actions:
 - **LATE**: Punched in after time-in window end
 - **ABSENT**: No punch-in after cutoff time
 - **PARTIAL**: Punched in but no punch-out after cutoff
-- **ON_LEAVE**: User is on approved leave
 
 ## Deduction Types
 

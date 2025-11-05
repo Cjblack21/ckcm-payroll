@@ -12,6 +12,8 @@ export default withAuth(
     if (
       pathname.startsWith("/api/auth") ||
       pathname.startsWith("/api/test-db") ||
+      pathname.startsWith("/api/admin") ||
+      pathname.startsWith("/api/personnel") ||
       pathname.startsWith("/auth") ||
       pathname === "/" ||
       pathname.startsWith("/_next") ||
@@ -78,6 +80,8 @@ export default withAuth(
         if (
           pathname.startsWith("/api/auth") ||
           pathname.startsWith("/api/test-db") ||
+          pathname.startsWith("/api/admin") ||
+          pathname.startsWith("/api/personnel") ||
           pathname.startsWith("/auth") ||
           pathname === "/" ||
           pathname.startsWith("/_next") ||

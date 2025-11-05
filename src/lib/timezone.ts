@@ -143,11 +143,18 @@ export function parsePhilippinesLocalDate(dateString: string, endOfDay = false):
   const [y, m, d] = dateString.split('-').map(Number)
   if (!y || !m || !d) return new Date(dateString)
   
-  // Create date in Philippines timezone
-  const philippinesDate = new Date(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0)
+  // Create ISO string in Philippines timezone format
+  const hours = endOfDay ? 23 : 0
+  const minutes = endOfDay ? 59 : 0
+  const seconds = endOfDay ? 59 : 0
+  const ms = endOfDay ? 999 : 0
   
-  // Convert to UTC using timezone library
-  return fromZonedTime(philippinesDate, PHILIPPINES_TIMEZONE)
+  // Format: 2025-11-06T00:00:00+08:00 (Philippines is UTC+8)
+  const isoString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(ms).padStart(3, '0')}+08:00`
+  
+  console.log(`🇵🇭 parsePhilippinesLocalDate - Input: ${dateString}, ISO: ${isoString}`)
+  
+  return new Date(isoString)
 }
 
 /**
@@ -167,7 +174,7 @@ export function getPhilippinesDayOfWeek(date: Date): number {
 }
 
 /**
- * Calculate working days between two dates in Philippines timezone (excluding Sundays)
+ * Calculate working days between two dates in Philippines timezone (excluding Saturdays and Sundays)
  */
 export function calculateWorkingDaysInPhilippines(startDate: Date, endDate: Date): number {
   const start = toZonedTime(startDate, PHILIPPINES_TIMEZONE)
@@ -177,7 +184,8 @@ export function calculateWorkingDaysInPhilippines(startDate: Date, endDate: Date
   const current = new Date(start)
   
   while (current <= end) {
-    if (current.getDay() !== 0) { // Exclude Sundays
+    const dayOfWeek = current.getDay()
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude Saturdays (6) and Sundays (0)
       days++
     }
     current.setDate(current.getDate() + 1)
@@ -208,7 +216,8 @@ export function generateWorkingDaysInPhilippines(startDate: Date, endDate: Date)
   const current = new Date(start)
   
   while (current <= end) {
-    if (current.getDay() !== 0) { // Exclude Sundays
+    const dayOfWeek = current.getDay()
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude Saturdays (6) and Sundays (0)
       workingDays.push(toPhilippinesDateString(current))
     }
     current.setDate(current.getDate() + 1)
@@ -237,7 +246,7 @@ export function parseDateInputToPhilippines(dateInput: string): Date {
  * Format date for display in Philippines timezone
  */
 export function formatDateForDisplay(date: Date, options?: Intl.DateTimeFormatOptions): string {
-  return date.toLocaleDateString('en-US', { 
+  return date.toLocaleDateString('en-GB', { 
     timeZone: PHILIPPINES_TIMEZONE,
     ...options
   })

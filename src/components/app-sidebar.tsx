@@ -59,7 +59,28 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const data = getNavData(user)
   const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
+  const [hasNotification, setHasNotification] = React.useState(false)
+  
+  React.useEffect(() => {
+    setMounted(true)
+    // Check localStorage on mount
+    setHasNotification(localStorage.getItem('hasNewArchivedPayroll') === 'true')
+    
+    // Listen for storage changes
+    const handleStorageChange = () => {
+      setHasNotification(localStorage.getItem('hasNewArchivedPayroll') === 'true')
+    }
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Also check periodically in case localStorage changes in same tab
+    const interval = setInterval(handleStorageChange, 500)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [])
+  
   if (!mounted) return null
   
   return (
@@ -111,9 +132,9 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
 
         <SidebarSeparator />
 
-        {/* Core Operations */}
+        {/* Payroll Operations */}
         <SidebarGroup>
-          <SidebarGroupLabel>Core Operations</SidebarGroupLabel>
+          <SidebarGroupLabel>Payroll Operations</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
             <SidebarMenu>
               <SidebarMenuItem>
@@ -126,17 +147,17 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <Link href="/admin/leaves">
-                    <CalendarIcon />
-                    <span>Leaves</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/admin/payroll">
-                    <span className="flex items-center justify-center w-4 h-4 text-lg font-bold">₱</span>
-                    <span>Payroll</span>
+                  <Link href="/admin/payroll" className="relative">
+                    <span className="flex items-center justify-center w-4 h-4 text-lg font-normal">₱</span>
+                    <span className="flex items-center gap-1.5">
+                      <span>Payroll</span>
+                      {hasNotification && (
+                        <span className="flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-red-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-600"></span>
+                        </span>
+                      )}
+                    </span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -144,7 +165,15 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
                 <SidebarMenuButton asChild>
                   <Link href="/admin/loans">
                     <Banknote />
-                    <span>Loans</span>
+                    <span>Loans & Deductions</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/admin/deductions">
+                    <Receipt />
+                    <span>Mandatory & Overload</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -156,14 +185,14 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
 
         {/* User Management */}
         <SidebarGroup>
-          <SidebarGroupLabel>User Management</SidebarGroupLabel>
+          <SidebarGroupLabel>Personnel Management</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link href="/admin/user-management">
                     <Users />
-                    <span>Users</span>
+                    <span>Personnel</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -181,16 +210,16 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
 
         <SidebarSeparator />
 
-        {/* Financial Management */}
+        {/* Holidays */}
         <SidebarGroup>
-          <SidebarGroupLabel>Financial Management</SidebarGroupLabel>
+          <SidebarGroupLabel>Holidays</SidebarGroupLabel>
           <SidebarGroupContent className="w-full min-w-0">
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <Link href="/admin/deductions">
-                    <Minus />
-                    <span>Deductions</span>
+                  <Link href="/admin/holidays">
+                    <Calendar />
+                    <span>Holidays</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -218,14 +247,6 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
                   <Link href="/admin/header-settings">
                     <FileText />
                     <span>Header Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/admin/holidays">
-                    <Calendar />
-                    <span>Holidays</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

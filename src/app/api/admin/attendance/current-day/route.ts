@@ -2,11 +2,12 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getTodayRangeInPhilippines } from "@/lib/timezone"
+import { getTodayRangeInPhilippines, getNowInPhilippines } from "@/lib/timezone"
 import { calculateLateDeduction, calculateAbsenceDeduction, calculatePartialDeduction, calculateEarnings } from "@/lib/attendance-calculations"
 
 export async function GET() {
   try {
+    console.log('🔄 CURRENT-DAY API CALLED - FRESH REQUEST')
     const session = await getServerSession(authOptions)
     
     if (!session || session.user.role !== 'ADMIN') {
@@ -110,7 +111,8 @@ export async function GET() {
     // No need to fetch payroll data since we calculate from personnel type salary structure
 
     // Check if we should auto-mark pending users as absent
-    const now = new Date()
+    // IMPORTANT: Use Philippine time, not server local time
+    const now = getNowInPhilippines()
     const nowHH = now.getHours().toString().padStart(2, '0')
     const nowMM = now.getMinutes().toString().padStart(2, '0')
     const nowHHmm = `${nowHH}:${nowMM}`
@@ -118,15 +120,29 @@ export async function GET() {
     // Get attendance settings to check time-out window
     const attendanceSettings = await prisma.attendanceSettings.findFirst()
     
+    console.log('⏰ CUTOFF DEBUG:', {
+      nowPhilippineTime: now.toISOString(),
+      nowHHmm,
+      cutoffTime: attendanceSettings?.timeOutEnd,
+      isPastCutoff: nowHHmm > (attendanceSettings?.timeOutEnd || ''),
+      noTimeOutCutoff: attendanceSettings?.noTimeOutCutoff
+    })
+    
     // Function to check if time-out window has passed
     const isTimeOutWindowPassed = () => {
       if (!attendanceSettings || attendanceSettings.noTimeOutCutoff) {
+        console.log('⏰ Cutoff DISABLED')
         return false // No time-out restrictions, don't auto-mark as absent
       }
       if (!attendanceSettings.timeOutEnd) {
+        console.log('⏰ No cutoff time set')
         return false // No end time set, don't auto-mark as absent
       }
-      return nowHHmm > attendanceSettings.timeOutEnd
+      // IMPORTANT: Only mark as absent AFTER the cutoff time, not before or during
+      // String comparison works for HH:MM format (e.g., "07:12" < "09:10" is false)
+      const isPast = nowHHmm > attendanceSettings.timeOutEnd
+      console.log(`⏰ ${nowHHmm} > ${attendanceSettings.timeOutEnd} = ${isPast}`)
+      return isPast
     }
 
     // Calculate attendance data for all users (including those without records)
@@ -184,14 +200,24 @@ export async function GET() {
             deductions = await calculateAbsenceDeduction(basicSalary) // Calculate absence deduction
             status = 'ABSENT' // Override status to ABSENT
           } else {
-            // Pending status - no earnings or deductions until attendance is completed
+            // IMPORTANT: Before cutoff - keep as PENDING with no deductions
+            // Do NOT show absence deductions until after the cutoff time
             earnings = 0
             deductions = 0
           }
         } else if (status === 'ABSENT') {
           earnings = 0 // No earnings for absent
-          // Use actual deduction records from database instead of recalculating
-          deductions = attendanceDeductionMap.get(user.users_id) || 0
+          // Only apply deduction if past cutoff time
+          const isPastCutoff = isTimeOutWindowPassed()
+          console.log(`🔴 ABSENT STATUS for ${user.name}: isPastCutoff=${isPastCutoff}`)
+          if (isPastCutoff) {
+            deductions = await calculateAbsenceDeduction(basicSalary)
+            console.log(`🔴 Applied deduction: ${deductions}`)
+          } else {
+            // Before cutoff - no deduction yet
+            deductions = 0
+            console.log(`🔴 Before cutoff - NO deduction`)
+          }
         } else if (status === 'PARTIAL') {
           // Earnings based on actual seconds worked
           if (attendanceRecord.timeIn) {
@@ -299,9 +325,10 @@ export async function GET() {
             deductions
           }
         } else {
-          // Time-out window hasn't passed yet - mark as pending
+          // IMPORTANT: Time-out window hasn't passed yet - mark as pending
+          // Do NOT create any absence deductions or show deduction amounts
           const earnings = 0 // No earnings for pending
-          const deductions = 0 // No deductions for pending
+          const deductions = 0 // No deductions for pending (IMPORTANT: must be 0 before cutoff)
 
           return {
             attendances_id: `pending-${user.users_id}`,
@@ -324,7 +351,16 @@ export async function GET() {
       }
     }))
 
-    return NextResponse.json({ attendance: attendanceData })
+    return NextResponse.json(
+      { attendance: attendanceData },
+      { 
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    )
   } catch (error) {
     console.error('Error fetching current day attendance:', error)
     return NextResponse.json(

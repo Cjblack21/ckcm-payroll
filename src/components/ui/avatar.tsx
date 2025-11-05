@@ -25,11 +25,17 @@ function AvatarImage({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+  // Filter out empty string src to avoid browser downloading the whole page
+  const filteredProps = { ...props }
+  if (filteredProps.src === '') {
+    delete filteredProps.src
+  }
+  
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
-      {...props}
+      {...filteredProps}
     />
   )
 }

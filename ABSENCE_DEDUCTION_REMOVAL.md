@@ -1,4 +1,4 @@
-# Absence Deduction Removal - Complete Fix
+pm# Absence Deduction Removal - Complete Fix
 
 ## Problem
 The "Absence Deduction" type was being auto-created by the attendance system, causing conflicts with the payroll system's real-time deduction calculations.

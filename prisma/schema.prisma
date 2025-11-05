@@ -23,9 +23,9 @@ model User {
   loans              Loan[]
   payrolls           PayrollEntry[]
   sessions           Session[]
-  leaveRequests      LeaveRequest[]
   activityLogs       ActivityLog[]
   settings           UserSettings?
+  overloadPays       OverloadPay[]
   personnelType      PersonnelType? @relation(fields: [personnel_types_id], references: [personnel_types_id])
 
   @@index([personnel_types_id], map: "users_personnel_types_id_fkey")
@@ -114,6 +114,7 @@ model PayrollEntry {
   processedAt        DateTime      @default(now())
   releasedAt         DateTime?
   archivedAt         DateTime?
+  breakdownSnapshot  String?       @db.LongText
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   user               User          @relation(fields: [users_id], references: [users_id])
@@ -147,13 +148,16 @@ model Event {
 }
 
 model DeductionType {
-  deduction_types_id String      @id @default(cuid()) @map("deduction_types_id")
-  name               String      @unique
+  deduction_types_id String            @id @default(cuid()) @map("deduction_types_id")
+  name               String            @unique
   description        String?
-  amount             Decimal     @default(0.000000000000000000000000000000)
-  isActive           Boolean     @default(true)
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  amount             Decimal           @default(0.000000000000000000000000000000)
+  calculationType    DeductionCalcType @default(FIXED)
+  percentageValue    Decimal?          @default(0.000000000000000000000000000000)
+  isActive           Boolean           @default(true)
+  isMandatory        Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
   deductions         Deduction[]
 
   @@map("deduction_types")
@@ -166,6 +170,7 @@ model Deduction {
   amount             Decimal
   appliedAt          DateTime      @default(now())
   notes              String?
+  archivedAt         DateTime?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   deductionType      DeductionType @relation(fields: [deduction_types_id], references: [deduction_types_id])
@@ -176,9 +181,26 @@ model Deduction {
   @@map("deductions")
 }
 
+model OverloadPay {
+  overload_pays_id String   @id @default(cuid()) @map("overload_pays_id")
+  users_id         String
+  amount           Decimal
+  notes            String?
+  appliedAt        DateTime @default(now())
+  archivedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [users_id], references: [users_id])
+
+  @@index([users_id], map: "overload_pays_users_id_fkey")
+  @@map("overload_pays")
+}
+
 model PersonnelType {
   personnel_types_id String   @id @default(cuid()) @map("personnel_types_id")
   name               String   @unique
+  type               String?  @default("NON_TEACHING") // TEACHING or NON_TEACHING
+  department         String?
   basicSalary        Decimal
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
@@ -238,31 +260,15 @@ model PayrollSchedule {
   @@map("payroll_schedules")
 }
 
-model LeaveRequest {
-  leave_requests_id String      @id @default(cuid()) @map("leave_requests_id")
-  users_id          String
-  type              LeaveType
-  customLeaveType   String?
-  startDate         DateTime
-  endDate           DateTime
-  days              Int         @default(1)
-  isPaid            Boolean     @default(true)
-  reason            String?     @db.LongText
-  status            LeaveStatus @default(PENDING)
-  admin_id          String?
-  adminComment      String?     @db.LongText
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  user User @relation(fields: [users_id], references: [users_id])
-
-  @@index([users_id], map: "leave_requests_users_id_fkey")
-  @@map("leave_requests")
-}
 
 enum Role {
   ADMIN
   PERSONNEL
+}
+
+enum DeductionCalcType {
+  FIXED
+  PERCENTAGE
 }
 
 enum PayrollStatus {
@@ -277,34 +283,12 @@ enum AttendanceStatus {
   ABSENT
   LATE
   PARTIAL
-  ON_LEAVE
 }
 
 enum LoanStatus {
   ACTIVE
   COMPLETED
   DEFAULTED
-}
-
-enum LeaveStatus {
-  PENDING
-  APPROVED
-  DENIED
-}
-
-enum LeaveType {
-  VACATION
-  FMLA
-  PARENTAL
-  SICK
-  UNPAID
-  PERSONAL
-  PUBLIC_HOLIDAY
-  RELIGIOUS
-  SABBATICAL
-  BEREAVEMENT
-  COMPENSATORY
-  CUSTOM
 }
 
 enum HolidayType {

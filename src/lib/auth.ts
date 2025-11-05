@@ -17,7 +17,15 @@ export const authOptions: NextAuthOptions = {
           access_type: "offline",
           response_type: "code"
         }
-      }
+      },
+      profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture, // Explicitly map the picture field
+        }
+      },
     }),
     CredentialsProvider({
       name: "credentials",
@@ -97,17 +105,36 @@ export const authOptions: NextAuthOptions = {
       }
       return true // Allow other providers (credentials)
     },
-    async jwt({ token, user, account, profile }) {
+    async jwt({ token, user, account, profile, trigger }) {
       console.log('JWT callback called:', { 
         hasAccount: !!account, 
         provider: account?.provider,
         hasProfile: !!profile,
-        hasUser: !!user 
+        hasUser: !!user,
+        trigger,
+        existingPicture: token.picture
       })
+      
+      // Always refresh avatar from database on every request
+      if (token.userId) {
+        try {
+          const freshUser = await prisma.user.findUnique({
+            where: { users_id: token.userId as string },
+            select: { avatar: true }
+          })
+          if (freshUser) {
+            token.avatar = freshUser.avatar
+          }
+        } catch (error) {
+          console.error("Error refreshing avatar:", error)
+        }
+      }
       
       if (account?.provider === "google" && profile) {
         const googleProfile = profile as any
         console.log('Processing Google OAuth user:', googleProfile.email)
+        console.log('Google profile picture URL:', googleProfile.picture)
+        console.log('Full Google profile:', googleProfile)
         
         // Check if user exists in database with timeout
         try {
@@ -126,8 +153,11 @@ export const authOptions: NextAuthOptions = {
             token.role = existingUser.role
             token.userId = existingUser.users_id
             token.avatar = existingUser.avatar
+            // Still keep the picture from Google for display
+            token.picture = googleProfile.picture
           } else {
             console.log('New user, setting up for account setup')
+            console.log('Storing picture URL:', googleProfile.picture)
             // New user, mark as needing setup
             token.role = "SETUP_REQUIRED"
             token.email = googleProfile.email
@@ -152,22 +182,37 @@ export const authOptions: NextAuthOptions = {
       console.log('JWT token final state:', { 
         role: token.role, 
         userId: token.userId,
-        hasEmail: !!token.email 
+        hasEmail: !!token.email,
+        avatar: token.avatar,
+        picture: token.picture
       })
       
       return token
     },
     async session({ session, token }) {
+      console.log('Session callback - token.picture:', token.picture)
+      console.log('Session callback - token.role:', token.role)
+      
       if (token) {
-        session.user.id = token.userId as string || token.sub || ''
+        // Ensure userId is set - critical for API routes
+        const userId = (token.userId as string) || (token.sub as string) || ''
+        session.user.id = userId
         session.user.role = token.role as Role || 'SETUP_REQUIRED'
         session.user.avatar = token.avatar as string || null
+        
         if (token.role === "SETUP_REQUIRED") {
           session.user.email = token.email as string || ''
           session.user.name = token.name as string || ''
           session.user.image = token.picture as string || ''
+          console.log('Setting SETUP_REQUIRED user image to:', session.user.image)
+        } else {
+          // For existing users, use their stored avatar or image
+          session.user.image = token.avatar as string || null
+          console.log('Setting existing user image to:', session.user.image)
         }
       }
+      
+      console.log('Final session.user.image:', session.user.image)
       return session
     },
     async redirect({ url, baseUrl }) {

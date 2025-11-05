@@ -16,6 +16,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts"
 
@@ -77,11 +78,13 @@ export function AdminDashboardCharts() {
             <AreaChart data={chartData.attendanceData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
-              <YAxis />
+              <YAxis allowDecimals={false} />
               <Tooltip />
+              <Legend />
               <Area
                 type="monotone"
                 dataKey="present"
+                name="Present"
                 stackId="1"
                 stroke="#10b981"
                 fill="#10b981"
@@ -90,6 +93,7 @@ export function AdminDashboardCharts() {
               <Area
                 type="monotone"
                 dataKey="absent"
+                name="Absent"
                 stackId="1"
                 stroke="#ef4444"
                 fill="#ef4444"
@@ -112,46 +116,25 @@ export function AdminDashboardCharts() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis 
-                tickFormatter={(value) => `₱${(value / 1000000).toFixed(1)}M`}
+                tickFormatter={(value) => {
+                  if (value >= 1000000) return `₱${(value / 1000000).toFixed(1)}M`
+                  if (value >= 1000) return `₱${(value / 1000).toFixed(0)}K`
+                  return `₱${value}`
+                }}
               />
               <Tooltip 
                 formatter={(value) => [`₱${value.toLocaleString()}`, "Amount"]}
               />
+              <Legend />
               <Line
                 type="monotone"
                 dataKey="amount"
+                name="Payroll Amount"
                 stroke="#3b82f6"
                 strokeWidth={3}
                 dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
               />
             </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Department Distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Personnel by Department</CardTitle>
-          <CardDescription>Distribution of employees across departments</CardDescription>
-        </CardHeader>
-        <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={chartData.departmentData}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
-              >
-                {chartData.departmentData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>

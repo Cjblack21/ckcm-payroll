@@ -16,6 +16,7 @@ import { authOptions } from "@/lib/auth"
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, addDays, subDays } from "date-fns"
 import { revalidatePath } from "next/cache"
 import { calculateLateDeductionSync, calculateAbsenceDeductionSync, calculateEarnings } from "@/lib/attendance-calculations-sync"
+import { getLiveAttendanceRecords } from "@/lib/attendance-live"
 // import { calculatePartialDeduction } from "@/lib/attendance-calculations-sync"
 
 // Types
@@ -42,6 +43,7 @@ export type PayrollEntry = {
   users_id: string
   name: string | null
   email: string
+  avatar?: string | null
   personnelType: {
     name: string
     basicSalary: number
@@ -53,6 +55,7 @@ export type PayrollEntry = {
   totalWorkHours: number
   grossSalary: number
   totalDeductions: number
+  totalAdditions: number
   netSalary: number
   status: 'Pending' | 'Released' | 'Archived'
   attendanceRecords: AttendanceRecord[]
@@ -181,10 +184,15 @@ export async function getPayrollSummary(): Promise<{
         isActive: true, 
         role: 'PERSONNEL' 
       },
-      include: {
+      select: {
+        users_id: true,
+        name: true,
+        email: true,
         personnelType: {
           select: {
             name: true,
+            type: true,
+            department: true,
             basicSalary: true
           }
         }
@@ -193,11 +201,17 @@ export async function getPayrollSummary(): Promise<{
 
     console.log('🔍 Payroll Summary - Users found:', users.length)
 
-    // Normalize to full-day range (Philippines) so end-date items are included
-    const periodStartDay = new Date(periodStart)
-    periodStartDay.setHours(0, 0, 0, 0)
-    const periodEndDay = new Date(periodEnd)
-    periodEndDay.setHours(23, 59, 59, 999)
+    // Use the period dates directly - they're already in correct Philippines timezone from parsePhilippinesLocalDate
+    // periodStart is already 00:00:00 Philippines time
+    // periodEnd is already 23:59:59 Philippines time
+    const periodStartDay = periodStart
+    const periodEndDay = periodEnd
+
+    console.log(`📅 Original periodStart: ${periodStart.toISOString()}`)
+    console.log(`📅 Original periodEnd: ${periodEnd.toISOString()}`)
+    console.log(`📅 Querying attendance from ${periodStartDay.toISOString()} to ${periodEndDay.toISOString()}`)
+    console.log(`📅 Period Start (Philippines date): ${toPhilippinesDateString(periodStartDay)}`)
+    console.log(`📅 Period End (Philippines date): ${toPhilippinesDateString(periodEndDay)}`)
 
     // Get attendance records for the period
     const attendanceRecords = await prisma.attendance.findMany({
@@ -216,6 +230,8 @@ export async function getPayrollSummary(): Promise<{
             personnelType: {
               select: {
                 name: true,
+                type: true,
+                department: true,
                 basicSalary: true
               }
             }
@@ -225,33 +241,39 @@ export async function getPayrollSummary(): Promise<{
     })
 
     console.log('Attendance records found:', attendanceRecords.length)
+    if (attendanceRecords.length > 0) {
+      const uniqueDates = [...new Set(attendanceRecords.map(r => r.date.toISOString().split('T')[0]))].sort()
+      console.log(`📅 Attendance dates retrieved: ${uniqueDates.join(', ')}`)
+      console.log(`📅 First attendance date: ${uniqueDates[0]}`)
+      console.log(`📅 Last attendance date: ${uniqueDates[uniqueDates.length - 1]}`)
+    }
 
-    // Load any existing payroll entries for this period to surface real statuses (Pending/Released/Archived)
+    // Load any existing payroll entries for this period to surface real statuses (Pending/Released)
+    // Exclude archived entries so old archived payrolls don't affect current payroll status
     const existingPayrollEntries = await prisma.payrollEntry.findMany({
       where: {
         periodStart: periodStart,
-        periodEnd: periodEnd
+        periodEnd: periodEnd,
+        status: { not: 'ARCHIVED' } // Only consider active payroll entries (Pending/Released)
       },
       select: {
         users_id: true,
         status: true
       }
     })
-    const usersIdToStatus = new Map<string, 'Pending' | 'Released' | 'Archived'>()
+    const usersIdToStatus = new Map<string, 'Pending' | 'Released'>()
     existingPayrollEntries.forEach(e => {
-      const mapped = e.status === 'RELEASED' ? 'Released' : e.status === 'ARCHIVED' ? 'Archived' : 'Pending'
+      const mapped = e.status === 'RELEASED' ? 'Released' : 'Pending'
       usersIdToStatus.set(e.users_id, mapped)
     })
     const hasGenerated = existingPayrollEntries.length > 0
     const hasReleased = existingPayrollEntries.some(e => e.status === 'RELEASED')
 
-    // Calculate working days for MONTHLY rate (not period)
-    // For absence deduction: use total working days in the MONTH to get consistent daily rate
+    // Use STANDARD 22 working days for consistent daily rate calculation
+    // This matches the Personnel Types page which uses 22 working days as the standard
     const currentMonth = periodStart.getMonth()
     const currentYear = periodStart.getFullYear()
-    const monthStart = new Date(currentYear, currentMonth, 1)
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0) // Last day of month
-    const workingDaysInMonth = calculateWorkingDaysInPhilippines(monthStart, monthEnd)
+    const workingDaysInMonth = 22 // Standard working days (Mon-Fri average per month)
     
     // For payroll period tracking
     const workingDaysInPeriod = calculateWorkingDaysInPhilippines(periodStart, periodEnd)
@@ -287,7 +309,7 @@ export async function getPayrollSummary(): Promise<{
             users_id: true,
             name: true,
             email: true,
-            personnelType: { select: { name: true, basicSalary: true } }
+            personnelType: { select: { name: true, type: true, department: true, basicSalary: true } }
           }
         }
       }
@@ -297,13 +319,6 @@ export async function getPayrollSummary(): Promise<{
       // Freeze to stored amounts, but reconstruct supporting breakdown (work hours, attendance, deductions, loans)
       const attendanceSettings = await prisma.attendanceSettings.findFirst()
 
-      // Calculate working days for MONTHLY rate (not period)
-      // For absence deduction: use total working days in the MONTH to get consistent daily rate
-      const currentMonth = periodStart.getMonth()
-      const currentYear = periodStart.getFullYear()
-      const monthStart = new Date(currentYear, currentMonth, 1)
-      const monthEnd = new Date(currentYear, currentMonth + 1, 0) // Last day of month
-      const workingDaysInMonth = calculateWorkingDaysInPhilippines(monthStart, monthEnd)
 
       const periodDays = calculatePeriodDurationInPhilippines(periodStart, periodEnd)
       // ALWAYS use semi-monthly calculation (divide by 2) regardless of period length
@@ -376,12 +391,28 @@ export async function getPayrollSummary(): Promise<{
         }) as any
 
         // Non-attendance deductions for period
+        // For mandatory deductions, don't filter by date - they apply to every period
         const periodDeductions = await prisma.deduction.findMany({
           where: {
             users_id: se.users_id,
-            appliedAt: { gte: periodStart, lte: periodEnd }
+            archivedAt: null, // Exclude archived deductions
+            OR: [
+              // Mandatory deductions - always include
+              {
+                deductionType: {
+                  isMandatory: true
+                }
+              },
+              // Other deductions - only within period
+              {
+                deductionType: {
+                  isMandatory: false
+                },
+                appliedAt: { gte: periodStart, lte: periodEnd }
+              }
+            ]
           },
-          include: { deductionType: { select: { name: true, description: true } } },
+          include: { deductionType: { select: { name: true, description: true, isMandatory: true } } },
           orderBy: { appliedAt: 'desc' }
         })
         const nonAttendance = periodDeductions.filter(d =>
@@ -405,7 +436,7 @@ export async function getPayrollSummary(): Promise<{
         if (databaseDeductions === 0) {
           const latestUserDeductions = await prisma.deduction.findMany({
             where: { users_id: se.users_id },
-            include: { deductionType: { select: { name: true, description: true } } },
+            include: { deductionType: { select: { name: true, description: true, isMandatory: true } } },
             orderBy: { appliedAt: 'desc' }
           })
           const seen = new Set<string>()
@@ -465,7 +496,7 @@ export async function getPayrollSummary(): Promise<{
           grossSalary: (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) * perPayrollFactor,
           totalDeductions: Number(se.deductions),
           netSalary: Number(se.netPay),
-          status: se.status === 'RELEASED' ? 'Released' : se.status === 'ARCHIVED' ? 'Archived' : 'Pending',
+          status: se.status === 'RELEASED' ? 'Released' : 'Pending',
           attendanceRecords,
           deductionDetails,
           loanPayments,
@@ -494,9 +525,10 @@ export async function getPayrollSummary(): Promise<{
       const monthlyBasicSalary = parseFloat(user.personnelType.basicSalary.toString())
       // For semi-monthly payroll, use half of monthly salary for deduction calculations
       const basicSalary = monthlyBasicSalary * 0.5
-      // Fixed daily rate: monthly salary ÷ 22 standard working days (simple and consistent)
+      // Use actual working days in the period for absence deduction calculation
       const totalWorkingDaysInPeriod = workingDaysInPeriod
-      const dailySalary = monthlyBasicSalary / 22 // 1 absent day = monthly salary ÷ 22
+      // FIXED: Divide semi-monthly salary by working days in period (not monthly salary by days in month)
+      const dailySalary = basicSalary / workingDaysInPeriod
       
       console.log(`🔍 Payroll Debug - User: ${user.name}, Monthly Basic Salary: ₱${monthlyBasicSalary.toFixed(2)}, Period Basic Salary: ₱${basicSalary.toFixed(2)}, Daily Salary: ₱${dailySalary.toFixed(2)}, Working Days: ${totalWorkingDaysInPeriod}`)
       
@@ -509,212 +541,136 @@ export async function getPayrollSummary(): Promise<{
       let totalWorkHours = 0
       const userAttendanceRecords: AttendanceRecord[] = []
 
+      // Use live attendance records with cutoff-aware status and deductions
+      const liveAttendanceRecords = await getLiveAttendanceRecords(
+        user.users_id,
+        periodStartDay,
+        periodEndDay,
+        basicSalary
+      )
+      
+      console.log(`🔍 Payroll Debug - User: ${user.name}, Live Attendance Records: ${liveAttendanceRecords.length}`)
+      
       // Process each working day using Philippines timezone
       const checkDate = new Date(periodStart)
       const todayForUser = getNowInPhilippines() // Use Philippines timezone for each user
-      while (checkDate <= periodEnd && checkDate <= todayForUser) {
+      // Set today to end of day for comparison
+      const todayEndOfDay = new Date(todayForUser)
+      todayEndOfDay.setHours(23, 59, 59, 999)
+      while (checkDate <= periodEnd && checkDate <= todayEndOfDay) {
         const dayName = checkDate.toLocaleDateString('en-US', { weekday: 'long' })
+        const dayOfWeek = getPhilippinesDayOfWeek(checkDate)
         
-        if (getPhilippinesDayOfWeek(checkDate) !== 0) { // Exclude Sundays only using Philippines timezone
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude Saturdays (6) and Sundays (0) using Philippines timezone
           totalDays++
           const dateKey = toPhilippinesDateString(checkDate)
           const attendanceKey = `${user.users_id}-${dateKey}`
           const attendance = attendanceMap.get(attendanceKey)
           
-          console.log(`🔍 Payroll Day Processing - User: ${user.name}, Date: ${dateKey}, Day: ${dayName}, Has Attendance Record: ${!!attendance}`)
+          // Find corresponding live attendance record
+          const liveRecord = liveAttendanceRecords.find(r => 
+            toPhilippinesDateString(r.date) === dateKey
+          )
+          
+          console.log(`🔍 Payroll Day Processing - User: ${user.name}, Date: ${dateKey}, Day: ${dayName}, Has Attendance Record: ${!!attendance}, Has Live Record: ${!!liveRecord}`)
 
           // Declare variables at higher scope
           let workHours = 0
           let earnings = 0
           let deductions = 0
           
-          if (attendance) {
-            presentDays++
+          if (attendance && liveRecord) {
+              // Use live attendance data for consistency with attendance system
+              const calculatedStatus = liveRecord.status
+              workHours = liveRecord.workHours
+              earnings = liveRecord.earnings
+              deductions = liveRecord.deductions
+              
+              // Update day counters based on status
+              if (calculatedStatus === 'PRESENT' || calculatedStatus === 'LATE' || calculatedStatus === 'PARTIAL') {
+                presentDays++
+              }
+              if (calculatedStatus === 'LATE') {
+                lateDays++
+              }
+              if (calculatedStatus === 'ABSENT') {
+                absentDays++
+              }
+              
+              userAttendanceRecords.push({
+                date: dateKey,
+                timeIn: liveRecord.timeIn?.toISOString() || null,
+                timeOut: liveRecord.timeOut?.toISOString() || null,
+                status: calculatedStatus,
+                workHours,
+                earnings,
+                deductions
+              })
+
+            // Accumulate attendance deductions from this record
+            totalUserDeductions += deductions
             
-            // Calculate work hours
-            if (attendance.timeIn && attendance.timeOut) {
-              const timeIn = new Date(attendance.timeIn)
-              const timeOut = new Date(attendance.timeOut)
-              workHours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
-            }
-
-            // RECALCULATE STATUS and deductions using same logic as attendance system
-            let calculatedStatus = attendance.status
-            
-            // Check if PENDING should be converted to ABSENT (only if past cut-off time)
-            if (attendance.status === 'PENDING' && attendanceSettings?.timeOutEnd) {
-              const currentTime = getNowInPhilippines()
-              const cutoffTime = new Date(checkDate)
-              const [hours, minutes] = attendanceSettings.timeOutEnd.split(':').map(Number)
-              cutoffTime.setHours(hours, minutes, 0, 0)
-              
-              // Only mark as ABSENT if current time is past the cutoff for this date
-              if (currentTime > cutoffTime) {
-                calculatedStatus = 'ABSENT'
-                console.log(`🔍 Payroll Status Check - User: ${user.name}, Date: ${dateKey}`)
-                console.log(`🔍 Payroll Status Check - Status: ABSENT (past cut-off time: ${cutoffTime.toISOString()})`)
-              }
-            }
-            
-            if (attendance.timeIn) {
-              const timeIn = new Date(attendance.timeIn)
-              // Create expected time-in using Philippines timezone for the specific date
-              const expectedTimeIn = new Date(checkDate)
-              const [hours, minutes] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
-              // Use the exact timeInEnd (no +1 minute adjustment for payroll calculations)
-              expectedTimeIn.setHours(hours, minutes, 0, 0)
-              
-              console.log(`🔍 Payroll Status Check - User: ${user.name}, Date: ${dateKey}`)
-              console.log(`🔍 Payroll Status Check - TimeIn: ${timeIn.toISOString()}`)
-              console.log(`🔍 Payroll Status Check - Expected: ${expectedTimeIn.toISOString()}`)
-              
-              // Check if user was late using same logic as attendance system
-              if (timeIn > expectedTimeIn) {
-                calculatedStatus = 'LATE'
-                console.log(`🔍 Payroll Status Check - Status: LATE (${Math.round((timeIn.getTime() - expectedTimeIn.getTime()) / 1000 / 60)} minutes late)`)
-              } else {
-                calculatedStatus = 'PRESENT'
-                console.log(`🔍 Payroll Status Check - Status: PRESENT (on time)`)
-              }
-            }
-
-            // Calculate earnings and deductions based on RECALCULATED status
-            if (calculatedStatus === 'PRESENT') {
-              // Use attendance system's earnings calculation for consistency
-              if (attendance.timeIn) {
-                const timeIn = new Date(attendance.timeIn)
-                const timeOut = attendance.timeOut ? new Date(attendance.timeOut) : undefined
-                earnings = calculateEarnings(basicSalary, timeIn, timeOut)
-              } else {
-                earnings = dailySalary
-              }
-              // No deductions for present
-              deductions = 0
-            } else if (calculatedStatus === 'LATE') {
-              // Use attendance system's earnings calculation for consistency
-              if (attendance.timeIn) {
-                const timeIn = new Date(attendance.timeIn)
-                const timeOut = attendance.timeOut ? new Date(attendance.timeOut) : undefined
-                earnings = calculateEarnings(basicSalary, timeIn, timeOut)
-              } else {
-                earnings = dailySalary
-              }
-              // Calculate late deduction: per-second rate × seconds late (capped at 50% daily)
-              const timeIn = new Date(attendance.timeIn!)
-              const expectedTimeIn = new Date(checkDate)
-              const [hours, minutes] = (attendanceSettings?.timeInEnd || '09:30').split(':').map(Number)
-              expectedTimeIn.setHours(hours, minutes, 0, 0)
-              
-              const perSecondRate = dailySalary / 8 / 60 / 60
-              const secondsLate = Math.max(0, (timeIn.getTime() - expectedTimeIn.getTime()) / 1000)
-              deductions = Math.min(secondsLate * perSecondRate, dailySalary * 0.5)
-              lateDays++
-            } else if (calculatedStatus === 'ABSENT') {
-              earnings = 0
-              // Deduct daily salary for absent day
-              deductions = dailySalary
-              absentDays++
-            } else if (calculatedStatus === 'PARTIAL') {
-              // Pro-rated earnings based on actual work hours
-              earnings = dailySalary * (workHours / 8)
-              // Deduct hourly rate for hours short of 8
-              const hourlyRate = dailySalary / 8
-              const hoursShort = Math.max(0, 8 - workHours)
-              deductions = hoursShort * hourlyRate
-            }
-
-            userAttendanceRecords.push({
-              date: dateKey,
-              timeIn: attendance.timeIn?.toISOString() || null,
-              timeOut: attendance.timeOut?.toISOString() || null,
-              status: calculatedStatus,
-              workHours,
-              earnings,
-              deductions
-            })
-
             // Don't accumulate gross salary here - will be set to basic salary for period
             totalWorkHours += workHours
             
-            console.log(`🔍 Daily Calculation - User: ${user.name}, Date: ${dateKey}, Status: ${calculatedStatus}, Work Hours: ${workHours.toFixed(2)}`)
+              
+              console.log(`🔍 Daily Calculation - User: ${user.name}, Date: ${dateKey}, Status: ${calculatedStatus}, Work Hours: ${workHours.toFixed(2)}, Deductions: ₱${deductions.toFixed(2)} (from live attendance)`)
           } else {
-            // No attendance record - check if should be PENDING or ABSENT
+            // No attendance record - use live record if available (for auto-marked absent)
             console.log(`🔍 Payroll No Record Processing - User: ${user.name}, Date: ${dateKey}, Day: ${dayName}`)
             
-            let statusForNoRecord = 'ABSENT'
-            let deductionsForNoRecord = 0
-            
-            // Check if current day and still within time-out window (should be PENDING)
-            const checkDateString = toPhilippinesDateString(checkDate)
-            const todayString = toPhilippinesDateString(todayForUser)
-            const isCurrentDay = checkDateString === todayString
-            if (isCurrentDay && attendanceSettings?.timeOutEnd) {
-              const currentTime = getNowInPhilippines()
-              // Create time-out end time for today in Philippines timezone
-              const timeOutEnd = new Date(todayForUser)
-              const [hours, minutes] = attendanceSettings.timeOutEnd.split(':').map(Number)
-              timeOutEnd.setHours(hours, minutes, 0, 0)
+            if (liveRecord) {
+              // Use live attendance data for days without database record
+              const statusForNoRecord = liveRecord.status
+              const deductionsForNoRecord = liveRecord.deductions
               
-              console.log(`🔍 Payroll PENDING Check - User: ${user.name}, Date: ${dateKey}`)
-              console.log(`🔍 Payroll PENDING Check - Current Time: ${currentTime.toISOString()}`)
-              console.log(`🔍 Payroll PENDING Check - TimeOut End: ${timeOutEnd.toISOString()}`)
-              console.log(`🔍 Payroll PENDING Check - Is Current Day: ${isCurrentDay}`)
-              
-              if (currentTime <= timeOutEnd) {
-                // Still within time-out window - should be PENDING
-                statusForNoRecord = 'PENDING'
-                deductionsForNoRecord = 0
-                console.log(`🔍 Payroll PENDING Check - Status: PENDING (within time-out window)`)
-              } else {
-                // Past time-out window - should be ABSENT
-                statusForNoRecord = 'ABSENT'
-                // Deduct daily salary for absent day
-                deductionsForNoRecord = dailySalary
+              if (statusForNoRecord === 'ABSENT') {
                 absentDays++
-                console.log(`🔍 Payroll PENDING Check - Status: ABSENT (past time-out window), Deduction: ₱${deductionsForNoRecord.toFixed(2)}`)
               }
+              
+              totalUserDeductions += deductionsForNoRecord
+              
+              userAttendanceRecords.push({
+                date: dateKey,
+                timeIn: null,
+                timeOut: null,
+                status: statusForNoRecord,
+                workHours: 0,
+                earnings: 0,
+                deductions: deductionsForNoRecord
+              })
+              
+              console.log(`🔍 No Record Day (from live) - User: ${user.name}, Date: ${dateKey}, Status: ${statusForNoRecord}, Deductions: ₱${deductionsForNoRecord.toFixed(2)}`)
             } else {
-              // Not current day - should be ABSENT
-              statusForNoRecord = 'ABSENT'
-              // Deduct daily salary for absent day
-              deductionsForNoRecord = dailySalary
-              absentDays++
-              console.log(`🔍 Payroll No Record - Status: ABSENT (not current day), Deduction: ₱${deductionsForNoRecord.toFixed(2)}`)
+              // No live record either - this shouldn't happen but handle gracefully
+              console.log(`🔍 Payroll SKIPPING - No attendance or live record - User: ${user.name}, Date: ${dateKey}`)
             }
-            
-            totalUserDeductions += deductionsForNoRecord
-            
-            userAttendanceRecords.push({
-              date: dateKey,
-              timeIn: null,
-              timeOut: null,
-              status: statusForNoRecord,
-              workHours: 0,
-              earnings: 0,
-              deductions: deductionsForNoRecord
-            })
-            
-            console.log(`🔍 No Record Day - User: ${user.name}, Date: ${dateKey}, Status: ${statusForNoRecord}, Deductions: ₱${deductionsForNoRecord.toFixed(2)}`)
           }
         }
         
         checkDate.setDate(checkDate.getDate() + 1)
       }
-
-      // Get comprehensive deduction details for this user (including attendance deductions)
+      
+      console.log(`🔍 Payroll Summary - User: ${user.name}, Total Attendance Deductions: ₱${totalUserDeductions.toFixed(2)} (from live attendance)`)
+      // Get comprehensive deduction details for this user
+      // For mandatory deductions (PhilHealth, SSS, Pag-IBIG), don't filter by date - they apply to every period
+      // For other deductions, only include those within the current period
+      console.log(`🔍🔍🔍 FETCHING DEDUCTIONS for ${user.name} (${user.users_id})`)
+      console.log(`🔍 Period: ${periodStartDay.toISOString()} to ${periodEndDay.toISOString()}`)
+      
       const deductionDetails = await prisma.deduction.findMany({
         where: {
           users_id: user.users_id,
-          appliedAt: {
-            gte: periodStartDay,
-            lte: periodEndDay
-          }
+          archivedAt: null, // Exclude archived deductions
+          // Include ALL active deductions (both mandatory and non-mandatory)
+          // Non-mandatory deductions will be archived after payroll release
         },
         include: {
           deductionType: {
             select: {
               name: true,
-              description: true
+              description: true,
+              isMandatory: true
             }
           }
         },
@@ -722,14 +678,65 @@ export async function getPayrollSummary(): Promise<{
           appliedAt: 'desc'
         }
       })
+      
+      console.log(`🔍🔍🔍 FOUND ${deductionDetails.length} DEDUCTIONS for ${user.name}:`)
+      deductionDetails.forEach(d => {
+        console.log(`  - ${d.deductionType.name}: ₱${d.amount} (Mandatory: ${d.deductionType.isMandatory}, Applied: ${d.appliedAt.toISOString()})`)
+      })
+      
+      // Get all active mandatory deduction types
+      const activeMandatoryTypes = await prisma.deductionType.findMany({
+        where: {
+          isMandatory: true,
+          isActive: true
+        }
+      })
+      
+      console.log(`🔍 Found ${activeMandatoryTypes.length} active mandatory deduction types`)
+      
+      // For each active mandatory type, ensure it's in deductionDetails
+      for (const mandatoryType of activeMandatoryTypes) {
+        const exists = deductionDetails.find(d => d.deduction_types_id === mandatoryType.deduction_types_id)
+        if (!exists) {
+          // Add it automatically
+          console.log(`  ✅ AUTO-ADDING ${mandatoryType.name} (₱${mandatoryType.amount}) to ${user.name}`)
+          deductionDetails.push({
+            deductions_id: 'auto-' + mandatoryType.deduction_types_id,
+            users_id: user.users_id,
+            deduction_types_id: mandatoryType.deduction_types_id,
+            amount: mandatoryType.amount,
+            appliedAt: new Date(),
+            notes: 'Auto-applied mandatory deduction',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deductionType: {
+              name: mandatoryType.name,
+              description: mandatoryType.description,
+              isMandatory: true
+            }
+          } as any)
+        }
+      }
 
-      // Set gross salary to semi-monthly (basicSalary already divided by 2 above)
-      grossSalary = basicSalary // basicSalary is already the semi-monthly amount
+      // FORCE: Always fetch ALL overload pays and sum by user
+      const allOverloadPays = await prisma.overloadPay.findMany({
+        where: { archivedAt: null },
+        include: { user: { select: { name: true } } }
+      })
+      
+      const userOverloadPays = allOverloadPays.filter(op => op.users_id === user.users_id)
+      const totalOverloadPay = userOverloadPays.reduce((sum, op) => sum + Number(op.amount), 0)
+      
+      console.log(`🔴 ${user.name} (${user.users_id}): Found ${userOverloadPays.length} overload records = ₱${totalOverloadPay}`)
+
+      // Set gross salary to semi-monthly + overload pay (overload is additional salary)
+      grossSalary = basicSalary + totalOverloadPay // basicSalary is already the semi-monthly amount
       
       console.log(`💰 GROSS SALARY CALCULATION - User: ${user.name}`)
       console.log(`💰 Monthly Basic Salary: ₱${monthlyBasicSalary.toFixed(2)}`)
       console.log(`💰 Semi-Monthly Calculation: ALWAYS ÷ 2`)
-      console.log(`💰 GROSS SALARY FOR THIS PERIOD: ₱${grossSalary.toFixed(2)} = ₱${monthlyBasicSalary.toFixed(2)} × 0.5`)
+      console.log(`💰 Overload Pay: ₱${totalOverloadPay.toFixed(2)}`)
+      console.log(`💰 GROSS SALARY FOR THIS PERIOD: ₱${grossSalary.toFixed(2)} = ₱${basicSalary.toFixed(2)} + ₱${totalOverloadPay.toFixed(2)}`)
       
       // Calculate total deductions from database (excluding attendance deductions)
       // Maintain full decimal precision by using parseFloat instead of Number()
@@ -747,8 +754,8 @@ export async function getPayrollSummary(): Promise<{
       // apply the most recent deduction per type (treat as standing/recurring assignment) WITHOUT creating new rows
       if (totalDatabaseDeductions === 0) {
         const latestUserDeductions = await prisma.deduction.findMany({
-          where: { users_id: user.users_id },
-          include: { deductionType: { select: { name: true, description: true } } },
+          where: { users_id: user.users_id, archivedAt: null },
+          include: { deductionType: { select: { name: true, description: true, isMandatory: true } } },
           orderBy: { appliedAt: 'desc' }
         })
 
@@ -807,56 +814,6 @@ export async function getPayrollSummary(): Promise<{
       
       // No auto-creation of deductions; page should reflect only existing records
 
-      // Get approved unpaid leave requests for this user in the payroll period
-      const unpaidLeaveRequests = await prisma.leaveRequest.findMany({
-        where: {
-          users_id: user.users_id,
-          status: 'APPROVED',
-          isPaid: false,
-          startDate: { lte: periodEnd },
-          endDate: { gte: periodStart }
-        }
-      })
-
-      console.log(`🔍 UNPAID LEAVE DEBUG - User: ${user.name}`)
-      console.log(`🔍 UNPAID LEAVE DEBUG - Payroll Period: ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`)
-      console.log(`🔍 UNPAID LEAVE DEBUG - Found ${unpaidLeaveRequests.length} unpaid leave requests in this period`)
-      unpaidLeaveRequests.forEach(leave => {
-        console.log(`🔍 UNPAID LEAVE DEBUG - ✓ Leave FOUND: ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]}, Days: ${leave.days}, isPaid: ${leave.isPaid}`)
-      })
-      
-      // Also check ALL approved unpaid leaves for this user (for debugging)
-      const allUnpaidLeaves = await prisma.leaveRequest.findMany({
-        where: {
-          users_id: user.users_id,
-          status: 'APPROVED',
-          isPaid: false
-        }
-      })
-      console.log(`🔍 UNPAID LEAVE DEBUG - Total approved unpaid leaves (all periods): ${allUnpaidLeaves.length}`)
-      allUnpaidLeaves.forEach(leave => {
-        console.log(`🔍 UNPAID LEAVE DEBUG - All Leaves: ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]}`)
-      })
-
-      // Calculate unpaid leave deduction
-      let totalUnpaidLeaveDays = 0
-      for (const leave of unpaidLeaveRequests) {
-        const leaveStart = new Date(leave.startDate) > periodStart ? new Date(leave.startDate) : periodStart
-        const leaveEnd = new Date(leave.endDate) < periodEnd ? new Date(leave.endDate) : periodEnd
-        
-        // Count days between leaveStart and leaveEnd (inclusive)
-        let currentDate = new Date(leaveStart)
-        while (currentDate <= leaveEnd) {
-          // Only count working days (exclude Sundays)
-          if (getPhilippinesDayOfWeek(currentDate) !== 0) {
-            totalUnpaidLeaveDays++
-          }
-          currentDate.setDate(currentDate.getDate() + 1)
-        }
-      }
-      
-      const unpaidLeaveDeduction = totalUnpaidLeaveDays * dailySalary
-      console.log(`🔍 Unpaid Leave Debug - User: ${user.name}, Unpaid Days: ${totalUnpaidLeaveDays}, Daily Salary: ₱${dailySalary.toFixed(2)}, Total Deduction: ₱${unpaidLeaveDeduction.toFixed(2)}`)
 
       // Get active loans for this user and calculate monthly payment
       const activeLoans = await prisma.loan.findMany({
@@ -865,8 +822,11 @@ export async function getPayrollSummary(): Promise<{
           status: 'ACTIVE'
         },
         select: {
+          loans_id: true,
           amount: true,
-          monthlyPaymentPercent: true
+          balance: true,
+          monthlyPaymentPercent: true,
+          purpose: true
         }
       })
 
@@ -877,19 +837,46 @@ export async function getPayrollSummary(): Promise<{
         return sum + perPayrollPayment
       }, 0)
 
-      // Use database deductions + attendance deductions + unpaid leave deductions + loan payments
-      const finalTotalDeductions = totalDatabaseDeductions + totalAttendanceDeductions + unpaidLeaveDeduction + totalLoanPayments
+      // Map loan details for breakdown
+      const loanDetails = activeLoans.map(loan => {
+        const monthlyPayment = (parseFloat(loan.amount.toString()) * parseFloat(loan.monthlyPaymentPercent.toString())) / 100
+        const perPayrollPayment = monthlyPayment * perPayrollFactor
+        return {
+          type: loan.purpose || 'Loan', // Use purpose as type to identify deductions
+          amount: perPayrollPayment,
+          remainingBalance: parseFloat(loan.balance.toString()),
+          loans_id: loan.loans_id,
+          purpose: loan.purpose,
+          payment: perPayrollPayment,
+          balance: parseFloat(loan.balance.toString())
+        }
+      })
 
+      // Use database deductions + attendance deductions + loan payments
+      const finalTotalDeductions = totalDatabaseDeductions + totalAttendanceDeductions + totalLoanPayments
+
+      // Net salary = gross (which already includes overload pay) - deductions
       const netSalary = grossSalary - finalTotalDeductions
 
-      console.log(`🔍 Payroll Summary - User: ${user.name}, Basic Salary: ₱${basicSalary.toFixed(6)}, Gross (Full Period): ₱${grossSalary.toFixed(6)}, Database Deductions: ₱${totalDatabaseDeductions.toFixed(6)}, Attendance Deductions: ₱${totalAttendanceDeductions.toFixed(6)}, Unpaid Leave Deduction: ₱${unpaidLeaveDeduction.toFixed(6)}, Loan Payments: ₱${totalLoanPayments.toFixed(6)}, Total Deductions: ₱${finalTotalDeductions.toFixed(6)}, Net: ₱${netSalary.toFixed(6)}`)
+      console.log(`🔍 Payroll Summary - User: ${user.name}, Basic Salary: ₱${basicSalary.toFixed(6)}, Overload Pay: ₱${totalOverloadPay.toFixed(6)}, Gross (Full Period): ₱${grossSalary.toFixed(6)}, Database Deductions: ₱${totalDatabaseDeductions.toFixed(6)}, Attendance Deductions: ₱${totalAttendanceDeductions.toFixed(6)}, Loan Payments: ₱${totalLoanPayments.toFixed(6)}, Total Deductions: ₱${finalTotalDeductions.toFixed(6)}, Net: ₱${netSalary.toFixed(6)}`)
+      console.log(`📋 Deduction Details for ${user.name}:`, periodNonAttendanceDeductions.map(d => `${d.deductionType.name}: ₱${d.amount} (Mandatory: ${d.deductionType.isMandatory ?? 'N/A'})`))
+
+      // Log final values before pushing to entries
+      console.log(`✅ PUSHING ENTRY for ${user.name}:`)
+      console.log(`   - grossSalary: ₱${grossSalary.toFixed(2)}`)
+      console.log(`   - totalAdditions (overload): ₱${totalOverloadPay.toFixed(2)}`)
+      console.log(`   - totalDeductions: ₱${finalTotalDeductions.toFixed(2)}`)
+      console.log(`   - netSalary: ₱${netSalary.toFixed(2)}`)
 
       computedEntries.push({
         users_id: user.users_id,
         name: user.name,
         email: user.email,
+        avatar: user.avatar,
         personnelType: {
           name: user.personnelType.name,
+          type: user.personnelType.type,
+          department: user.personnelType.department,
           basicSalary: monthlyBasicSalary // Store monthly salary in personnel type for reference
         },
         totalDays,
@@ -899,28 +886,38 @@ export async function getPayrollSummary(): Promise<{
         totalWorkHours,
         grossSalary,
         totalDeductions: finalTotalDeductions,
+        totalAdditions: totalOverloadPay,
         netSalary,
-        status: (usersIdToStatus.get(user.users_id) || 'Pending') as 'Pending' | 'Released' | 'Archived',
+        status: (usersIdToStatus.get(user.users_id) || 'Pending') as 'Pending' | 'Released',
         attendanceRecords: userAttendanceRecords,
-        deductionDetails: periodNonAttendanceDeductions.map(deduction => ({
-          id: (deduction as any).deductions_id || (deduction as any).deduction_id || '',
-          amount: parseFloat(deduction.amount.toString()),
-          type: deduction.deductionType.name,
-          description: deduction.deductionType.description,
-          appliedAt: deduction.appliedAt.toISOString(),
-          notes: deduction.notes
-        })),
+        deductionDetails: (() => {
+          const mapped = periodNonAttendanceDeductions.map(deduction => ({
+            id: (deduction as any).deductions_id || (deduction as any).deduction_id || '',
+            amount: parseFloat(deduction.amount.toString()),
+            type: deduction.deductionType.name,
+            description: deduction.deductionType.description,
+            appliedAt: deduction.appliedAt.toISOString(),
+            notes: deduction.notes,
+            isMandatory: deduction.deductionType.isMandatory
+          }))
+          console.log(`🎯🎯🎯 FINAL deductionDetails for ${user.name}:`, mapped.map(d => `${d.type}: ₱${d.amount} (Mandatory: ${d.isMandatory})`))
+          return mapped
+        })(),
         loanPayments: totalLoanPayments,
+        loanDetails: loanDetails,
         // Separate deduction breakdowns for frontend
         attendanceDeductions: totalAttendanceDeductions,
         databaseDeductions: totalDatabaseDeductions,
-        unpaidLeaveDeduction: unpaidLeaveDeduction,
-        unpaidLeaveDays: totalUnpaidLeaveDays
+        unpaidLeaveDeduction: 0,
+        unpaidLeaveDays: 0
       })
 
       compTotalGross += grossSalary
       compTotalDeductions += finalTotalDeductions
       compTotalNet += netSalary
+      
+      // Note: Deductions will be archived when payroll is RELEASED, not during generation
+      // This allows viewing the breakdown before release
     }
 
     payrollEntries = computedEntries
@@ -1092,41 +1089,17 @@ export async function generatePayroll(): Promise<{
       }
     }
 
-    // Auto-archive any previously RELEASED payroll entries that belong to older periods
-    // This ensures that once a new period is generated, older released payrolls move to the archive
-    const newPeriodStartDate = new Date(summary.periodStart)
-    
-    // Debug: Check what released entries exist before archiving
-    const releasedEntriesToCheck = await prisma.payrollEntry.findMany({
+    // Auto-archive all RELEASED payroll entries when generating new payroll
+    // This ensures personnel only see the latest released payroll
+    const archivedCount = await prisma.payrollEntry.updateMany({
       where: {
-        status: 'RELEASED',
-        archivedAt: null,
-      },
-      select: {
-        payroll_entries_id: true,
-        periodStart: true,
-        periodEnd: true,
-        users_id: true
-      }
-    })
-    console.log(`🔍 Found ${releasedEntriesToCheck.length} RELEASED entries to check for archiving:`)
-    releasedEntriesToCheck.forEach(entry => {
-      const shouldArchive = new Date(entry.periodEnd) < newPeriodStartDate
-      console.log(`  - Entry ${entry.payroll_entries_id}: ${entry.periodStart.toISOString()} to ${entry.periodEnd.toISOString()} (should archive: ${shouldArchive})`)
-    })
-    
-    const autoArchiveResult = await prisma.payrollEntry.updateMany({
-      where: {
-        status: 'RELEASED',
-        archivedAt: null,
-        periodEnd: { lt: newPeriodStartDate }, // Archive entries that end before the new period starts
+        status: 'RELEASED'
       },
       data: {
-        status: 'ARCHIVED',
-        archivedAt: new Date(),
-      },
+        status: 'ARCHIVED'
+      }
     })
-    console.log(`🗄️ Auto-archived previous released payrolls: ${autoArchiveResult.count} entries with periodEnd < ${newPeriodStartDate.toISOString()}`)
+    console.log(`📦 Auto-archived ${archivedCount.count} released payroll entries`)
 
     // After generating, set the summary's display period to the newly generated one by updating Attendance Settings
     await prisma.attendanceSettings.upsert({
@@ -1181,12 +1154,64 @@ export async function releasePayroll(entryIds: string[]): Promise<{
       }
     })
 
-    // Update payroll entries status to RELEASED
+    // Get full payroll summary to capture breakdown snapshot
+    const summaryResult = await getPayrollSummary()
+    
+    // For each entry, capture the breakdown snapshot before releasing
+    for (const entry of entries) {
+      // Find the matching entry in summary
+      const summaryEntry = summaryResult.summary?.payrollEntries.find(
+        e => e.users_id === entry.users_id
+      )
+      
+      if (summaryEntry) {
+        // Create snapshot of ALL breakdown information
+        const breakdownSnapshot = {
+          monthlyBasicSalary: summaryEntry.personnelType?.basicSalary,
+          periodSalary: summaryEntry.grossSalary,
+          totalDeductions: summaryEntry.totalDeductions,
+          totalAdditions: summaryEntry.totalAdditions || 0, // Overload pay
+          netPay: summaryEntry.netSalary,
+          totalWorkHours: summaryEntry.totalWorkHours,
+          attendanceDeductions: summaryEntry.attendanceDeductions,
+          databaseDeductions: summaryEntry.databaseDeductions,
+          loanPayments: summaryEntry.loanPayments,
+          attendanceRecords: summaryEntry.attendanceRecords,
+          deductionDetails: summaryEntry.deductionDetails,
+          personnelType: summaryEntry.personnelType?.name
+        }
+        
+        // Find the payroll_entries_id for this user
+        const payrollEntry = await prisma.payrollEntry.findFirst({
+          where: {
+            users_id: entry.users_id,
+            payroll_entries_id: { in: entryIds }
+          }
+        })
+        
+        if (payrollEntry) {
+          // Update this specific entry with snapshot and RELEASED status
+          await prisma.payrollEntry.update({
+            where: {
+              payroll_entries_id: payrollEntry.payroll_entries_id
+            },
+            data: {
+              status: 'RELEASED',
+              releasedAt: new Date(),
+              breakdownSnapshot: JSON.stringify(breakdownSnapshot)
+            }
+          })
+        }
+      }
+    }
+    
+    // Fallback: update any remaining entries without snapshot
     await prisma.payrollEntry.updateMany({
       where: {
         payroll_entries_id: {
           in: entryIds
-        }
+        },
+        breakdownSnapshot: null
       },
       data: {
         status: 'RELEASED',
@@ -1348,6 +1373,49 @@ export async function releasePayrollWithAudit(nextPeriodStart?: string, nextPeri
         }
       })
 
+      // Update loan balances for all users with active loans
+      const activeLoans = await tx.loan.findMany({
+        where: {
+          status: 'ACTIVE',
+          archivedAt: null
+        }
+      })
+
+      // Calculate period factor (biweekly vs monthly)
+      const periodDays = Math.floor((endOfDayPH.getTime() - startOfDayPH.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      const payrollFactor = periodDays <= 16 ? 0.5 : 1.0
+
+      // Update each active loan
+      for (const loan of activeLoans) {
+        const loanAmount = Number(loan.amount)
+        const monthlyPaymentPercent = Number(loan.monthlyPaymentPercent)
+        const monthlyPayment = (loanAmount * monthlyPaymentPercent) / 100
+        const paymentAmount = monthlyPayment * payrollFactor
+
+        // Calculate new balance
+        const currentBalance = Number(loan.balance)
+        const newBalance = Math.max(0, currentBalance - paymentAmount)
+
+        // Check if loan is fully paid
+        const isFullyPaid = newBalance <= 0
+
+        // Update loan - auto-archive when completed
+        await tx.loan.update({
+          where: { loans_id: loan.loans_id },
+          data: {
+            balance: newBalance,
+            status: isFullyPaid ? 'COMPLETED' : 'ACTIVE',
+            archivedAt: isFullyPaid ? new Date() : null
+          }
+        })
+
+        if (isFullyPaid) {
+          console.log(`🎉 Loan ${loan.loans_id} COMPLETED and AUTO-ARCHIVED: ₱${currentBalance.toFixed(2)} → ₱0.00 (final payment: ₱${paymentAmount.toFixed(2)})`)
+        } else {
+          console.log(`✅ Updated loan ${loan.loans_id}: ₱${currentBalance.toFixed(2)} → ₱${newBalance.toFixed(2)} (paid: ₱${paymentAmount.toFixed(2)})`)
+        }
+      }
+
       // Persist NEXT period into attendance settings (flexible dates provided by admin)
       if (nextPeriodStart && nextPeriodEnd) {
         // Convert PH-local dates to UTC using helper to avoid off-by-one
@@ -1369,6 +1437,72 @@ export async function releasePayrollWithAudit(nextPeriodStart?: string, nextPeri
 
       return res
     })
+
+    // Archive non-mandatory deductions after payroll is released
+    // This moves them to archived section so they don't appear in future payrolls
+    console.log('📦 Archiving non-mandatory deductions from released payroll...')
+    
+    for (const entry of entriesToRelease) {
+      // Get all non-mandatory deductions for this user in this period
+      const userDeductions = await prisma.deduction.findMany({
+        where: {
+          users_id: entry.users_id,
+          archivedAt: null,
+          OR: [
+            {
+              deductionType: {
+                isMandatory: false
+              },
+              appliedAt: {
+                gte: startOfDayPH,
+                lte: endOfDayPH
+              }
+            }
+          ]
+        },
+        include: {
+          deductionType: {
+            select: {
+              name: true,
+              isMandatory: true
+            }
+          }
+        }
+      })
+
+      const nonMandatory = userDeductions.filter(d => 
+        !d.deductionType.isMandatory &&
+        !d.deductionType.name.includes('Late') &&
+        !d.deductionType.name.includes('Absent') &&
+        !d.deductionType.name.includes('Early') &&
+        !d.deductionType.name.includes('Partial') &&
+        !d.deductionType.name.includes('Tardiness')
+      )
+
+      if (nonMandatory.length > 0) {
+        const idsToArchive = nonMandatory
+          .map(d => d.deductions_id)
+          .filter(id => !id.startsWith('auto-'))
+
+        if (idsToArchive.length > 0) {
+          console.log(`📦 Archiving ${idsToArchive.length} non-mandatory deductions for user ${entry.users_id}:`)
+          nonMandatory.forEach(d => {
+            console.log(`   - ${d.deductionType.name}: ₱${d.amount}`)
+          })
+          
+          // ARCHIVE the deductions by setting archivedAt timestamp
+          await prisma.deduction.updateMany({
+            where: {
+              deductions_id: { in: idsToArchive }
+            },
+            data: {
+              archivedAt: new Date()
+            }
+          })
+          console.log(`📦 ✅ Archived ${idsToArchive.length} non-mandatory deductions for user ${entry.users_id}`)
+        }
+      }
+    }
 
     // Send notification to all personnel whose payroll was released
     if (entriesToRelease.length > 0) {

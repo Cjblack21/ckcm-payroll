@@ -12,11 +12,16 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = session.user.id
+    
+    // Check if requesting archived loans
+    const { searchParams } = new URL(request.url)
+    const archived = searchParams.get('archived') === 'true'
 
     // Get all loans for the user
     const loans = await prisma.loan.findMany({
       where: {
-        users_id: userId
+        users_id: userId,
+        archivedAt: archived ? { not: null } : null
       },
       include: {
         user: {
@@ -45,17 +50,17 @@ export async function GET(request: NextRequest) {
     // Calculate loan progress for each loan
     const loansWithProgress = loans.map(loan => {
       const loanAmount = Number(loan.amount)
+      const remainingBalance = Number(loan.balance)
       const monthlyPaymentPercent = Number(loan.monthlyPaymentPercent)
       const monthlyPayment = (loanAmount * monthlyPaymentPercent) / 100
       const biweeklyPayment = monthlyPayment / 2
 
-      // Calculate total payments made (approximate based on payroll entries)
-      const totalPaymentsMade = payrollEntries.length * biweeklyPayment
-      const remainingBalance = Math.max(0, loanAmount - totalPaymentsMade)
-      const progressPercentage = Math.min(100, (totalPaymentsMade / loanAmount) * 100)
+      // Calculate total payments made based on actual balance
+      const totalPaymentsMade = loanAmount - remainingBalance
+      const progressPercentage = loanAmount > 0 ? Math.min(100, (totalPaymentsMade / loanAmount) * 100) : 0
 
       // Calculate estimated completion date
-      const paymentsRemaining = Math.ceil(remainingBalance / biweeklyPayment)
+      const paymentsRemaining = biweeklyPayment > 0 ? Math.ceil(remainingBalance / biweeklyPayment) : 0
       const estimatedCompletionDate = new Date()
       estimatedCompletionDate.setDate(estimatedCompletionDate.getDate() + (paymentsRemaining * 14)) // 14 days per biweekly period
 

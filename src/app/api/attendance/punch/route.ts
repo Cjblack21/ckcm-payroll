@@ -37,74 +37,7 @@ export async function POST(request: NextRequest) {
     // Use resolved users_id for all subsequent operations
     const users_id = user.users_id
 
-    // Check if user has approved leave for today
     const now = getNowInPhilippines()
-    const startToday = getStartOfDayInPhilippines(now)
-    const endToday = getEndOfDayInPhilippines(now)
-    
-    console.log('🔍 LEAVE CHECK DEBUG:')
-    console.log('🔍 Current Philippines time:', now.toISOString())
-    console.log('🔍 Start of today:', startToday.toISOString())
-    console.log('🔍 End of today:', endToday.toISOString())
-    
-    // Method 1: Check for approved leave requests
-    const approvedLeave = await prisma.leaveRequest.findFirst({
-      where: {
-        users_id,
-        status: 'APPROVED',
-        startDate: { lte: endToday },
-        endDate: { gte: startToday }
-      }
-    })
-
-    console.log('🔍 LEAVE CHECK RESULT:', approvedLeave ? {
-      startDate: approvedLeave.startDate.toISOString(),
-      endDate: approvedLeave.endDate.toISOString(),
-      isPaid: approvedLeave.isPaid,
-      status: approvedLeave.status,
-      comparison: {
-        'startDate <= endToday': `${approvedLeave.startDate.toISOString()} <= ${endToday.toISOString()} = ${approvedLeave.startDate <= endToday}`,
-        'endDate >= startToday': `${approvedLeave.endDate.toISOString()} >= ${startToday.toISOString()} = ${approvedLeave.endDate >= startToday}`,
-        'Today is within leave': approvedLeave.startDate <= endToday && approvedLeave.endDate >= startToday
-      }
-    } : 'No approved leave found')
-
-    if (approvedLeave) {
-      const leaveType = approvedLeave.isPaid ? 'paid' : 'unpaid'
-      console.log(`⛔ BLOCKING ATTENDANCE: User is on ${leaveType} leave`)
-      return NextResponse.json({ 
-        error: `You are on approved ${leaveType} leave from ${new Date(approvedLeave.startDate).toLocaleDateString()} to ${new Date(approvedLeave.endDate).toLocaleDateString()}. Attendance cannot be recorded during leave.`,
-        onLeave: true,
-        leaveDetails: {
-          type: leaveType,
-          startDate: approvedLeave.startDate,
-          endDate: approvedLeave.endDate
-        }
-      }, { status: 403 })
-    }
-    
-    // Method 2: Check if today's attendance record already has ON_LEAVE status
-    const existingAttendance = await prisma.attendance.findFirst({
-      where: { 
-        users_id, 
-        date: { gte: startToday, lte: endToday },
-        status: 'ON_LEAVE'
-      },
-    })
-    
-    if (existingAttendance) {
-      console.log(`⛔ BLOCKING ATTENDANCE: Attendance record already marked as ON_LEAVE`)
-      return NextResponse.json({ 
-        error: 'You are on approved leave today. Attendance cannot be recorded during leave.',
-        onLeave: true,
-        leaveDetails: {
-          type: 'leave',
-          startDate: existingAttendance.date,
-          endDate: existingAttendance.date
-        }
-      }, { status: 403 })
-    }
-
     const settings = await prisma.attendanceSettings.findFirst()
     const nowHH = now.getHours().toString().padStart(2, '0')
     const nowMM = now.getMinutes().toString().padStart(2, '0')
@@ -118,6 +51,9 @@ export async function POST(request: NextRequest) {
       noTimeInCutoff: settings.noTimeInCutoff
     } : 'No settings found')
 
+    // Get today's date range in Philippines timezone
+    const startToday = getStartOfDayInPhilippines(now)
+    const endToday = getEndOfDayInPhilippines(now)
 
     // Find or create today's record
     let record = await prisma.attendance.findFirst({

@@ -91,14 +91,17 @@ async function main() {
 
   // Seed default deduction types if not present
   const defaultTypes = [
-    { name: 'Late Penalty', description: 'Penalty for late arrival' },
-    { name: 'Uniform', description: 'Uniform payment deduction' },
+    { name: 'Late Penalty', description: 'Penalty for late arrival', amount: 0 },
+    { name: 'Uniform', description: 'Uniform payment deduction', amount: 0 },
+    { name: 'PhilHealth', description: 'Philippine Health Insurance Corporation', amount: 0 },
+    { name: 'SSS', description: 'Social Security System', amount: 0 },
+    { name: 'Pag-IBIG', description: 'Home Development Mutual Fund', amount: 0 },
   ]
   for (const t of defaultTypes) {
     await prisma.deductionType.upsert({
       where: { name: t.name },
       update: {},
-      create: { name: t.name, description: t.description, isActive: true },
+      create: { name: t.name, description: t.description, amount: t.amount, isActive: true },
     })
   }
 

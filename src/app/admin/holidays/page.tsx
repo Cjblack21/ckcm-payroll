@@ -29,7 +29,7 @@ import {
   TableRow 
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Plus, Edit, Trash2, MapPin, Flag, Download } from "lucide-react"
+import { Calendar, Plus, Edit, Trash2, MapPin, Flag, Download, FileText, CalendarDays } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns"
 import { SSRSafe } from "@/components/ssr-safe"
@@ -68,19 +68,15 @@ export default function HolidaysPage() {
 
   useEffect(() => {
     fetchHolidays()
-    autoImportPhilippineHolidays()
   }, [])
 
-  const autoImportPhilippineHolidays = async () => {
-    try {
-      // Check if we already have holidays for 2025
-      const hasHolidays = holidays.some(h => {
-        const year = new Date(h.date).getFullYear()
-        return year === 2025
-      })
-
-      // If no 2025 holidays exist, auto-import Philippine holidays
-      if (!hasHolidays) {
+  // Check for auto-import after holidays are loaded
+  useEffect(() => {
+    if (holidays.length > 0) return // Don't auto-import if we have holidays
+    
+    // Only auto-import once when there are no holidays at all
+    const autoImportPhilippineHolidays = async () => {
+      try {
         const response = await fetch('/api/admin/holidays/import?type=philippine', {
           method: 'POST'
         })
@@ -90,12 +86,14 @@ export default function HolidaysPage() {
             fetchHolidays()
           }
         }
+      } catch (error) {
+        // Silently fail - user can manually import if needed
+        console.log('Auto-import skipped')
       }
-    } catch (error) {
-      // Silently fail - user can manually import if needed
-      console.log('Auto-import skipped')
     }
-  }
+    
+    autoImportPhilippineHolidays()
+  }, [holidays.length])
 
   // Removed static Philippines holidays. The page now relies solely on DB holidays.
 
@@ -282,11 +280,21 @@ export default function HolidaysPage() {
     return getHolidaysForDate(selectedDate)
   }
 
+  // Calculate statistics
+  const totalHolidays = holidays.length
+  const nationalHolidays = holidays.filter(h => h.type === 'NATIONAL').length
+  const religiousHolidays = holidays.filter(h => h.type === 'RELIGIOUS').length
+  const companyHolidays = holidays.filter(h => h.type === 'COMPANY').length
+  const upcomingHolidays = holidays.filter(h => new Date(h.date) > new Date()).length
+
   return (
-    <div className="space-y-6">
+    <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Holidays Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <Calendar className="h-8 w-8 text-blue-600" />
+            Holidays Management
+          </h1>
           <p className="text-muted-foreground">
             Manage holidays and special days for the payroll system
           </p>
@@ -372,15 +380,70 @@ export default function HolidaysPage() {
         </SSRSafe>
       </div>
 
+      {/* Statistics Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Holidays</CardTitle>
+            <Calendar className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalHolidays}</div>
+            <p className="text-xs text-muted-foreground">
+              All holidays in the system
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-red-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">National Holidays</CardTitle>
+            <Flag className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{nationalHolidays}</div>
+            <p className="text-xs text-muted-foreground">
+              Government declared holidays
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Religious Holidays</CardTitle>
+            <Flag className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{religiousHolidays}</div>
+            <p className="text-xs text-muted-foreground">
+              Religious observances
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Company Holidays</CardTitle>
+            <CalendarDays className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{companyHolidays}</div>
+            <p className="text-xs text-muted-foreground">
+              Company-specific days off
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Holidays Table */}
         <div className="lg:col-span-2">
           <Card>
-        <CardHeader>
+        <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <Calendar className="h-6 w-6" />
               Holidays Calendar - {format(currentMonth, 'MMMM yyyy')}
             </CardTitle>
             <div className="flex gap-2">
@@ -411,12 +474,32 @@ export default function HolidaysPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Holiday Name</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Holiday Name
+                    </div>
+                  </TableHead>
+                  <TableHead className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4" />
+                      Date
+                    </div>
+                  </TableHead>
+                  <TableHead className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <Flag className="h-4 w-4" />
+                      Type
+                    </div>
+                  </TableHead>
+                  <TableHead className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Description
+                    </div>
+                  </TableHead>
+                  <TableHead className="px-6 py-4">Created</TableHead>
+                  <TableHead className="text-right px-6 py-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -486,9 +569,9 @@ export default function HolidaysPage() {
         {/* Calendar Sidebar */}
         <div className="lg:col-span-1">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <MapPin className="h-6 w-6" />
                 Philippines Holidays
               </CardTitle>
             </CardHeader>

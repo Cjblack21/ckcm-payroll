@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CreditCard, TrendingUp, Calendar, FileText, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Banknote, TrendingUp, Calendar, FileText, Clock, CheckCircle, AlertCircle, CreditCard as DeductionIcon, Archive } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface LoanData {
@@ -26,12 +26,15 @@ interface LoanData {
 
 export default function PersonnelLoansPage() {
   const [data, setData] = useState<LoanData | null>(null)
+  const [archivedLoans, setArchivedLoans] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedLoan, setSelectedLoan] = useState<any>(null)
+  const [showArchived, setShowArchived] = useState(false)
 
   useEffect(() => {
     loadLoansData()
+    loadArchivedLoans()
   }, [])
 
   const loadLoansData = async () => {
@@ -49,6 +52,21 @@ export default function PersonnelLoansPage() {
       console.error('Error loading loans data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadArchivedLoans = async () => {
+    try {
+      const response = await fetch('/api/personnel/loans?archived=true')
+      
+      if (response.ok) {
+        const data = await response.json()
+        setArchivedLoans(data.loans || [])
+      } else {
+        console.error('Failed to load archived loans')
+      }
+    } catch (error) {
+      console.error('Error loading archived loans:', error)
     }
   }
 
@@ -121,67 +139,204 @@ export default function PersonnelLoansPage() {
   const { loans, summary, paymentHistory } = data
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">My Loans</h1>
-          <p className="text-gray-600">View your loan information and payment progress</p>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <Banknote className="h-8 w-8 text-blue-600" />
+            My Loans & Deductions
+          </h1>
+          <p className="text-muted-foreground">View your loans, deductions and payment progress</p>
         </div>
+        <Button
+          variant={showArchived ? 'default' : 'outline'}
+          onClick={() => setShowArchived(!showArchived)}
+        >
+          <Archive className="h-4 w-4 mr-2" />
+          {showArchived ? 'Active Loans & Deductions' : 'Archived Loans & Deductions'}
+        </Button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Loans</p>
-                <p className="text-2xl font-bold">{summary.totalLoans}</p>
-              </div>
-              <CreditCard className="w-8 h-8 text-blue-600" />
-            </div>
+      {/* Loan Statistics */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Banknote className="h-5 w-5 text-blue-600" />
+          Loan Statistics
+        </h3>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Loans</CardTitle>
+            <FileText className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loans.filter(l => !l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').length}</div>
+            <p className="text-xs text-muted-foreground">
+              Currently active
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Active Loans</p>
-                <p className="text-2xl font-bold text-blue-600">{summary.activeLoans}</p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-green-600" />
+        <Card className="border-l-4 border-l-green-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Loan Amount</CardTitle>
+            <span className="text-2xl font-bold text-blue-600">₱</span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(loans.filter(l => !l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').reduce((sum, l) => sum + l.loanAmount, 0))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Active loan amount
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Amount</p>
-                <p className="text-2xl font-bold">{formatCurrency(summary.totalActiveLoanAmount)}</p>
-              </div>
-              <span className="text-4xl font-bold text-purple-600">₱</span>
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Outstanding Balance</CardTitle>
+            <TrendingUp className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(loans.filter(l => !l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').reduce((sum, l) => sum + l.remainingBalance, 0))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Remaining to be paid
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Remaining Balance</p>
-                <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalRemainingBalance)}</p>
-              </div>
-              <AlertCircle className="w-8 h-8 text-orange-600" />
+        <Card className="border-l-4 border-l-purple-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Per Payroll Payments</CardTitle>
+            <DeductionIcon className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(loans.filter(l => !l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').reduce((sum, l) => sum + (l.biweeklyPayment || 0), 0))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Total per-payroll collection
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-emerald-500 relative">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              Completed Loans
+            </CardTitle>
+            <CheckCircle className="h-4 w-4 text-emerald-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {loans.filter(l => !l.purpose?.startsWith('[DEDUCTION]') && l.status === 'COMPLETED').length + 
+               archivedLoans.filter(l => !l.purpose?.startsWith('[DEDUCTION]')).length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Successfully completed
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Deduction Statistics */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <DeductionIcon className="h-5 w-5 text-red-600" />
+          Deduction Statistics
+        </h3>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card className="border-l-4 border-l-red-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Deductions</CardTitle>
+            <FileText className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loans.filter(l => l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').length}</div>
+            <p className="text-xs text-muted-foreground">
+              Currently active
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Deduction Amount</CardTitle>
+            <span className="text-2xl font-bold text-red-600">₱</span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(loans.filter(l => l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').reduce((sum, l) => sum + l.loanAmount, 0))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Active deduction amount
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-yellow-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Outstanding Balance</CardTitle>
+            <TrendingUp className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(loans.filter(l => l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').reduce((sum, l) => sum + l.remainingBalance, 0))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Remaining to be paid
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-pink-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Per Payroll Deductions</CardTitle>
+            <DeductionIcon className="h-4 w-4 text-pink-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(loans.filter(l => l.purpose?.startsWith('[DEDUCTION]') && l.status === 'ACTIVE').reduce((sum, l) => sum + (l.biweeklyPayment || 0), 0))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total per-payroll deductions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-teal-500 relative">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-teal-500"></span>
+              </span>
+              Completed Deductions
+            </CardTitle>
+            <CheckCircle className="h-4 w-4 text-teal-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {loans.filter(l => l.purpose?.startsWith('[DEDUCTION]') && l.status === 'COMPLETED').length + 
+               archivedLoans.filter(l => l.purpose?.startsWith('[DEDUCTION]')).length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Successfully completed
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Active Loans */}
-      {summary.activeLoans > 0 && (
+      {!showArchived && summary.activeLoans > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -194,13 +349,26 @@ export default function PersonnelLoansPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {loans.filter(loan => loan.status === 'ACTIVE').map((loan) => (
+              {loans.filter(loan => loan.status === 'ACTIVE').map((loan) => {
+                const isDeduction = loan.purpose?.startsWith('[DEDUCTION]')
+                const displayPurpose = isDeduction ? loan.purpose.replace('[DEDUCTION] ', '') : loan.purpose
+                return (
                 <div key={loan.loans_id} className="border rounded-lg p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="font-medium text-lg">{loan.purpose}</h3>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {isDeduction ? (
+                          <DeductionIcon className="h-4 w-4 text-red-600" />
+                        ) : (
+                          <Banknote className="h-4 w-4 text-blue-600" />
+                        )}
+                        <h3 className="font-medium text-lg">{displayPurpose}</h3>
+                        <Badge variant="outline" className={isDeduction ? 'bg-red-50 text-red-700 border-red-200 text-xs' : 'bg-blue-50 text-blue-700 border-blue-200 text-xs'}>
+                          {isDeduction ? 'Deduction' : 'Loan'}
+                        </Badge>
+                      </div>
                       <p className="text-sm text-gray-600">
-                        Loan Date: {formatDate(loan.createdAt)}
+                        Date: {formatDate(loan.createdAt)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -219,7 +387,7 @@ export default function PersonnelLoansPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                     <div className="text-center p-3 bg-blue-50 rounded-lg">
                       <p className="text-sm text-gray-600">Original Amount</p>
                       <p className="font-bold text-blue-600">{formatCurrency(loan.loanAmount)}</p>
@@ -227,6 +395,10 @@ export default function PersonnelLoansPage() {
                     <div className="text-center p-3 bg-green-50 rounded-lg">
                       <p className="text-sm text-gray-600">Monthly Payment</p>
                       <p className="font-bold text-green-600">{formatCurrency(loan.monthlyPayment)}</p>
+                    </div>
+                    <div className="text-center p-3 bg-purple-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Per Payroll Deduction</p>
+                      <p className="font-bold text-purple-600">{formatCurrency(loan.biweeklyPayment || 0)}</p>
                     </div>
                     <div className="text-center p-3 bg-red-50 rounded-lg">
                       <p className="text-sm text-gray-600">Remaining Balance</p>
@@ -246,65 +418,93 @@ export default function PersonnelLoansPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Completed Loans */}
-      {summary.completedLoans > 0 && (
+      {/* Archived Loans */}
+      {showArchived && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5" />
-              Completed Loans
+              <Archive className="w-5 h-5" />
+              Archived Loans & Deductions
             </CardTitle>
             <CardDescription>
-              Your successfully completed loans
+              Your archived and completed loans
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {loans.filter(loan => loan.status === 'COMPLETED').map((loan) => (
-                <div key={loan.loans_id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium">{loan.purpose}</h3>
-                      <p className="text-sm text-gray-600">
-                        Completed: {formatDate(loan.updatedAt)}
-                      </p>
+            {archivedLoans.length > 0 ? (
+              <div className="space-y-4">
+                {archivedLoans.map((loan) => {
+                  const isDeduction = loan.purpose?.startsWith('[DEDUCTION]')
+                  const displayPurpose = isDeduction ? loan.purpose.replace('[DEDUCTION] ', '') : loan.purpose
+                  return (
+                    <div key={loan.loans_id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {isDeduction ? (
+                              <DeductionIcon className="h-4 w-4 text-red-600" />
+                            ) : (
+                              <Banknote className="h-4 w-4 text-blue-600" />
+                            )}
+                            <h3 className="font-medium">{displayPurpose}</h3>
+                            <Badge variant="outline" className={isDeduction ? 'bg-red-50 text-red-700 border-red-200 text-xs' : 'bg-blue-50 text-blue-700 border-blue-200 text-xs'}>
+                              {isDeduction ? 'Deduction' : 'Loan'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            Amount: {formatCurrency(loan.amount)} | Balance: {formatCurrency(loan.balance)}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Created: {formatDate(loan.createdAt)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={getStatusColor(loan.status)}>
+                            {getStatusIcon(loan.status)}
+                            <span className="ml-1">{loan.status}</span>
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => viewDetails(loan)}
+                          >
+                            <FileText className="w-4 h-4 mr-1" />
+                            Details
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getStatusColor(loan.status)}>
-                        {getStatusIcon(loan.status)}
-                        <span className="ml-1">{loan.status}</span>
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => viewDetails(loan)}
-                      >
-                        <FileText className="w-4 h-4 mr-1" />
-                        Details
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Archive className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Archived Items</h3>
+                <p className="text-gray-600">
+                  You don't have any archived loans or deductions.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
       {/* No Loans Message */}
-      {summary.totalLoans === 0 && (
+      {!showArchived && summary.totalLoans === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
-            <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Loans Found</h3>
+            <Banknote className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Loans or Deductions Found</h3>
             <p className="text-gray-600">
-              You don't have any loans at this time.
+              You don't have any loans or deductions at this time.
             </p>
           </CardContent>
         </Card>
@@ -314,19 +514,30 @@ export default function PersonnelLoansPage() {
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Loan Details</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-blue-600" />
+              Loan & Deduction Details
+            </DialogTitle>
             <DialogDescription>
-              Detailed information about your loan
+              Detailed information about your loan or deduction
             </DialogDescription>
           </DialogHeader>
           
           {selectedLoan && (
             <div className="space-y-6">
               {/* Loan Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600">Loan Purpose</p>
-                  <p className="font-medium">{selectedLoan.purpose}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="md:col-span-2 border-b border-border pb-3">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {selectedLoan.purpose?.startsWith('[DEDUCTION]') ? 'Deduction Purpose' : 'Loan Purpose'}
+                    </span>
+                    <span className="text-2xl font-bold text-primary">
+                      {selectedLoan.purpose?.startsWith('[DEDUCTION]') 
+                        ? (selectedLoan.purpose.replace('[DEDUCTION] ', '') || 'Not specified') 
+                        : (selectedLoan.purpose || 'Not specified')}
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Status</p>
@@ -369,7 +580,7 @@ export default function PersonnelLoansPage() {
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell>Biweekly Payment</TableCell>
+                      <TableCell>Per Payroll Deduction</TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(selectedLoan.biweeklyPayment)}
                       </TableCell>
@@ -403,41 +614,17 @@ export default function PersonnelLoansPage() {
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Payments Remaining</p>
-                      <p className="font-bold text-blue-600">{selectedLoan.paymentsRemaining}</p>
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Payments Remaining</p>
+                      <p className="font-bold text-blue-600 dark:text-blue-400">{selectedLoan.paymentsRemaining}</p>
                     </div>
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Estimated Completion</p>
-                      <p className="font-bold text-green-600">
+                    <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Estimated Completion</p>
+                      <p className="font-bold text-green-600 dark:text-green-400">
                         {formatDate(selectedLoan.estimatedCompletionDate)}
                       </p>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Payment History */}
-              <div>
-                <h4 className="font-medium mb-3">Recent Payment History</h4>
-                <div className="space-y-2">
-                  {paymentHistory.slice(0, 5).map((payment, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {formatDate(payment.periodStart)} - {formatDate(payment.periodEnd)}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Released: {formatDate(payment.releasedAt)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">
-                          {formatCurrency(selectedLoan.biweeklyPayment)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>

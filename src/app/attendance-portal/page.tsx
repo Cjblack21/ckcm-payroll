@@ -41,6 +41,13 @@ export default function AttendancePortalPage() {
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResp | null>(null)
   const [showAlreadyTimedInModal, setShowAlreadyTimedInModal] = useState(false)
   const [leaveStatus, setLeaveStatus] = useState<LeaveDetails | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successModalMessage, setSuccessModalMessage] = useState('')
+  const [successModalType, setSuccessModalType] = useState<'time-in' | 'time-out'>('time-in')
+  const [userAttendanceStatus, setUserAttendanceStatus] = useState<{hasTimedIn: boolean, hasTimedOut: boolean} | null>(null)
+  
+  // Auto-refresh interval in milliseconds (default: 30 seconds)
+  const AUTO_REFRESH_INTERVAL = 30000
 
   // Use a configurable base path so the app can be deployed under e.g. /attendance-portal
   const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ""
@@ -63,15 +70,32 @@ export default function AttendancePortalPage() {
     }
   }, [now, showAlreadyTimedInModal, settings])
 
+  // Fetch settings on mount
   useEffect(() => {
-    ;(async () => {
+    const fetchSettings = async () => {
       try {
         const res = await fetch(`${BASE_PATH}/api/attendance/settings`)
         const data = await res.json()
         setSettings((data.settings || null) as AttendanceSettings | null)
       } catch (e) {}
-    })()
+    }
+    
+    fetchSettings()
   }, [])
+  
+  // Auto-refresh settings periodically
+  useEffect(() => {
+    const refreshSettings = async () => {
+      try {
+        const res = await fetch(`${BASE_PATH}/api/attendance/settings`)
+        const data = await res.json()
+        setSettings((data.settings || null) as AttendanceSettings | null)
+      } catch (e) {}
+    }
+    
+    const interval = setInterval(refreshSettings, AUTO_REFRESH_INTERVAL)
+    return () => clearInterval(interval)
+  }, [BASE_PATH, AUTO_REFRESH_INTERVAL])
 
   const manilaTime = useMemo(() => formatInTimeZone(now, "Asia/Manila", "MMM dd, yyyy - h:mm:ss a"), [now])
 
@@ -143,24 +167,75 @@ export default function AttendancePortalPage() {
         }
         setMessage(result.error || 'Failed to record attendance')
       } else {
-        // Clear the form and show brief success message
+        // Determine modal type based on response
+        const wasTimeIn = !result.record?.timeOut || result.lateDeduction
+        const wasTimeOut = result.record?.timeOut || result.earlyTimeoutDeduction
+        
+        // Clear the form
         setSchoolId("")
-        setMessage("Attendance recorded successfully!")
+        setUserAttendanceStatus(null) // Reset status
         
-        // Show late deduction if applicable
+        // Determine modal type and message
+        let modalMessage = 'Attendance recorded successfully!'
+        let modalType: 'time-in' | 'time-out' = wasTimeOut ? 'time-out' : 'time-in'
+        
+        // Show late message if applicable
         if (result.lateDeduction) {
-          setMessage(`Time-in recorded. Late arrival deduction: ₱${result.lateDeduction.amount.toFixed(2)} (${result.lateDeduction.minutes} minutes late)`)
+          modalType = 'time-in'
+          const totalMinutes = Math.floor(result.lateDeduction.minutes / 60)
+          const hours = Math.floor(totalMinutes / 60)
+          const minutes = totalMinutes % 60
+          
+          let timeText = ''
+          if (hours > 0 && minutes > 0) {
+            timeText = `${hours} ${hours === 1 ? 'hour' : 'hours'} and ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+          } else if (hours > 0) {
+            timeText = `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+          } else {
+            timeText = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+          }
+          
+          const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
+          modalMessage = `You timed in at ${currentTime}\nYou are ${timeText} late`
+        } else if (wasTimeIn) {
+          // On-time time-in
+          const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
+          modalMessage = `You timed in at ${currentTime}\nOn time! Great job! ✨`
         }
         
-        // Show early timeout deduction if applicable
+        // Show early timeout message if applicable
         if (result.earlyTimeoutDeduction) {
-          setMessage(`Time-out recorded. Early departure deduction: ₱${result.earlyTimeoutDeduction.amount.toFixed(2)} (${result.earlyTimeoutDeduction.minutes} minutes early)`)
+          modalType = 'time-out'
+          const totalMinutes = result.earlyTimeoutDeduction.minutes
+          const hours = Math.floor(totalMinutes / 60)
+          const minutes = totalMinutes % 60
+          
+          let timeText = ''
+          if (hours > 0 && minutes > 0) {
+            timeText = `${hours} ${hours === 1 ? 'hour' : 'hours'} and ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+          } else if (hours > 0) {
+            timeText = `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+          } else {
+            timeText = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+          }
+          
+          const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
+          modalMessage = `You timed out at ${currentTime}\nYou left ${timeText} early`
+        } else if (wasTimeOut && !result.earlyTimeoutDeduction) {
+          // On-time time-out
+          const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
+          modalMessage = `You timed out at ${currentTime}\nThank you for your hard work today! 💪`
         }
         
-        // Clear success message after 5 seconds
+        // Show success modal
+        setSuccessModalType(modalType)
+        setSuccessModalMessage(modalMessage)
+        setShowSuccessModal(true)
+        
+        // Auto-dismiss modal after 3 seconds
         setTimeout(() => {
-          setMessage(null)
-        }, 5000)
+          setShowSuccessModal(false)
+        }, 3000)
       }
     } catch (e) {
       setMessage('Network error')
@@ -197,14 +272,16 @@ export default function AttendancePortalPage() {
     return true
   }, [settings, now])
 
+  // Status check disabled - button now always shows "Submit Attendance"
+  // The API automatically determines whether to time in or time out
+  // useEffect(() => {
+  //   ... status check code removed ...
+  // }, [schoolId, BASE_PATH])
+
   // Get current punch action type
   const getPunchAction = () => {
-    if (!schoolId.trim()) return 'Submit Attendance'
-    
-    // This would need to check actual user status, but for now show generic
-    if (inWindow) return 'Time In'
-    if (outWindow) return 'Time Out'
-    return 'Submit Attendance'
+    // Always show "Submit Attendance" - the API will determine the correct action
+    return schoolId.trim() ? 'Submit Attendance' : 'Submit Attendance'
   }
 
   function formatHHmmTo12(hhmm?: string | null) {
@@ -268,7 +345,7 @@ export default function AttendancePortalPage() {
             placeholder="Enter your School ID or Email" 
             value={schoolId} 
             onChange={(e) => setSchoolId(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && onPunch()}
+            onKeyPress={(e) => e.key === 'Enter' && canPunch && !saving && onPunch()}
             style={{ fontSize: '2rem', lineHeight: '1.2' }}
             className="h-20 sm:h-22 text-center font-bold bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border-4 border-orange-300 dark:border-orange-700 focus:border-orange-500 dark:focus:border-orange-500 transition-all shadow-xl rounded-2xl placeholder:text-3xl"
           />
@@ -277,7 +354,7 @@ export default function AttendancePortalPage() {
         {/* Submit Button */}
         <Button 
           className="w-full h-18 sm:h-20 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-bold text-2xl sm:text-3xl shadow-2xl hover:shadow-3xl transition-all duration-200 rounded-2xl"
-          disabled={saving || !schoolId.trim() || !canPunch} 
+          disabled={saving || !schoolId.trim() || !canPunch || (userAttendanceStatus?.hasTimedOut === true)} 
           onClick={onPunch}
         >
           {saving ? (
@@ -411,6 +488,44 @@ export default function AttendancePortalPage() {
               <Button onClick={() => setShowAlreadyTimedInModal(false)}>
                 Understood
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Success Modal - Auto-dismiss after 3 seconds */}
+      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+        <DialogContent className="sm:max-w-md border-2 border-green-300 bg-white dark:bg-slate-900 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              {successModalType === 'time-in' ? (
+                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
+                  <LogIn className="h-8 w-8 text-green-600 dark:text-green-400" />
+                </div>
+              ) : (
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-full">
+                  <LogOut className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                </div>
+              )}
+              <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                {successModalType === 'time-in' ? 'Time In Recorded' : 'Time Out Recorded'}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="text-center">
+              <div className="text-5xl mb-4">
+                {successModalMessage.includes('late') ? '⏰' : 
+                 successModalMessage.includes('early') ? '⚠️' : '✅'}
+              </div>
+              <p className="text-xl font-semibold text-foreground mb-2 whitespace-pre-line">
+                {successModalMessage}
+              </p>
+              {(successModalMessage.includes('late') || successModalMessage.includes('early')) && (
+                <p className="text-sm text-muted-foreground">
+                  Deductions will be applied to your salary
+                </p>
+              )}
             </div>
           </div>
         </DialogContent>

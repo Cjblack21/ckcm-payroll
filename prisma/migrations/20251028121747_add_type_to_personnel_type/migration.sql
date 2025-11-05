@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `personnel_types` ADD COLUMN `type` VARCHAR(191) NULL DEFAULT 'NON_TEACHING';

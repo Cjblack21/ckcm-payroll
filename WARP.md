@@ -45,7 +45,7 @@ High-level architecture
     - Role-gated routing (/admin for ADMIN, /personnel for PERSONNEL/ADMIN)
     - Redirects generic /dashboard to role-specific dashboards
 - Data models and persistence
-  - MySQL via Prisma with core models: User, Session, Attendance, PayrollEntry, Loan, DeductionType, Deduction, PersonnelType, AttendanceSettings, HeaderSettings, PayrollSchedule, LeaveRequest (+ enums for statuses/types)
+  - MySQL via Prisma with core models: User, Session, Attendance, PayrollEntry, Loan, DeductionType, Deduction, PersonnelType, AttendanceSettings, HeaderSettings, PayrollSchedule (+ enums for statuses/types)
   - Prisma client singleton at src/lib/prisma.ts
 - Business logic and server actions
   - Server actions under src/lib/actions/* for auth, attendance, payroll, personnel

@@ -1,130 +1,186 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useTheme } from "next-themes"
+import { Sun, Moon, Monitor, Shield, Zap, TrendingUp, ChevronRight, Settings } from "lucide-react"
 import { LoginForm } from "@/components/login-form"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function Home() {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-orange-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 relative overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-red-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 transition-colors duration-500">
+      {/* Theme Switcher */}
+      {mounted && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="fixed top-6 right-6 z-50 h-11 w-11 rounded-xl bg-slate-900/90 backdrop-blur-sm hover:bg-slate-900 shadow-lg hover:shadow-xl transition-all duration-300 dark:bg-white/90 dark:hover:bg-white border border-slate-800 dark:border-slate-200 group"
+            >
+              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all duration-300 dark:-rotate-90 dark:scale-0 text-orange-400" />
+              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100 text-indigo-600" />
+              <span className="sr-only">Toggle theme</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer gap-2">
+              <Sun className="h-4 w-4 text-orange-500" />
+              <span>Light</span>
+              {theme === "light" && <span className="ml-auto">✓</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer gap-2">
+              <Moon className="h-4 w-4 text-indigo-400" />
+              <span>Dark</span>
+              {theme === "dark" && <span className="ml-auto">✓</span>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer gap-2">
+              <Monitor className="h-4 w-4 text-slate-500" />
+              <span>System</span>
+              {theme === "system" && <span className="ml-auto">✓</span>}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* Left Side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-8 lg:p-12">
+        <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-left duration-700">
+          {/* Logo & Brand */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 shadow-lg mb-4">
+              <img src="/ckcm.png" alt="CKCM Logo" className="w-10 h-10 object-contain" />
+            </div>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+              CKCM Payroll
+            </h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              Sign in to continue to your account
+            </p>
+          </div>
+
+          {/* Login Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8">
+            <LoginForm />
+          </div>
+
+          {/* Footer */}
+          <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+            © 2025 CKCM. All rights reserved.
+          </p>
+        </div>
       </div>
 
-      <div className="relative z-10 grid min-h-screen lg:grid-cols-2 gap-8 lg:gap-0">
-        {/* Left Panel - Login Section */}
-        <div className="flex flex-col justify-center px-4 py-8 sm:px-6 lg:px-12">
-          <div className="mx-auto w-full max-w-md">
-            {/* Logo & Header Section */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl shadow-lg mb-4 transform hover:scale-105 transition-transform duration-300">
-                <img 
-                  src="/ckcm.png" 
-                  alt="CKCM Logo" 
-                  className="w-14 h-14 object-contain"
-                />
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent mb-2">
-                Welcome Back
-              </h1>
-              <p className="text-muted-foreground text-sm sm:text-base">
-                Sign in to access CKCM Payroll Management System
-              </p>
-            </div>
-            
-            {/* Login Form Card */}
-            <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50 p-6 sm:p-8">
-              <LoginForm />
-            </div>
-
-            {/* Footer Text */}
-            <div className="mt-6 text-center">
-              <p className="text-xs text-muted-foreground">
-                Protected by enterprise-grade security
-              </p>
-            </div>
-          </div>
+      {/* Right Side - Branding */}
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-orange-500 to-red-600 p-12 items-center justify-center relative overflow-hidden animate-in fade-in slide-in-from-right duration-700">
+        {/* Decorative Elements */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
         </div>
 
-        {/* Right Panel - Branding Section */}
-        <div className="hidden lg:flex lg:flex-col lg:justify-center lg:items-center p-8 xl:p-12 relative">
-          <div className="max-w-lg w-full">
-            {/* Logo Section */}
-            <div className="text-center mb-12">
-              <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-orange-500 to-red-600 rounded-3xl mb-6 shadow-xl border border-orange-300/30">
-                <svg className="w-16 h-16 text-white animate-spin-slow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <h2 className="text-4xl font-bold text-slate-800 dark:text-white mb-4">
-                Payroll Management
-                <br />
-                <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-                  System
-                </span>
-              </h2>
-              <p className="text-slate-600 dark:text-slate-300 text-lg">
-                Advanced payroll solutions for modern organizations
-              </p>
-            </div>
+        {/* Payroll Illustration */}
+        <div className="absolute right-0 bottom-0 w-2/3 h-2/3 opacity-20">
+          <svg viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+            {/* Document/Payslip */}
+            <rect x="150" y="100" width="200" height="280" rx="10" fill="white" opacity="0.9"/>
+            <rect x="170" y="130" width="160" height="15" rx="5" fill="currentColor" opacity="0.3"/>
+            <rect x="170" y="160" width="120" height="10" rx="5" fill="currentColor" opacity="0.2"/>
+            <rect x="170" y="180" width="140" height="10" rx="5" fill="currentColor" opacity="0.2"/>
+            <rect x="170" y="220" width="160" height="8" rx="4" fill="currentColor" opacity="0.15"/>
+            <rect x="170" y="240" width="160" height="8" rx="4" fill="currentColor" opacity="0.15"/>
+            <rect x="170" y="260" width="160" height="8" rx="4" fill="currentColor" opacity="0.15"/>
+            <rect x="170" y="300" width="160" height="20" rx="5" fill="currentColor" opacity="0.4"/>
             
-            {/* Feature Cards */}
-            <div className="space-y-4">
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 transform hover:-translate-y-1">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div className="text-left flex-1">
-                    <h3 className="font-semibold text-slate-800 dark:text-white text-base">Automated Processing</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">Streamlined payroll calculations</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 transform hover:-translate-y-1">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="text-left flex-1">
-                    <h3 className="font-semibold text-slate-800 dark:text-white text-base">Real-time Tracking</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">Live attendance monitoring</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 transform hover:-translate-y-1">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-red-700 rounded-xl flex items-center justify-center shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <div className="text-left flex-1">
-                    <h3 className="font-semibold text-slate-800 dark:text-white text-base">Advanced Reports</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">Comprehensive analytics & insights</p>
-                  </div>
-                </div>
+            {/* Money/Dollar Signs */}
+            <circle cx="100" cy="150" r="30" fill="white" opacity="0.8"/>
+            <text x="100" y="165" fontSize="35" fill="currentColor" textAnchor="middle" fontWeight="bold">$</text>
+            
+            <circle cx="400" cy="200" r="25" fill="white" opacity="0.7"/>
+            <text x="400" y="213" fontSize="30" fill="currentColor" textAnchor="middle" fontWeight="bold">₱</text>
+            
+            {/* Calculator */}
+            <rect x="80" y="320" width="100" height="130" rx="8" fill="white" opacity="0.85"/>
+            <rect x="90" y="330" width="80" height="30" rx="4" fill="currentColor" opacity="0.2"/>
+            <circle cx="105" cy="380" r="8" fill="currentColor" opacity="0.3"/>
+            <circle cx="130" cy="380" r="8" fill="currentColor" opacity="0.3"/>
+            <circle cx="155" cy="380" r="8" fill="currentColor" opacity="0.3"/>
+            <circle cx="105" cy="410" r="8" fill="currentColor" opacity="0.3"/>
+            <circle cx="130" cy="410" r="8" fill="currentColor" opacity="0.3"/>
+            <circle cx="155" cy="410" r="8" fill="currentColor" opacity="0.3"/>
+            
+            {/* Clock/Time */}
+            <circle cx="380" cy="350" r="35" fill="white" opacity="0.8"/>
+            <line x1="380" y1="350" x2="380" y2="330" stroke="currentColor" strokeWidth="3" opacity="0.4"/>
+            <line x1="380" y1="350" x2="395" y2="350" stroke="currentColor" strokeWidth="3" opacity="0.4"/>
+            
+            {/* Checkmark */}
+            <circle cx="250" cy="420" r="25" fill="white" opacity="0.9"/>
+            <path d="M 240 420 L 248 428 L 262 410" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.5" strokeLinecap="round"/>
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 text-white space-y-12 max-w-lg">
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="relative">
+                <Settings className="h-16 w-16 text-white/30 animate-spin-slow" />
+                <Settings className="absolute inset-0 h-16 w-16 text-white/20 animate-spin-slow" style={{animationDirection: 'reverse', animationDuration: '20s'}} />
               </div>
             </div>
-            
-            {/* Trust Badge */}
-            <div className="mt-12 pt-6 border-t border-white/20">
-              <div className="flex items-center justify-center space-x-3">
-                <div className="flex items-center justify-center w-10 h-10 bg-green-500/20 rounded-full">
-                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-white">Secure & Reliable</p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">Bank-level encryption</p>
-                </div>
+            <h2 className="text-5xl font-bold leading-tight">
+              Modern Payroll
+              <br />
+              Management
+            </h2>
+            <p className="text-xl text-white/90">
+              Streamline your payroll process with our comprehensive management system
+            </p>
+          </div>
+
+          {/* Features */}
+          <div className="space-y-6">
+            <div className="flex items-start gap-4 group">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                <Zap className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-1">Lightning Fast</h3>
+                <p className="text-white/80">Process payroll in minutes, not hours</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 group">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                <Shield className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-1">Secure & Compliant</h3>
+                <p className="text-white/80">Bank-level encryption and data protection</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 group">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-1">Smart Analytics</h3>
+                <p className="text-white/80">Insights and reports at your fingertips</p>
               </div>
             </div>
           </div>

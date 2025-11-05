@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { User, Mail, Building, DollarSign, KeyRound, Eye, EyeOff, Camera, Settings } from "lucide-react"
+import { User, Mail, Building, KeyRound, Eye, EyeOff, Camera, Settings } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 type ProfileData = {
@@ -167,12 +167,10 @@ export default function PersonnelProfile() {
       }
 
       toast.success('Profile picture updated successfully!')
-      // Refresh profile data
-      const res = await fetch('/api/personnel/dashboard')
-      if (res.ok) {
-        const dashboardData = await res.json()
-        setData(dashboardData)
-      }
+      // Reload the page to update sidebar avatar and session
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error) {
       console.error('Error uploading photo:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to upload photo')
@@ -197,12 +195,10 @@ export default function PersonnelProfile() {
       }
 
       toast.success('Profile picture removed successfully!')
-      // Refresh profile data
-      const res = await fetch('/api/personnel/dashboard')
-      if (res.ok) {
-        const dashboardData = await res.json()
-        setData(dashboardData)
-      }
+      // Reload the page to update sidebar avatar and session
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error) {
       console.error('Error removing photo:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to remove photo')
@@ -383,16 +379,14 @@ export default function PersonnelProfile() {
                 </div>
                 <div>
                   <div className="text-sm font-medium text-muted-foreground">Monthly Salary</div>
-                  <div className="text-lg font-semibold flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
+                  <div className="text-lg font-semibold">
                     ₱{data.user.basicSalary?.toLocaleString() || "0"}
                   </div>
                 </div>
                 {data.user.biweeklySalary !== undefined && (
                   <div>
                     <div className="text-sm font-medium text-muted-foreground">Biweekly Salary</div>
-                    <div className="text-lg font-semibold flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
+                    <div className="text-lg font-semibold">
                       ₱{data.user.biweeklySalary?.toLocaleString() || "0"}
                     </div>
                   </div>
@@ -424,7 +418,7 @@ export default function PersonnelProfile() {
                     <div className="text-sm text-muted-foreground">Choose your display theme</div>
                   </div>
                   <select 
-                    className="border rounded-md px-3 py-2"
+                    className="border rounded-md px-3 py-2 bg-card text-card-foreground dark:border-border"
                     value={settings.theme}
                     onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
                   >
@@ -439,9 +433,14 @@ export default function PersonnelProfile() {
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Notifications</Label>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center justify-between p-4 border rounded-lg opacity-60">
                     <div>
-                      <div className="font-medium">Email Notifications</div>
+                      <div className="font-medium flex items-center gap-2">
+                        Email Notifications
+                        <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 px-2 py-0.5 rounded">
+                          Work in progress
+                        </span>
+                      </div>
                       <div className="text-sm text-muted-foreground">Receive email updates about your account</div>
                     </div>
                     <input 
@@ -449,6 +448,7 @@ export default function PersonnelProfile() {
                       className="h-4 w-4" 
                       checked={settings.emailNotifications}
                       onChange={(e) => setSettings({ ...settings, emailNotifications: e.target.checked })}
+                      disabled
                     />
                   </div>
                   <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -488,7 +488,7 @@ export default function PersonnelProfile() {
                       <div className="text-sm text-muted-foreground">Select your preferred language</div>
                     </div>
                     <select 
-                      className="border rounded-md px-3 py-2"
+                      className="border rounded-md px-3 py-2 bg-card text-card-foreground dark:border-border"
                       value={settings.language}
                       onChange={(e) => setSettings({ ...settings, language: e.target.value })}
                     >

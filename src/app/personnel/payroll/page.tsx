@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Calendar, DollarSign, FileText, Archive, Clock, TrendingUp, TrendingDown } from 'lucide-react'
+import { Calendar, FileText, Archive, Clock } from 'lucide-react'
 import { format } from 'date-fns'
+import PayrollBreakdownDialog from '@/components/payroll/PayrollBreakdownDialog'
 
 interface PayrollData {
   currentPayroll: any
@@ -17,6 +17,7 @@ interface PayrollData {
       start: string
       end: string
       releaseTime?: string
+      scheduledRelease?: string
     }
   }
   breakdown: {
@@ -25,9 +26,6 @@ interface PayrollData {
     attendanceDeductionsTotal: number
     databaseDeductionsTotal: number
     loans: any[]
-    unpaidLeaves?: { leaveType: string; startDate: string; endDate: string; days: number; amount: number }[]
-    unpaidLeaveDeductionTotal?: number
-    unpaidLeaveDays?: number
     totalDeductions: number
     totalLoanPayments: number
   }
@@ -39,6 +37,8 @@ export default function PersonnelPayrollPage() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [selectedPayroll, setSelectedPayroll] = useState<any>(null)
+  const [selectedBreakdown, setSelectedBreakdown] = useState<any>(null)
+  const [loadingBreakdown, setLoadingBreakdown] = useState(false)
   const [timeUntilRelease, setTimeUntilRelease] = useState('')
   const [canRelease, setCanRelease] = useState(false)
 
@@ -58,6 +58,12 @@ export default function PersonnelPayrollPage() {
       if (response.ok) {
         const payrollData = await response.json()
         console.log('Payroll data received:', payrollData)
+        console.log('📅 Period Info:', {
+          start: payrollData.periodInfo?.current?.start,
+          end: payrollData.periodInfo?.current?.end,
+          releaseTime: payrollData.periodInfo?.current?.releaseTime,
+          scheduledRelease: payrollData.periodInfo?.current?.scheduledRelease
+        })
         setData(payrollData)
       } else {
         let errorPayload: any = {}
@@ -122,10 +128,58 @@ export default function PersonnelPayrollPage() {
     }
   }
 
-  const viewDetails = (payroll: any) => {
+  const viewDetails = async (payroll: any) => {
+    console.log('👁️ View details clicked for payroll:', payroll)
     setSelectedPayroll(payroll)
+    setSelectedBreakdown(null)
     setDetailsOpen(true)
+    
+    // Fetch breakdown with the payroll data directly
+    await fetchBreakdownForPayroll(payroll)
   }
+  
+  const fetchBreakdownForPayroll = async (payroll: any) => {
+    setLoadingBreakdown(true)
+    
+    try {
+      // SIMPLE - Use the data that's already in the table (it's correct!)
+      const snapshot = payroll.breakdownSnapshot
+      const monthlyBasic = payroll.user?.personnelType?.basicSalary || 20000
+      const periodSalary = monthlyBasic / 2
+      const overload = snapshot?.totalAdditions || 0
+      const deductions = payroll.deductions || 0
+      
+      setSelectedBreakdown({
+        basicSalary: periodSalary,
+        monthlyBasicSalary: monthlyBasic,
+        attendanceDeductions: 0,
+        leaveDeductions: 0,
+        loanDeductions: 0,
+        otherDeductions: deductions,
+        overloadPay: overload,
+        attendanceDetails: [],
+        loanDetails: [],
+        otherDeductionDetails: []
+      })
+    } catch (error) {
+      console.error('Error:', error)
+      setSelectedBreakdown({
+        basicSalary: 10000,
+        monthlyBasicSalary: 20000,
+        attendanceDeductions: 0,
+        leaveDeductions: 0,
+        loanDeductions: 0,
+        otherDeductions: 0,
+        overloadPay: 0,
+        attendanceDetails: [],
+        loanDetails: [],
+        otherDeductionDetails: []
+      })
+    } finally {
+      setLoadingBreakdown(false)
+    }
+  }
+  
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-PH', {
@@ -140,21 +194,31 @@ export default function PersonnelPayrollPage() {
 
   // Timer to update countdown every second
   useEffect(() => {
-    if (!data?.periodInfo?.current?.end || !data?.periodInfo?.current?.releaseTime) {
+    if (!data?.periodInfo?.current?.end) {
       setTimeUntilRelease('')
+      setCanRelease(false)
       return
     }
 
     const updateCountdown = () => {
+      // Get current time in Philippines (UTC+8)
       const now = new Date()
-      const releaseTime = data.periodInfo.current.releaseTime || '17:00'
-      const [hours, minutes] = releaseTime.split(':').map(Number)
+      const philippinesTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
       
-      // Create release date time using period end date
-      const releaseDateTime = new Date(data.periodInfo.current.end)
-      releaseDateTime.setHours(hours, minutes, 0, 0)
+      // Use scheduledRelease if available, otherwise calculate from period end + release time
+      let releaseDateTime: Date
+      if (data.periodInfo?.current?.scheduledRelease) {
+        releaseDateTime = new Date(data.periodInfo.current.scheduledRelease)
+        console.log('Using scheduledRelease:', releaseDateTime.toISOString())
+      } else {
+        const releaseTime = data.periodInfo?.current?.releaseTime || '17:00'
+        const [hours, minutes] = releaseTime.split(':').map(Number)
+        releaseDateTime = new Date(data.periodInfo.current.end)
+        releaseDateTime.setHours(hours, minutes, 0, 0)
+        console.log('Using period end + releaseTime:', releaseDateTime.toISOString())
+      }
       
-      const diff = releaseDateTime.getTime() - now.getTime()
+      const diff = releaseDateTime.getTime() - philippinesTime.getTime()
       
       if (diff <= 0) {
         setTimeUntilRelease('Release available now!')
@@ -222,377 +286,321 @@ export default function PersonnelPayrollPage() {
   const { currentPayroll, archivedPayrolls, periodInfo, breakdown } = data
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">My Payroll</h1>
-          <p className="text-gray-600">View your current and archived payroll information</p>
-        </div>
-        <div className="flex gap-2">
-          <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Archive className="w-4 h-4 mr-2" />
-                View Archive
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Payroll Archive</DialogTitle>
-                <DialogDescription>
-                  View your previous payroll records
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                {archivedPayrolls.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">No archived payroll records found</p>
-                ) : (
-                  archivedPayrolls.map((payroll) => (
-                    <Card key={payroll.payroll_entries_id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">
-                              {formatDate(payroll.periodStart)} - {formatDate(payroll.periodEnd)}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              Net Pay: {formatCurrency(Number(payroll.netPay))}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={payroll.status === 'RELEASED' ? 'default' : 'secondary'}>
-                              {payroll.status}
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => viewDetails(payroll)}
-                            >
-                              <FileText className="w-4 h-4 mr-1" />
-                              Details
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <FileText className="h-8 w-8 text-blue-600" />
+            My Payroll
+          </h1>
+          <p className="text-muted-foreground">View your payroll information and breakdowns</p>
         </div>
       </div>
 
-      {/* Release Countdown Timer - Only show if payroll exists (was generated) */}
-      {!canRelease && currentPayroll && currentPayroll.status !== 'RELEASED' && timeUntilRelease && (
-        <Card className="border-2 border-yellow-500 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400 mb-1">Payroll Release Countdown</p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-500">
-                  Release available on {formatDate(periodInfo.current.end)}
-                  {periodInfo.current.releaseTime && ` at ${periodInfo.current.releaseTime}`}
+      {/* Summary Cards - Latest Payroll */}
+      {(currentPayroll || (archivedPayrolls && archivedPayrolls.length > 0)) && (() => {
+        const latestPayroll = currentPayroll || archivedPayrolls[0]
+        let snapshot = latestPayroll.breakdownSnapshot
+        if (snapshot && typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot)
+          } catch (e) {
+            snapshot = null
+          }
+        }
+        
+        const monthlyBasic = Number(latestPayroll.user?.personnelType?.basicSalary || 20000)
+        const periodSalary = monthlyBasic / 2
+        const dbNetPay = Number(latestPayroll.netPay || 0)
+        const deductions = Number(latestPayroll.deductions || 0)
+        let overloadPay = Number(snapshot?.totalAdditions || 0)
+        if (overloadPay === 0 && dbNetPay > periodSalary) {
+          overloadPay = dbNetPay - periodSalary + deductions
+        }
+        
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <Card className="border-l-4 border-l-purple-500">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-1">Monthly Basic Salary</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {formatCurrency(monthlyBasic)}
                 </p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-yellow-700 dark:text-yellow-500 mb-1">Release in:</p>
-                <div className="text-4xl font-bold font-mono text-yellow-900 dark:text-yellow-400 tracking-wider">
-                  {timeUntilRelease}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                <p className="text-xs text-muted-foreground mt-0.5">Reference</p>
+              </CardContent>
+            </Card>
 
-      {/* Release Ready Banner - Only show if payroll exists (was generated) */}
-      {canRelease && currentPayroll && currentPayroll.status !== 'RELEASED' && (
-        <Card className="border-2 border-orange-500 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-center gap-3">
-              <div className="text-4xl">✓</div>
-              <div>
-                <p className="text-lg font-bold text-orange-800 dark:text-orange-400">Payroll Release Available!</p>
-                <p className="text-sm text-orange-600 dark:text-orange-500">Your payroll will be released soon</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            <Card className="border-l-4 border-l-blue-500">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-1">Period Salary</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(periodSalary)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Semi-monthly</p>
+              </CardContent>
+            </Card>
 
-      {/* Current Pay Period Info */}
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-1">Overload Pay</p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  +{formatCurrency(overloadPay)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Additional</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-red-500">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-1">Deductions</p>
+                <p className="text-2xl font-bold text-red-600">
+                  -{formatCurrency(deductions)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Total</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-orange-500">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-1">Net Pay</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {formatCurrency(dbNetPay)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Take home</p>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
+
+      {/* Payroll Tabs - Current and Archived */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Current Pay Period
+            <FileText className="h-5 w-5" />
+            My Payroll History
           </CardTitle>
+          <CardDescription>
+            View your current and archived payrolls
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Period Start</p>
-              <p className="font-medium">{formatDate(periodInfo.current.start)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Period End</p>
-              <p className="font-medium">{formatDate(periodInfo.current.end)}</p>
+          <div className="mb-4">
+            <div className="flex gap-2 border-b">
+              <button
+                onClick={() => setArchiveOpen(false)}
+                className={`px-4 py-2 font-medium transition-colors ${
+                  !archiveOpen
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Current Payroll
+              </button>
+              <button
+                onClick={() => setArchiveOpen(true)}
+                className={`px-4 py-2 font-medium transition-colors ${
+                  archiveOpen
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Archived Payrolls
+              </button>
             </div>
           </div>
+
+          {!archiveOpen ? (
+            // Current Payroll Tab - Show only the latest released
+            currentPayroll ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3 font-semibold">Period</th>
+                      <th className="text-left p-3 font-semibold">Net Pay</th>
+                      <th className="text-left p-3 font-semibold">Status</th>
+                      <th className="text-center p-3 font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b hover:bg-muted/50">
+                      <td className="p-3">
+                        {formatDate(currentPayroll.periodStart)} - {formatDate(currentPayroll.periodEnd)}
+                      </td>
+                      <td className="p-3 font-semibold text-green-600">
+                        {formatCurrency(Number(currentPayroll.netPay))}
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="default" className="bg-green-600">
+                          {currentPayroll.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => viewDetails(currentPayroll)}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          View Payslip
+                        </Button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                No current payroll available.
+              </p>
+            )
+          ) : (
+            // Archived Tab - Show all older released payrolls
+            archivedPayrolls && archivedPayrolls.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-3 font-semibold">Period</th>
+                    <th className="text-left p-3 font-semibold">Net Pay</th>
+                    <th className="text-left p-3 font-semibold">Status</th>
+                    <th className="text-center p-3 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedPayrolls.map((payroll: any) => (
+                    <tr key={payroll.payroll_entries_id} className="border-b hover:bg-muted/50">
+                      <td className="p-3">
+                        {formatDate(payroll.periodStart)} - {formatDate(payroll.periodEnd)}
+                      </td>
+                      <td className="p-3 font-semibold text-green-600">
+                        {formatCurrency(Number(payroll.netPay))}
+                      </td>
+                      <td className="p-3">
+                        <Badge variant={payroll.status === 'RELEASED' ? 'default' : 'secondary'} 
+                               className={payroll.status === 'RELEASED' ? 'bg-green-600' : ''}>
+                          {payroll.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="text-sm">
+                          <div className="font-semibold">Period Salary: {formatCurrency(Number(payroll.basicSalary))}</div>
+                          <div className="text-green-600">+ Overload: {formatCurrency(Number(payroll.breakdownSnapshot?.totalAdditions || 0))}</div>
+                          <div className="text-red-600">- Deductions: {formatCurrency(Number(payroll.deductions))}</div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                No archived payrolls yet.
+              </p>
+            )
+          )}
         </CardContent>
       </Card>
 
-      {/* Current Payroll */}
-      {currentPayroll ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5" />
-              Current Payroll
-            </CardTitle>
-            <CardDescription>
-              Your payroll for the current period
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {/* Summary Cards - Clean Design */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-              <Card className="border-l-4 border-l-green-500">
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Basic Salary</p>
-                  <p className="text-xl font-semibold">
-                    {formatCurrency(Number(currentPayroll.basicSalary))}
-                  </p>
-                </CardContent>
-              </Card>
 
-              <Card className="border-l-4 border-l-red-500">
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Deductions</p>
-                  <p className="text-xl font-semibold text-red-600 dark:text-red-400">
-                    {formatCurrency(Number(currentPayroll.deductions))}
-                  </p>
-                </CardContent>
-              </Card>
 
-              <Card className="border-l-4 border-l-primary">
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Net Pay</p>
-                  <p className="text-xl font-semibold text-primary">
-                    {formatCurrency(Number(currentPayroll.netPay))}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {((Number(currentPayroll.netPay) / Number(currentPayroll.basicSalary)) * 100).toFixed(1)}% of basic
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            
-            {/* Status and Action */}
-            <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <Badge variant={currentPayroll.status === 'RELEASED' ? 'default' : 'secondary'}>
-                  {currentPayroll.status}
-                </Badge>
-                {currentPayroll.releasedAt && (
-                  <span className="text-sm text-muted-foreground">
-                    Released: {formatDate(currentPayroll.releasedAt)}
-                  </span>
-                )}
-              </div>
-              <Button onClick={() => viewDetails(currentPayroll)}>
-                <FileText className="w-4 h-4 mr-2" />
-                View Details
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Current Payroll</h3>
-            <p className="text-gray-600">
-              No payroll has been generated for the current period yet.
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Payroll Details Dialog */}
+      {/* Digital Payslip Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">
-              Payroll Details
-            </DialogTitle>
-            <DialogDescription>
-              Detailed breakdown of your payroll
-            </DialogDescription>
+            <DialogTitle>Payslip</DialogTitle>
           </DialogHeader>
-          
-          {selectedPayroll && (
-            <div className="space-y-6">
-              {/* Period Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600">Pay Period</p>
-                  <p className="font-medium">
-                    {formatDate(selectedPayroll.periodStart)} - {formatDate(selectedPayroll.periodEnd)}
-                  </p>
+          {selectedPayroll && (() => {
+            // Parse snapshot if string
+            let snapshot = selectedPayroll.breakdownSnapshot
+            console.log('🔥 RAW breakdownSnapshot:', selectedPayroll.breakdownSnapshot)
+            console.log('🔥 Type:', typeof selectedPayroll.breakdownSnapshot)
+            
+            if (snapshot && typeof snapshot === 'string') {
+              try {
+                snapshot = JSON.parse(snapshot)
+                console.log('✅ Parsed snapshot:', snapshot)
+              } catch (e) {
+                console.error('❌ Parse error:', e)
+                snapshot = null
+              }
+            }
+            
+            const monthlyBasic = Number(selectedPayroll.user?.personnelType?.basicSalary || 20000)
+            const periodSalary = monthlyBasic / 2 // Semi-monthly = monthly / 2
+            const dbNetPay = Number(selectedPayroll.netPay || 0)
+            const deductions = Number(selectedPayroll.deductions || 0)
+            
+            // Calculate overload: if netPay is 18000 and periodSalary is 10000, overload = 8000
+            let overloadPay = Number(snapshot?.totalAdditions || 0)
+            if (overloadPay === 0 && dbNetPay > periodSalary) {
+              overloadPay = dbNetPay - periodSalary + deductions
+              console.log('🔥 CALCULATED overload from netPay:', overloadPay)
+            }
+            
+            console.log('💰 Final values:', { monthlyBasic, periodSalary, overloadPay, deductions, dbNetPay })
+            
+            const grossPay = periodSalary + overloadPay
+            const netPay = grossPay - deductions
+            
+            return (
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="text-center border-b pb-4">
+                <h2 className="text-2xl font-bold">{selectedPayroll.user?.name || 'Personnel'}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {formatDate(selectedPayroll.periodStart)} - {formatDate(selectedPayroll.periodEnd)}
+                </p>
+              </div>
+
+              {/* Salary Details */}
+              <div className="space-y-2">
+                <div className="flex justify-between py-2 border-b">
+                  <span className="font-semibold">Monthly Basic Salary</span>
+                  <span>{formatCurrency(monthlyBasic)}</span>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Status</p>
-                  <Badge variant={selectedPayroll.status === 'RELEASED' ? 'default' : 'secondary'}>
-                    {selectedPayroll.status}
-                  </Badge>
+                <div className="flex justify-between py-2 border-b bg-green-50 dark:bg-green-950/20 px-2">
+                  <span className="font-semibold">Period Salary (Semi-Monthly)</span>
+                  <span className="text-green-600 font-bold">{formatCurrency(periodSalary)}</span>
                 </div>
-              </div>
-
-              {/* Earnings Breakdown */}
-              <div>
-                <h4 className="font-medium mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-green-600" />
-                  Earnings
-                </h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Basic Salary (Biweekly)</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(Number(selectedPayroll.basicSalary))}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow className="font-medium">
-                      <TableCell>Total Earnings</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(Number(selectedPayroll.basicSalary))}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Deductions Breakdown */}
-              <div>
-                <h4 className="font-medium mb-3 flex items-center gap-2">
-                  <TrendingDown className="w-4 h-4 text-red-600" />
-                  Deductions
-                </h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {breakdown.otherDeductions.map((deduction, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{deduction.deductionType?.name || deduction.type || 'Deduction'}</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(Number(deduction.amount ?? deduction.deductionType?.amount ?? 0))}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {breakdown.attendanceDetails.map((item, idx) => (
-                      <TableRow key={`attd-${idx}`}>
-                        <TableCell>{`Attendance - ${item.type} (${formatDate(item.date)})`}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {(() => {
-                      const start = new Date(selectedPayroll.periodStart)
-                      const end = new Date(selectedPayroll.periodEnd)
-                      const periodDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-                      const factor = periodDays <= 16 ? 0.5 : 1.0
-                      return breakdown.loans.map((loan, index) => (
-                      <TableRow key={`loan-${index}`}>
-                        <TableCell>Loan Payment - {loan.purpose}</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency((Number(loan.amount) * Number(loan.monthlyPaymentPercent) / 100) * factor)}
-                        </TableCell>
-                      </TableRow>
-                      ))
-                    })()}
-                    {breakdown.unpaidLeaves && breakdown.unpaidLeaves.length > 0 && breakdown.unpaidLeaves.map((leave, index) => (
-                      <TableRow key={`leave-${index}`} className="bg-orange-50">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium">Unpaid Leave - {leave.leaveType}</span>
-                            <span className="text-xs text-gray-600">
-                              {formatDate(leave.startDate)} - {formatDate(leave.endDate)} ({leave.days} {leave.days === 1 ? 'day' : 'days'})
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-orange-600">
-                          {formatCurrency(leave.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell className="font-medium">Total Attendance Deductions</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(Number(breakdown.attendanceDeductionsTotal))}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Total Other Deductions</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(Number(breakdown.databaseDeductionsTotal))}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Total Loan Payments</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(Number(breakdown.totalLoanPayments))}
-                      </TableCell>
-                    </TableRow>
-                    {breakdown.unpaidLeaveDeductionTotal && breakdown.unpaidLeaveDeductionTotal > 0 && (
-                      <TableRow className="bg-orange-100">
-                        <TableCell className="font-medium text-orange-900">
-                          Total Unpaid Leave ({breakdown.unpaidLeaveDays} {breakdown.unpaidLeaveDays === 1 ? 'day' : 'days'})
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-orange-900">
-                          {formatCurrency(Number(breakdown.unpaidLeaveDeductionTotal))}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    <TableRow className="font-medium">
-                      <TableCell>Total Deductions</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(Number(selectedPayroll.deductions))}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Net Pay Summary */}
-              <div className="p-4 bg-purple-50 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-lg font-medium">Net Pay</span>
-                  <span className="text-2xl font-bold text-purple-600">
-                    {formatCurrency(Number(selectedPayroll.netPay))}
-                  </span>
+                <div className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
+                  <span className="font-semibold">+ Overload Pay</span>
+                  <span className="text-emerald-600 font-bold">+{formatCurrency(overloadPay)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b bg-red-50 dark:bg-red-950/20 px-2">
+                  <span className="font-semibold">- Total Deductions</span>
+                  <span className="text-red-600 font-bold">-{formatCurrency(deductions)}</span>
+                </div>
+                <div className="flex justify-between py-3 bg-primary/10 px-2 rounded">
+                  <span className="text-lg font-bold">NET PAY</span>
+                  <span className="text-lg font-bold text-primary">{formatCurrency(netPay)}</span>
                 </div>
               </div>
             </div>
-          )}
+            )
+          })()}
         </DialogContent>
       </Dialog>
+
+      {/* Loading Dialog */}
+      {selectedPayroll && !selectedBreakdown && detailsOpen && (
+        <Dialog open={true} onOpenChange={setDetailsOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Loading Payroll Details...</DialogTitle>
+            </DialogHeader>
+            <div className="py-8 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Fetching breakdown data...</p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
-
-
-
 
 

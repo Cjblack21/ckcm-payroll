@@ -8,7 +8,10 @@ const typeSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   amount: z.number().min(0),
+  calculationType: z.enum(['FIXED', 'PERCENTAGE']).optional().default('FIXED'),
+  percentageValue: z.number().min(0).max(100).optional(),
   isActive: z.boolean().optional().default(true),
+  isMandatory: z.boolean().optional().default(false),
 })
 
 export async function GET() {
@@ -45,14 +48,25 @@ export async function POST(req: NextRequest) {
     }
     
     const created = await prisma.deductionType.create({ data })
+    
+    // Note: Removed automatic application of mandatory deductions to all personnel
+    // Admins must manually apply deductions using the Deductions page
+    // This gives full control over which personnel receive which deductions
+    
     return NextResponse.json(created, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating deduction type:', error)
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Validation failed", details: error.issues }, { status: 400 })
     }
+    // Handle Prisma unique constraint error
+    if (error.code === 'P2002') {
+      return NextResponse.json({ 
+        error: "A deduction type with this name already exists. Please use a different name." 
+      }, { status: 400 })
+    }
     return NextResponse.json({ 
-      error: "Failed to create", 
+      error: "Failed to create deduction type", 
       details: error instanceof Error ? error.message : 'Unknown error' 
     }, { status: 500 })
   }

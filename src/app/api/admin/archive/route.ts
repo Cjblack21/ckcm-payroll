@@ -11,34 +11,30 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    console.log('Fetching archived payroll entries...')
+    console.log('Fetching archived payroll and loan data...')
 
-    // First, let's check what payroll entries exist and their statuses
-    const allPayrollEntries = await prisma.payrollEntry.findMany({
-      select: {
-        payroll_entries_id: true,
-        status: true,
-        releasedAt: true,
+    // Fetch archived payrolls
+    const archivedPayrolls = await prisma.payrollEntry.findMany({
+      where: {
+        status: {
+          in: ['RELEASED', 'ARCHIVED']
+        }
+      },
+      include: {
         user: {
-          select: {
-            name: true
+          include: {
+            personnelType: true
           }
         }
       },
-      orderBy: { processedAt: 'desc' },
-      take: 10 // Just get the latest 10 to see what's there
-    })
-    
-    console.log('All payroll entries (latest 10):')
-    allPayrollEntries.forEach((entry, index) => {
-      console.log(`Entry ${index + 1}: User: ${entry.user?.name}, Status: ${entry.status}, Released: ${entry.releasedAt}`)
+      orderBy: {
+        periodStart: 'desc'
+      }
     })
 
-    // Fetch all archived payroll entries with detailed information
-    const entries = await prisma.payrollEntry.findMany({
-      where: {
-        status: 'ARCHIVED'
-      },
+    // Fetch archived loans
+    const archivedLoans = await prisma.loan.findMany({
+      where: { archivedAt: { not: null } },
       include: {
         user: { 
           select: { 
@@ -47,418 +43,82 @@ export async function GET() {
             email: true,
             personnelType: {
               select: {
-                name: true,
-                basicSalary: true
+                department: true
               }
             }
           } 
         }
       },
-      orderBy: { releasedAt: 'desc' }
-    })
-    
-    console.log('Database query executed for ARCHIVED status')
-
-    console.log(`Found ${entries.length} archived payroll entries`)
-    
-    // Log details of found entries
-    entries.forEach((entry, index) => {
-      console.log(`Entry ${index + 1}: User: ${entry.user?.name}, Period: ${entry.periodStart.toISOString().split('T')[0]} to ${entry.periodEnd.toISOString().split('T')[0]}, Status: ${entry.status}`)
+      orderBy: { createdAt: 'desc' }
     })
 
-    // If no entries found, return empty result
-    if (entries.length === 0) {
-      console.log('No archived payroll entries found')
-      return NextResponse.json({ 
-        groupedItems: [],
-        totalDates: 0,
-        totalPayrolls: 0
-      })
-    }
-
-    console.log('Fetching related data...')
-
-    // Get attendance records for the archived payrolls to reconstruct details
-    const payrollPeriods = entries.map(entry => ({
-      periodStart: entry.periodStart,
-      periodEnd: entry.periodEnd
-    }))
-
-    // Get unique periods
-    const uniquePeriods = Array.from(
-      new Set(payrollPeriods.map(p => `${p.periodStart.toISOString()}-${p.periodEnd.toISOString()}`))
-    )
-
-    console.log(`Fetching attendance records for ${uniquePeriods.length} unique periods`)
-
-    // Fetch attendance records for all periods
-    let attendanceRecords: any[] = []
-    try {
-      attendanceRecords = await prisma.attendance.findMany({
-        where: {
-          OR: uniquePeriods.map(period => {
-            const [start, end] = period.split('-')
-            return {
-              date: {
-                gte: new Date(start),
-                lte: new Date(end)
-              }
-            }
-          })
-        },
-        include: {
-          user: {
-            select: {
-              users_id: true,
-              name: true,
-              email: true
-            }
-          }
+    // Group archived payrolls by period and calculate totals
+    const groupedPayrollArchives = archivedPayrolls.reduce((acc, payroll) => {
+      const periodKey = `${payroll.periodStart.toISOString()}-${payroll.periodEnd.toISOString()}`
+      
+      if (!acc[periodKey]) {
+        acc[periodKey] = {
+          id: periodKey,
+          periodStart: payroll.periodStart.toISOString().split('T')[0],
+          periodEnd: payroll.periodEnd.toISOString().split('T')[0],
+          totalEmployees: 0,
+          totalExpenses: 0,
+          totalDeductions: 0,
+          totalAttendanceDeductions: 0,
+          totalDatabaseDeductions: 0,
+          totalLoanPayments: 0,
+          totalGrossSalary: 0,
+          totalNetPay: 0,
+          releasedAt: payroll.releasedAt?.toISOString() || '',
+          releasedBy: session.user.name || 'Admin',
+          payrolls: []
         }
-      })
-    } catch (error) {
-      console.warn('Error fetching attendance records:', error)
-      attendanceRecords = []
-    }
-
-    console.log(`Found ${attendanceRecords.length} attendance records`)
-
-    // Get loan records for the archived payrolls
-    let loanRecords: any[] = []
-    try {
-      loanRecords = await prisma.loan.findMany({
-        where: {
-          users_id: {
-            in: entries.map(entry => entry.users_id)
-          },
-          status: 'ACTIVE'
-        },
-        include: {
-          user: {
-            select: {
-              users_id: true,
-              name: true,
-              email: true
-            }
-          }
-        }
-      })
-    } catch (error) {
-      console.warn('Error fetching loan records:', error)
-      loanRecords = []
-    }
-
-    console.log(`Found ${loanRecords.length} loan records`)
-
-    // Note: We now fetch actual deduction records per user instead of deduction types
-
-    // Get attendance settings for accurate deduction calculations
-    let attendanceSettings: any = null
-    try {
-      attendanceSettings = await prisma.attendanceSettings.findFirst()
-    } catch (error) {
-      console.warn('Error fetching attendance settings:', error)
-    }
-
-    console.log('Processing payroll entries...')
-
-    // Pre-fetch ALL data to avoid async issues in reduce function
-    let allDeductionRecords: any[] = []
-    let allAttendanceRecords: any[] = []
-    
-    try {
-      if (entries.length > 0) {
-        // Pre-fetch deduction records
-        allDeductionRecords = await prisma.deduction.findMany({
-          where: {
-            users_id: {
-              in: entries.map(entry => entry.users_id)
-            },
-            appliedAt: {
-              gte: new Date(Math.min(...entries.map(e => e.periodStart.getTime()))),
-              lte: new Date(Math.max(...entries.map(e => e.periodEnd.getTime())))
-            }
-          },
-          include: {
-            deductionType: {
-              select: {
-                name: true,
-                description: true
-              }
-            }
-          }
-        })
-        
-        // Pre-fetch ALL attendance records for all users and periods
-        allAttendanceRecords = await prisma.attendance.findMany({
-          where: {
-            users_id: {
-              in: entries.map(entry => entry.users_id)
-            },
-            date: {
-              gte: new Date(Math.min(...entries.map(e => e.periodStart.getTime()))),
-              lte: new Date(Math.max(...entries.map(e => e.periodEnd.getTime())))
-            }
-          },
-          orderBy: {
-            date: 'asc'
-          }
-        })
       }
-    } catch (error) {
-      console.warn('Error fetching records:', error)
-      allDeductionRecords = []
-      allAttendanceRecords = []
-    }
-    
-    console.log(`Found ${allDeductionRecords.length} total deduction records`)
-    console.log(`Found ${allAttendanceRecords.length} total attendance records`)
-
-    // Group by release date
-    const groupedByDate = entries.reduce((acc, entry) => {
-      try {
-        console.log(`🔍 PROCESSING ENTRY - User: ${entry.user?.name}, Period: ${entry.periodStart.toISOString().split('T')[0]} to ${entry.periodEnd.toISOString().split('T')[0]}`)
-        let releaseDate = 'Unknown'
-        
-        if (entry.releasedAt) {
-          try {
-            const date = new Date(entry.releasedAt)
-            if (!isNaN(date.getTime())) {
-              releaseDate = date.toISOString().split('T')[0]
-            }
-          } catch (error) {
-            console.warn('Invalid releasedAt date:', entry.releasedAt)
-          }
-        }
-        
-        if (!acc[releaseDate]) {
-          acc[releaseDate] = {
-            date: releaseDate,
-            totalEmployees: 0,
-            totalNetPay: 0,
-            payrolls: []
-          }
-        }
-        
-        acc[releaseDate].totalEmployees += 1
-        acc[releaseDate].totalNetPay += Number(entry.netPay)
-        
-        // Note: We now use direct attendance queries instead of pre-fetched data
-
-        // Filter attendance records for this user and period from pre-fetched data
-        const directAttendanceRecords = allAttendanceRecords.filter(record => 
-          record.users_id === entry.users_id &&
-          record.date >= entry.periodStart &&
-          record.date <= entry.periodEnd
-        )
-
-        // Get loan records for this user
-        const userLoanRecords = loanRecords.filter(loan => 
-          loan.users_id === entry.users_id
-        )
-
-        // Calculate attendance details from direct query results
-        const attendanceDetails = directAttendanceRecords.map(record => {
-          let workHours = 0
-          if (record.timeIn && record.timeOut) {
-            const timeIn = new Date(record.timeIn)
-            const timeOut = new Date(record.timeOut)
-            workHours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60) // Convert to hours
-          }
-          
-          return {
-            date: record.date.toISOString().split('T')[0],
-            timeIn: record.timeIn?.toISOString() || null,
-            timeOut: record.timeOut?.toISOString() || null,
-            status: record.status,
-            workHours: workHours
-          }
-        })
-
-        // Calculate loan details
-        const periodDays = Math.floor((entry.periodEnd.getTime() - entry.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
-        const loanFactor = periodDays <= 16 ? 0.5 : 1.0
-        const loanDetails = userLoanRecords.map(loan => {
-          const monthlyPayment = Number(loan.amount) * Number(loan.monthlyPaymentPercent) / 100
-          const periodPayment = monthlyPayment * loanFactor
-          return {
-            type: 'Loan Payment',
-            amount: periodPayment,
-            description: `Loan Payment - Amount: ₱${Number(loan.amount).toLocaleString()}, Monthly %: ${Number(loan.monthlyPaymentPercent)}%`
-          }
-        })
-        
-        console.log(`🔍 DIRECT QUERY - User: ${entry.user?.name} (${entry.users_id})`)
-        console.log(`🔍 DIRECT QUERY - Period: ${entry.periodStart.toISOString().split('T')[0]} to ${entry.periodEnd.toISOString().split('T')[0]}`)
-        console.log(`🔍 DIRECT QUERY - Found ${directAttendanceRecords.length} attendance records`)
-        
-        // Log each attendance record
-        directAttendanceRecords.forEach(record => {
-          console.log(`🔍 DIRECT QUERY - Record: ${record.date.toISOString().split('T')[0]}, Status: ${record.status}, TimeIn: ${record.timeIn}, TimeOut: ${record.timeOut}`)
-        })
-        
-        // Calculate attendance deductions from direct query results
-        const basicSalary = entry.user?.personnelType?.basicSalary ? Number(entry.user.personnelType.basicSalary) : Number(entry.basicSalary)
-        const workingDaysInPeriod = Math.floor((entry.periodEnd.getTime() - entry.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
-        const timeInEnd = attendanceSettings?.timeInEnd || '09:30'
-        
-        console.log(`🔍 DIRECT QUERY - Basic Salary: ₱${basicSalary}, Working Days: ${workingDaysInPeriod}, TimeInEnd: ${timeInEnd}`)
-        
-        let attendanceDeductionDetails: any[] = []
-        let totalAttendanceDeductions = 0
-        
-        // Process each attendance record
-        directAttendanceRecords.forEach(record => {
-          console.log(`🔍 PROCESSING - Date: ${record.date.toISOString().split('T')[0]}, Status: ${record.status}`)
-          
-          if (record.status === 'LATE' && record.timeIn) {
-            // Calculate late deduction
-            const timeIn = new Date(record.timeIn)
-            const expected = new Date(record.date)
-            const [h, m] = timeInEnd.split(':').map(Number)
-            const adjM = m + 1 // Deductions start 1 minute after timeInEnd
-            if (adjM >= 60) {
-              expected.setHours(h + 1, adjM - 60, 0, 0)
-            } else {
-              expected.setHours(h, adjM, 0, 0)
-            }
-            
-            const perSecond = (basicSalary / workingDaysInPeriod / 8 / 60 / 60)
-            const secondsLate = Math.max(0, (timeIn.getTime() - expected.getTime()) / 1000)
-            const daily = basicSalary / workingDaysInPeriod
-            const amount = Math.min(secondsLate * perSecond, daily * 0.5)
-            
-            if (amount > 0) {
-              attendanceDeductionDetails.push({
-                date: record.date.toISOString().split('T')[0],
-                amount: amount,
-                description: `Late arrival - ${Math.round(secondsLate / 60)} minutes late`
-              })
-              totalAttendanceDeductions += amount
-              console.log(`🔍 LATE DEDUCTION - ₱${amount.toFixed(2)} for ${Math.round(secondsLate / 60)} minutes late`)
-            }
-          } else if (record.status === 'ABSENT') {
-            const amount = basicSalary / workingDaysInPeriod
-            attendanceDeductionDetails.push({
-              date: record.date.toISOString().split('T')[0],
-              amount: amount,
-              description: 'Absence deduction'
-            })
-            totalAttendanceDeductions += amount
-            console.log(`🔍 ABSENCE DEDUCTION - ₱${amount.toFixed(2)}`)
-          } else if (record.status === 'PARTIAL') {
-            // Calculate partial deduction
-            let hoursShort = 8
-            if (record.timeIn && record.timeOut) {
-              const timeIn = new Date(record.timeIn)
-              const timeOut = new Date(record.timeOut)
-              const hoursWorked = Math.max(0, (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60))
-              hoursShort = Math.max(0, 8 - hoursWorked)
-            }
-            const hourlyRate = (basicSalary / workingDaysInPeriod) / 8
-            const amount = hoursShort * hourlyRate
-            
-            if (amount > 0) {
-              attendanceDeductionDetails.push({
-                date: record.date.toISOString().split('T')[0],
-                amount: amount,
-                description: `Partial attendance - ${hoursShort.toFixed(1)} hours short`
-              })
-              totalAttendanceDeductions += amount
-              console.log(`🔍 PARTIAL DEDUCTION - ₱${amount.toFixed(2)} for ${hoursShort.toFixed(1)} hours short`)
-            }
-          }
-        })
-        
-        console.log(`🔍 FINAL RESULT - Total Attendance Deductions: ₱${totalAttendanceDeductions.toFixed(2)}`)
-        console.log(`🔍 FINAL RESULT - Deduction Details:`, attendanceDeductionDetails)
-        console.log(`🔍 SUMMARY - User: ${entry.user?.name}, Period: ${entry.periodStart.toISOString().split('T')[0]} to ${entry.periodEnd.toISOString().split('T')[0]}, Records: ${directAttendanceRecords.length}, Deductions: ${attendanceDeductionDetails.length}, Total: ₱${totalAttendanceDeductions.toFixed(2)}`)
-        
-        // Get other deduction records (non-attendance related)
-        const otherDeductionRecords = allDeductionRecords.filter(deduction => 
-          deduction.users_id === entry.users_id &&
-          deduction.appliedAt >= entry.periodStart &&
-          deduction.appliedAt <= entry.periodEnd &&
-          !['Late Arrival', 'Late Penalty', 'Absence Deduction', 'Absent', 'Late', 'Tardiness', 'Early Time-Out', 'Partial Attendance'].includes(deduction.deductionType.name)
-        )
-        
-        const otherDeductionDetails = otherDeductionRecords.map(deduction => ({
-          type: deduction.deductionType.name,
-          amount: Number(deduction.amount),
-          description: `${deduction.deductionType.name} - ${deduction.deductionType.description || 'Other deduction'}`
-        }))
-        
-        console.log(`🔍 ARCHIVE DEBUG - Total Attendance Deductions (Real-time): ₱${totalAttendanceDeductions}`)
-        console.log(`🔍 ARCHIVE DEBUG - Attendance Deduction Details:`, attendanceDeductionDetails)
-
-        acc[releaseDate].payrolls.push({
-          payroll_entries_id: entry.payroll_entries_id,
-          users_id: entry.users_id,
-          userName: entry.user?.name ?? null,
-          userEmail: entry.user?.email || '',
-          periodStart: entry.periodStart.toISOString(),
-          periodEnd: entry.periodEnd.toISOString(),
-          basicSalary: Number(entry.basicSalary),
-          overtime: Number(entry.overtime),
-          deductions: Number(entry.deductions),
-          netPay: Number(entry.netPay),
-          releasedAt: entry.releasedAt?.toISOString() || null,
-          processedAt: entry.processedAt.toISOString(),
-          // Add detailed breakdown
-          breakdown: {
-            basicSalary: Number(entry.basicSalary),
-            overtime: Number(entry.overtime),
-            grossPay: Number(entry.basicSalary) + Number(entry.overtime),
-            totalDeductions: Number(entry.deductions),
-            netPay: Number(entry.netPay),
-            attendanceDetails: attendanceDetails,
-            attendanceDeductionDetails: attendanceDeductionDetails,
-            totalAttendanceDeductions: totalAttendanceDeductions,
-            loanDetails: loanDetails,
-            otherDeductionDetails: otherDeductionDetails,
-            personnelType: entry.user?.personnelType?.name || 'Unknown',
-            personnelBasicSalary: Number(entry.user?.personnelType?.basicSalary || 0)
-          }
-        })
-      } catch (error) {
-        console.error('Error processing payroll entry:', entry.payroll_entries_id, error)
-      }
+      
+      // Accumulate totals
+      acc[periodKey].totalEmployees++
+      acc[periodKey].totalExpenses += Number(payroll.basicSalary)
+      acc[periodKey].totalGrossSalary += Number(payroll.basicSalary)
+      acc[periodKey].totalDeductions += Number(payroll.deductions)
+      acc[periodKey].totalAttendanceDeductions += Number(payroll.attendanceDeductions || 0)
+      acc[periodKey].totalDatabaseDeductions += Number(payroll.databaseDeductions || 0)
+      acc[periodKey].totalLoanPayments += Number(payroll.loanPayments || 0)
+      acc[periodKey].totalNetPay += Number(payroll.netPay)
+      
+      // Add employee to payrolls array
+      acc[periodKey].payrolls.push(payroll)
       
       return acc
-    }, {} as Record<string, any>)
+    }, {} as any)
 
-    console.log('Converting to array and sorting...')
+    const payrollArchiveList = Object.values(groupedPayrollArchives)
 
-    // Convert to array and sort by date
-    const groupedItems = Object.values(groupedByDate).sort((a: any, b: any) => {
-      // Handle 'Unknown' dates by putting them at the end
-      if (a.date === 'Unknown') return 1
-      if (b.date === 'Unknown') return -1
-      
-      const dateA = new Date(a.date)
-      const dateB = new Date(b.date)
-      
-      // Handle invalid dates
-      if (isNaN(dateA.getTime())) return 1
-      if (isNaN(dateB.getTime())) return -1
-      
-      return dateB.getTime() - dateA.getTime()
-    })
+    // Format archived loans
+    const loanArchiveList = archivedLoans.map(l => ({
+      loans_id: l.loans_id,
+      users_id: l.users_id,
+      userName: l.user?.name ?? null,
+      userEmail: l.user?.email || '',
+      department: l.user?.personnelType?.department ?? null,
+      amount: Number(l.amount),
+      balance: Number(l.balance),
+      monthlyPaymentPercent: Number(l.monthlyPaymentPercent),
+      termMonths: l.termMonths,
+      status: l.status,
+      purpose: l.purpose,
+      createdAt: l.createdAt.toISOString(),
+      archivedAt: l.archivedAt?.toISOString() || null,
+    }))
 
-    console.log(`Successfully processed ${groupedItems.length} date groups with ${entries.length} total payroll entries`)
-    
-    // Log final response structure
-    console.log('Final response structure:')
-    console.log(`- Total date groups: ${groupedItems.length}`)
-    console.log(`- Total payroll entries: ${entries.length}`)
-    groupedItems.forEach((group, index) => {
-      console.log(`- Group ${index + 1}: Date: ${group.date}, Employees: ${group.totalEmployees}, Payrolls: ${group.payrolls.length}`)
-    })
+    console.log('📦 Archive API - Payroll periods:', payrollArchiveList.length)
+    console.log('📦 Archive API - Archived loans:', loanArchiveList.length)
 
     return NextResponse.json({ 
-      groupedItems,
-      totalDates: groupedItems.length,
-      totalPayrolls: entries.length
+      success: true,
+      payrolls: payrollArchiveList,
+      loans: loanArchiveList,
+      totalPayrollPeriods: payrollArchiveList.length,
+      totalArchivedLoans: loanArchiveList.length
     })
   } catch (error) {
     console.error('Error fetching archive:', error)
@@ -469,6 +129,7 @@ export async function GET() {
     }, { status: 500 })
   }
 }
+
 
 
 

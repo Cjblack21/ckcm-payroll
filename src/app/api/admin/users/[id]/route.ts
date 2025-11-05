@@ -191,6 +191,8 @@ export async function DELETE(
     }
 
     const resolvedParams = await params
+    const { searchParams } = new URL(request.url)
+    const force = searchParams.get('force') === 'true'
 
     // Prevent admin from deleting themselves
     if (session.user.id === resolvedParams.id) {
@@ -210,32 +212,59 @@ export async function DELETE(
     }
 
     // Check if user has related records
-    const [attendanceCount, payrollCount, loanCount, deductionCount, leaveCount] = await Promise.all([
+    const [attendanceCount, payrollCount, loanCount, deductionCount] = await Promise.all([
       prisma.attendance.count({ where: { users_id: resolvedParams.id } }),
       prisma.payrollEntry.count({ where: { users_id: resolvedParams.id } }),
       prisma.loan.count({ where: { users_id: resolvedParams.id } }),
-      prisma.deduction.count({ where: { users_id: resolvedParams.id } }),
-      prisma.leaveRequest.count({ where: { users_id: resolvedParams.id } })
+      prisma.deduction.count({ where: { users_id: resolvedParams.id } })
     ])
 
-    const totalRelatedRecords = attendanceCount + payrollCount + loanCount + deductionCount + leaveCount
+    const totalRelatedRecords = attendanceCount + payrollCount + loanCount + deductionCount
 
-    if (totalRelatedRecords > 0) {
+    // If there are related records and force is not set, return info about records
+    if (totalRelatedRecords > 0 && !force) {
       return NextResponse.json(
         { 
-          error: 'Cannot delete user with existing records',
-          details: `This user has ${attendanceCount} attendance records, ${payrollCount} payroll records, ${loanCount} loans, ${deductionCount} deductions, and ${leaveCount} leave requests. Please deactivate the user instead.`
+          error: 'Personnel has existing records',
+          needsForce: true,
+          counts: {
+            attendance: attendanceCount,
+            payroll: payrollCount,
+            loans: loanCount,
+            deductions: deductionCount
+          }
         },
         { status: 400 }
       )
     }
 
-    // Delete user (this will cascade delete sessions)
-    await prisma.user.delete({
-      where: { users_id: resolvedParams.id }
-    })
+    // Force delete: remove all related records first
+    if (force && totalRelatedRecords > 0) {
+      await prisma.$transaction([
+        // Delete related records in order
+        prisma.deduction.deleteMany({ where: { users_id: resolvedParams.id } }),
+        prisma.loan.deleteMany({ where: { users_id: resolvedParams.id } }),
+        prisma.payrollEntry.deleteMany({ where: { users_id: resolvedParams.id } }),
+        prisma.attendance.deleteMany({ where: { users_id: resolvedParams.id } }),
+        // Delete the user (this will cascade delete sessions)
+        prisma.user.delete({ where: { users_id: resolvedParams.id } })
+      ])
+    } else {
+      // No related records, just delete the user
+      await prisma.user.delete({
+        where: { users_id: resolvedParams.id }
+      })
+    }
 
-    return NextResponse.json({ message: 'User deleted successfully' })
+    return NextResponse.json({ 
+      message: 'Personnel deleted successfully',
+      deletedRecords: force ? {
+        attendance: attendanceCount,
+        payroll: payrollCount,
+        loans: loanCount,
+        deductions: deductionCount
+      } : null
+    })
   } catch (error) {
     console.error('Error deleting user:', error)
     
@@ -243,15 +272,15 @@ export async function DELETE(
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
       return NextResponse.json(
         { 
-          error: 'Cannot delete user with existing records',
-          details: 'This user has related records in the system. Please deactivate the user instead of deleting.'
+          error: 'Cannot delete personnel with existing records',
+          details: 'This personnel has related records in the system. Please use force delete or deactivate instead.'
         },
         { status: 400 }
       )
     }
     
     return NextResponse.json(
-      { error: 'Failed to delete user' },
+      { error: 'Failed to delete personnel' },
       { status: 500 }
     )
   }

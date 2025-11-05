@@ -6,8 +6,14 @@ import { prisma } from "@/lib/prisma"
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
+    console.log("[Settings API GET] Session:", { 
+      hasSession: !!session, 
+      userId: session?.user?.id,
+      userRole: session?.user?.role 
+    })
 
     if (!session?.user?.id) {
+      console.log("[Settings API GET] Unauthorized - no user ID")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -38,8 +44,14 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
+    console.log("[Settings API PUT] Session:", { 
+      hasSession: !!session, 
+      userId: session?.user?.id,
+      userRole: session?.user?.role 
+    })
 
     if (!session?.user?.id) {
+      console.log("[Settings API PUT] Unauthorized - no user ID")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

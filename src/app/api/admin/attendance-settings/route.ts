@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { AttendanceStatus } from "@prisma/client"
 import { z } from "zod"
 import { parsePhilippinesLocalDate } from "@/lib/timezone"
 
@@ -203,7 +204,7 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
     const [cutoffHours, cutoffMinutes] = cutoffTime.split(':').map(Number)
 
     // Create attendance records for each personnel and working day
-    const recordsToCreate = []
+    const recordsToCreate: { users_id: string; date: Date; status: AttendanceStatus }[] = []
     
     for (const person of activePersonnel) {
       for (const workingDay of workingDays) {
@@ -219,12 +220,10 @@ async function createAttendanceRecordsForPeriod(periodStart: Date, periodEnd: Da
         const isPastCutoff = isToday && nowPhilippines >= cutoffDateTime
         
         // If past cut-off and no time in/out, create as ABSENT
-        const status = isPastCutoff ? 'ABSENT' : 'PENDING'
-        
         recordsToCreate.push({
           users_id: person.users_id,
           date: workingDay,
-          status: status as const
+          status: isPastCutoff ? AttendanceStatus.ABSENT : AttendanceStatus.PENDING
         })
         
         // Note: Absence deductions are now calculated in real-time by the payroll system

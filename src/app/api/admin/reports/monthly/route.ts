@@ -41,6 +41,8 @@ export async function GET(request: NextRequest) {
         personnelType: {
           select: {
             name: true,
+            type: true,
+            department: true,
             basicSalary: true
           }
         }
@@ -49,14 +51,24 @@ export async function GET(request: NextRequest) {
 
     const userIds = users.map(u => u.users_id)
 
-    // Get payroll entries for the month
+    // Get payroll entries for the month (using periodStart/periodEnd)
     const payrollEntries = await prisma.payrollEntry.findMany({
       where: {
         users_id: { in: userIds },
-        processedAt: {
-          gte: monthStart,
-          lte: monthEnd
-        }
+        OR: [
+          {
+            periodStart: {
+              gte: monthStart,
+              lte: monthEnd
+            }
+          },
+          {
+            periodEnd: {
+              gte: monthStart,
+              lte: monthEnd
+            }
+          }
+        ]
       },
       include: {
         user: {
@@ -164,7 +176,9 @@ export async function GET(request: NextRequest) {
         users_id: user.users_id,
         name: user.name,
         email: user.email,
-        personnelType: user.personnelType?.name || 'No Type',
+        position: user.personnelType?.name || 'No Position',
+        personnelType: user.personnelType?.type || null,
+        department: user.personnelType?.department || 'No Department',
         basicSalary,
         totalDeductions: totalUserDeductions,
         totalLoans: totalUserLoans,

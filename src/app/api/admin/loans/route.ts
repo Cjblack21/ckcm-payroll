@@ -17,7 +17,18 @@ export async function GET(request: NextRequest) {
     const loans = await prisma.loan.findMany({
       where: archived ? { archivedAt: { not: null } } : { archivedAt: null },
       include: {
-        user: { select: { users_id: true, name: true, email: true } }
+        user: { 
+          select: { 
+            users_id: true, 
+            name: true, 
+            email: true,
+            personnelType: {
+              select: {
+                department: true
+              }
+            }
+          } 
+        }
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -31,11 +42,13 @@ export async function GET(request: NextRequest) {
       users_id: l.users_id,
       userName: l.user?.name ?? null,
       userEmail: l.user?.email || '',
+      department: l.user?.personnelType?.department ?? null,
       amount: Number(l.amount),
       balance: Number(l.balance),
       monthlyPaymentPercent: Number(l.monthlyPaymentPercent),
       termMonths: l.termMonths,
       status: l.status,
+      purpose: l.purpose,
       createdAt: l.createdAt.toISOString(),
     }))
 

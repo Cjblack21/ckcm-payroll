@@ -19,6 +19,9 @@ export interface PayslipData {
     totalDeductions: number
     netPay: number
     deductionDetails: any[]
+    loanDetails?: any[]
+    otherDeductionDetails?: any[]
+    attendanceDeductionDetails?: any[]
   }
 }
 
@@ -135,27 +138,71 @@ export function generatePayslipHTML(
             <span><strong>Gross:</strong></span>
             <span><strong>₱${(breakdown.grossPay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></span>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-            <span>Att. Ded:</span>
-            <span>-₱${(breakdown.attendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-            <span>Other Ded:</span>
-            <span>-₱${(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-            <span>Loans:</span>
-            <span>-₱${(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-          </div>
-          ${breakdown.deductionDetails && breakdown.deductionDetails.length > 0 ? `
-            <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 6px;">
-              <div style="font-weight: bold; margin-bottom: 1px;">Deduction Details:</div>
-              ${breakdown.deductionDetails.map((deduction: any) => `
+          ${breakdown.attendanceDeductionDetails && breakdown.attendanceDeductionDetails.length > 0 ? `
+            <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 5px;">
+              <div style="font-weight: bold; margin-bottom: 1px; color: #dc2626; font-size: 6px;">Attendance Deductions:</div>
+              ${breakdown.attendanceDeductionDetails.map((deduction: any) => `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.5px;">
-                  <span style="max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${deduction.description}">${deduction.type}:</span>
-                  <span>-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${deduction.description}">${deduction.date}: ${deduction.description}</span>
+                  <span style="font-weight: bold; color: #dc2626;">-₱${(deduction.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                 </div>
               `).join('')}
+              <div style="display: flex; justify-content: space-between; margin-top: 1px; padding-top: 1px; border-top: 0.5px solid #ddd;">
+                <span style="font-weight: bold; font-size: 6px;">Total Att. Ded:</span>
+                <span style="font-weight: bold; color: #dc2626; font-size: 6px;">-₱${(breakdown.attendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          ` : breakdown.attendanceDeductions > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
+              <span>Att. Ded:</span>
+              <span>-₱${(breakdown.attendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+          ` : ''}
+          ${breakdown.loanDetails && breakdown.loanDetails.length > 0 ? `
+            <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 5px;">
+              <div style="font-weight: bold; margin-bottom: 1px; color: #d97706; font-size: 6px;">Loan Payments:</div>
+              ${breakdown.loanDetails.map((loan: any) => `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5px;">
+                  <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${loan.description || loan.type}">${loan.description || loan.type || 'Loan Payment'}</span>
+                  <span style="font-weight: bold; color: #d97706;">-₱${(loan.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+              `).join('')}
+              <div style="display: flex; justify-content: space-between; margin-top: 1px; padding-top: 1px; border-top: 0.5px solid #ddd;">
+                <span style="font-weight: bold; font-size: 6px;">Total Loans:</span>
+                <span style="font-weight: bold; color: #d97706; font-size: 6px;">-₱${(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          ` : `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
+              <span>Loans:</span>
+              <span>-₱${(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+          `}
+          ${(breakdown.otherDeductionDetails && breakdown.otherDeductionDetails.length > 0) || (breakdown.deductionDetails && breakdown.deductionDetails.length > 0) ? `
+            <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 5px;">
+              <div style="font-weight: bold; margin-bottom: 1px; color: #7c3aed; font-size: 6px;">Other Deductions:</div>
+              ${(breakdown.otherDeductionDetails || breakdown.deductionDetails || []).map((deduction: any) => `
+                <div style="margin-bottom: 0.5px;">
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${deduction.type || deduction.description}">${deduction.type || deduction.description || 'Deduction'}</span>
+                    <span style="font-weight: bold; color: #7c3aed;">-₱${(deduction.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  </div>
+                  ${deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue ? `
+                    <div style="font-size: 4px; color: #999; margin-left: 2px;">
+                      ${deduction.percentageValue}% of salary
+                    </div>
+                  ` : ''}
+                </div>
+              `).join('')}
+              <div style="display: flex; justify-content: space-between; margin-top: 1px; padding-top: 1px; border-top: 0.5px solid #ddd;">
+                <span style="font-weight: bold; font-size: 6px;">Total Other Ded:</span>
+                <span style="font-weight: bold; color: #7c3aed; font-size: 6px;">-₱${(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          ` : breakdown.nonAttendanceDeductions > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
+              <span>Other Ded:</span>
+              <span>-₱${(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
           ` : ''}
           <div style="display: flex; justify-content: space-between; margin-bottom: 1px; border-top: 1px solid #ccc; padding-top: 1px;">

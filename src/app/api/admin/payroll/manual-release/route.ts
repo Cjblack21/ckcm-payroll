@@ -324,6 +324,25 @@ export async function POST(request: NextRequest) {
       })
       console.log(`Successfully updated payroll entry ${payroll.payroll_entries_id}`)
 
+      // Archive non-mandatory deductions on release (backup in case they weren't archived during generation)
+      await prisma.deduction.updateMany({
+        where: {
+          users_id: user.users_id,
+          deductionType: {
+            isMandatory: false
+          },
+          appliedAt: {
+            gte: payroll.periodStart,
+            lte: payroll.periodEnd
+          },
+          archivedAt: null // Only archive if not already archived
+        },
+        data: {
+          archivedAt: now
+        }
+      })
+      console.log(`📦 Archived non-mandatory deductions for ${user.name} on release`)
+
       // Update loan balances for this user if they have loan payments
       if (loanPayments > 0) {
         const userLoans = loans.filter(loan => loan.users_id === user.users_id)
@@ -344,11 +363,17 @@ export async function POST(request: NextRequest) {
             data: { 
               balance: newBalance,
               // Mark loan as completed if balance reaches 0
-              status: newBalance <= 0 ? 'COMPLETED' : 'ACTIVE'
+              status: newBalance <= 0 ? 'COMPLETED' : 'ACTIVE',
+              // Automatically archive when completed
+              archivedAt: newBalance <= 0 ? now : null
             }
           })
           
-          console.log(`Updated loan ${loan.loans_id} for ${user.name}: balance reduced from ₱${currentBalance.toFixed(2)} to ₱${newBalance.toFixed(2)}`)
+          if (newBalance <= 0) {
+            console.log(`✅ Loan ${loan.loans_id} for ${user.name} is now COMPLETED and ARCHIVED (balance: ₱0)`)
+          } else {
+            console.log(`Updated loan ${loan.loans_id} for ${user.name}: balance reduced from ₱${currentBalance.toFixed(2)} to ₱${newBalance.toFixed(2)}`)
+          }
         }
       }
 

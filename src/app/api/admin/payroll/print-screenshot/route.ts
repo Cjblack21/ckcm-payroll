@@ -74,9 +74,27 @@ export async function POST(request: NextRequest) {
     // USE STORED PAYROLL DATA APPROACH: Get existing payroll entries with correct breakdown
     console.log('🔧 Using stored payroll data from archive (correct breakdown)...')
     
-    // Get header settings
-    const headerSettings = await prisma.headerSettings.findFirst()
+    // Get header settings or create default
+    let headerSettings = await prisma.headerSettings.findFirst()
     console.log('📋 Header settings found:', !!headerSettings)
+    
+    if (!headerSettings) {
+      console.log('⚠️ No header settings found, creating defaults...')
+      headerSettings = await prisma.headerSettings.create({
+        data: {
+          schoolName: "Christ the King College De Maranding",
+          schoolAddress: "Maranding Lala Lanao del Norte",
+          systemName: "CKCM PMS (Payroll Management System)",
+          logoUrl: "/ckcm.png",
+          showLogo: true,
+          headerAlignment: 'center',
+          fontSize: 'medium',
+          customText: "",
+          workingDays: JSON.stringify(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+        }
+      })
+      console.log('✅ Default header settings created')
+    }
 
     // Get stored payroll entries for the period (same as archive route)
     // Use date range to handle timezone differences
@@ -121,11 +139,27 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Get deduction records for this user and period
+      // Get deduction records for this user
+      // For mandatory deductions (PhilHealth, SSS, Pag-IBIG), don't filter by date - they apply to every period
+      // For other deductions, only include those within the current period
       const deductionRecords = await prisma.deduction.findMany({
         where: {
           users_id: entry.users_id,
-          appliedAt: { gte: entry.periodStart, lte: entry.periodEnd }
+          OR: [
+            // Mandatory deductions - always include
+            {
+              deductionType: {
+                isMandatory: true
+              }
+            },
+            // Other deductions - only within period
+            {
+              deductionType: {
+                isMandatory: false
+              },
+              appliedAt: { gte: entry.periodStart, lte: entry.periodEnd }
+            }
+          ]
         },
         include: {
           deductionType: true
@@ -139,6 +173,15 @@ export async function POST(request: NextRequest) {
           status: 'ACTIVE'
         }
       })
+      
+      // Get overload pay for this user
+      const overloadPayRecords = await prisma.overloadPay.findMany({
+        where: {
+          users_id: entry.users_id,
+          archivedAt: null
+        }
+      })
+      const totalOverloadPay = overloadPayRecords.reduce((sum, op) => sum + Number(op.amount), 0)
 
       // Get attendance settings
       const attendanceSettings = await prisma.attendanceSettings.findFirst()
@@ -160,32 +203,33 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Calculate attendance deduction details
-      const basicSalary = entry.user?.personnelType?.basicSalary ? Number(entry.user.personnelType.basicSalary) : Number(entry.basicSalary)
-      const workingDaysInPeriod = Math.floor((entry.periodEnd.getTime() - entry.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      // SIMPLE SOLUTION: Use personnel type monthly salary and standard 22 working days
+      const monthlyBasicSalary = entry.user?.personnelType?.basicSalary ? Number(entry.user.personnelType.basicSalary) : Number(entry.basicSalary) * 2
+      const semiMonthlyBasicSalary = monthlyBasicSalary / 2
+      
+      // Daily salary = Monthly ÷ 22 (standard working days per month)
+      const dailySalary = monthlyBasicSalary / 22
       const timeInEnd = attendanceSettings?.timeInEnd || '09:30'
       
-      const attendanceDeductionDetails: any[] = []
       let totalAttendanceDeductions = 0
+      const attendanceDeductionDetails: any[] = []
       
       attendanceRecords.forEach(record => {
-        if (record.status === 'LATE' && record.timeIn) {
-          // Calculate late deduction
+        if (record.status === 'ABSENT') {
+          attendanceDeductionDetails.push({
+            date: record.date.toISOString().split('T')[0],
+            amount: dailySalary,
+            description: 'Absence deduction'
+          })
+          totalAttendanceDeductions += dailySalary
+        } else if (record.status === 'LATE' && record.timeIn) {
           const timeIn = new Date(record.timeIn)
           const expected = new Date(record.date)
           const [h, m] = timeInEnd.split(':').map(Number)
-          const adjM = m + 1 // Deductions start 1 minute after timeInEnd
-          if (adjM >= 60) {
-            expected.setHours(h + 1, adjM - 60, 0, 0)
-          } else {
-            expected.setHours(h, adjM, 0, 0)
-          }
-          
-          const perSecond = (basicSalary / workingDaysInPeriod / 8 / 60 / 60)
+          expected.setHours(h, m, 0, 0)
+          const perSecond = dailySalary / 8 / 60 / 60
           const secondsLate = Math.max(0, (timeIn.getTime() - expected.getTime()) / 1000)
-          const daily = basicSalary / workingDaysInPeriod
-          const amount = Math.min(secondsLate * perSecond, daily * 0.5)
-          
+          const amount = Math.min(secondsLate * perSecond, dailySalary * 0.5)
           if (amount > 0) {
             attendanceDeductionDetails.push({
               date: record.date.toISOString().split('T')[0],
@@ -194,26 +238,16 @@ export async function POST(request: NextRequest) {
             })
             totalAttendanceDeductions += amount
           }
-        } else if (record.status === 'ABSENT') {
-          const amount = basicSalary / workingDaysInPeriod
-          attendanceDeductionDetails.push({
-            date: record.date.toISOString().split('T')[0],
-            amount: amount,
-            description: 'Absence deduction'
-          })
-          totalAttendanceDeductions += amount
         } else if (record.status === 'PARTIAL') {
-          // Calculate partial deduction
-          let hoursShort = 8
+          let hoursWorked = 0
           if (record.timeIn && record.timeOut) {
             const timeIn = new Date(record.timeIn)
             const timeOut = new Date(record.timeOut)
-            const hoursWorked = Math.max(0, (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60))
-            hoursShort = Math.max(0, 8 - hoursWorked)
+            hoursWorked = Math.max(0, (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60))
           }
-          const hourlyRate = (basicSalary / workingDaysInPeriod) / 8
+          const hourlyRate = dailySalary / 8
+          const hoursShort = Math.max(0, 8 - hoursWorked)
           const amount = hoursShort * hourlyRate
-          
           if (amount > 0) {
             attendanceDeductionDetails.push({
               date: record.date.toISOString().split('T')[0],
@@ -230,77 +264,58 @@ export async function POST(request: NextRequest) {
         !['Late Arrival', 'Late Penalty', 'Absence Deduction', 'Absent', 'Late', 'Tardiness', 'Early Time-Out', 'Partial Attendance'].includes(deduction.deductionType.name)
       )
       
+      // Map deduction records with isMandatory flag preserved
       const otherDeductionDetails = otherDeductionRecords.map(deduction => ({
         type: deduction.deductionType.name,
         amount: Number(deduction.amount),
-        description: `${deduction.deductionType.name} - ${deduction.deductionType.description || 'Other deduction'}`,
-        appliedAt: deduction.appliedAt.toISOString().split('T')[0]
+        description: deduction.deductionType.description || '',
+        appliedAt: deduction.appliedAt.toISOString().split('T')[0],
+        isMandatory: deduction.deductionType.isMandatory
       }))
 
-      // Get unpaid leave for this period
-      const unpaidLeaveRequests = await prisma.leaveRequest.findMany({
-        where: {
-          users_id: entry.users_id,
-          status: 'APPROVED',
-          isPaid: false,
-          startDate: { lte: entry.periodEnd },
-          endDate: { gte: entry.periodStart }
-        }
-      })
-
-      // Calculate unpaid leave deduction
-      let totalUnpaidLeaveDays = 0
-      unpaidLeaveRequests.forEach(leave => {
-        const leaveStart = new Date(leave.startDate) > entry.periodStart ? new Date(leave.startDate) : entry.periodStart
-        const leaveEnd = new Date(leave.endDate) < entry.periodEnd ? new Date(leave.endDate) : entry.periodEnd
-        
-        // Count working days only (exclude Sundays)
-        let currentDate = new Date(leaveStart)
-        while (currentDate <= leaveEnd) {
-          if (currentDate.getDay() !== 0) { // Not Sunday
-            totalUnpaidLeaveDays++
-          }
-          currentDate.setDate(currentDate.getDate() + 1)
-        }
-      })
-      
-      const dailySalary = workingDaysInPeriod > 0 ? basicSalary / workingDaysInPeriod : 0
-      const unpaidLeaveDeduction = totalUnpaidLeaveDays * dailySalary
-
-      // Calculate loan details
+      // Calculate loan details with purpose label
       const periodDays = Math.floor((entry.periodEnd.getTime() - entry.periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
       const loanFactor = periodDays <= 16 ? 0.5 : 1.0
       const loanDetails = loanRecords.map(loan => {
         const monthlyPayment = Number(loan.amount) * Number(loan.monthlyPaymentPercent) / 100
         const periodPayment = monthlyPayment * loanFactor
         return {
-          type: 'Loan Payment',
+          type: loan.purpose || 'Loan Payment',
           amount: periodPayment,
-          description: `Loan Payment (${loan.monthlyPaymentPercent}% of ₱${Number(loan.amount).toLocaleString()})`,
+          description: `${loan.purpose || 'Loan'} (${loan.monthlyPaymentPercent}% of ₱${Number(loan.amount).toLocaleString()})`,
           loanId: loan.loans_id
         }
       })
 
+      // Calculate total deductions from all sources
+      const totalLoanPayments = loanDetails.reduce((sum, detail) => sum + detail.amount, 0)
+      const totalOtherDeductions = otherDeductionDetails.reduce((sum, detail) => sum + detail.amount, 0)
+      const totalDeductions = totalAttendanceDeductions + totalLoanPayments + totalOtherDeductions
+      
+      // Calculate correct net pay: Semi-Monthly Basic + Overload - Total Deductions
+      const grossPay = semiMonthlyBasicSalary + totalOverloadPay
+      const correctNetPay = grossPay - totalDeductions
+      
       return {
         users_id: entry.users_id,
         name: entry.user?.name || null,
         email: entry.user?.email || '',
         totalHours: attendanceDetails.reduce((sum, detail) => sum + detail.workHours, 0),
-        totalSalary: Number(entry.netPay),
+        totalSalary: correctNetPay, // Use calculated net pay
         released: entry.status === 'RELEASED',
         breakdown: {
-          biweeklyBasicSalary: Number(entry.basicSalary), // Use stored basic salary (correct per-payroll amount)
-          realTimeEarnings: Number(entry.basicSalary) + Number(entry.overtime),
+          biweeklyBasicSalary: semiMonthlyBasicSalary, // Use semi-monthly basic salary
+          realTimeEarnings: semiMonthlyBasicSalary + totalOverloadPay,
           realWorkHours: attendanceDetails.reduce((sum, detail) => sum + detail.workHours, 0),
-          overtimePay: Number(entry.overtime),
+          overtimePay: totalOverloadPay, // This is actually overload pay
           attendanceDeductions: totalAttendanceDeductions,
-          nonAttendanceDeductions: otherDeductionDetails.reduce((sum, detail) => sum + detail.amount, 0),
-          unpaidLeaveDeduction: unpaidLeaveDeduction,
-          unpaidLeaveDays: totalUnpaidLeaveDays,
-          loanPayments: loanDetails.reduce((sum, detail) => sum + detail.amount, 0),
-          grossPay: Number(entry.basicSalary) + Number(entry.overtime),
-          totalDeductions: Number(entry.deductions),
-          netPay: Number(entry.netPay),
+          nonAttendanceDeductions: totalOtherDeductions,
+          unpaidLeaveDeduction: 0,
+          unpaidLeaveDays: 0,
+          loanPayments: totalLoanPayments,
+          grossPay: grossPay,
+          totalDeductions: totalDeductions,
+          netPay: correctNetPay, // Use calculated net pay
           // Detailed breakdown with sources
           attendanceDetails: attendanceDetails,
           attendanceDeductionDetails: attendanceDeductionDetails,
@@ -335,7 +350,7 @@ export async function POST(request: NextRequest) {
           
           <div class="employee-info">
             <div class="info-row">
-              <span class="label">Employee:</span>
+              <span class="label">Personnel:</span>
               <span class="value">${employee.name || employee.email}</span>
             </div>
             <div class="info-row">
@@ -349,14 +364,20 @@ export async function POST(request: NextRequest) {
           </div>
           
           <div class="payroll-details">
+            <!-- Monthly Reference (Information Only) -->
+            <div class="detail-row" style="color: #666; font-size: 0.9em; font-style: italic;">
+              <span>Monthly Basic Salary (Reference):</span>
+              <span>₱${(breakdown.personnelBasicSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+            
             <!-- Earnings Section -->
             <div class="detail-row">
-              <span>Basic Salary:</span>
+              <span>Basic Salary (Semi-Monthly):</span>
               <span>₱${(breakdown.biweeklyBasicSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
             ${(breakdown.overtimePay || 0) > 0 ? `
-            <div class="detail-row">
-              <span>Overtime:</span>
+            <div class="detail-row" style="color: #2e7d32;">
+              <span>+ Overload Pay (Additional Salary):</span>
               <span>₱${(breakdown.overtimePay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
             ` : ''}
@@ -378,39 +399,81 @@ export async function POST(request: NextRequest) {
               </div>
             ` : ''}
             
-            ${breakdown.loanDetails && breakdown.loanDetails.length > 0 ? `
-              <div class="deduction-section">
-                <div class="deduction-title">Loan Payments:</div>
-                ${breakdown.loanDetails.map((loan: any) => `
-                  <div class="detail-row deduction-detail">
-                    <span>${loan.description}</span>
-                    <span class="deduction">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            ${(() => {
+              const actualLoans = breakdown.loanDetails?.filter((loan: any) => !loan.type?.startsWith('[DEDUCTION]')) || []
+              const deductionPayments = breakdown.loanDetails?.filter((loan: any) => loan.type?.startsWith('[DEDUCTION]')) || []
+              
+              let html = ''
+              
+              // Show actual loans
+              if (actualLoans.length > 0) {
+                html += `
+                  <div class="deduction-section">
+                    <div class="deduction-title">Loan Payments:</div>
+                    ${actualLoans.map((loan: any) => `
+                      <div class="detail-row deduction-detail">
+                        <span>${loan.description}</span>
+                        <span class="deduction">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    `).join('')}
                   </div>
-                `).join('')}
-              </div>
-            ` : ''}
-            
-            ${breakdown.otherDeductionDetails && breakdown.otherDeductionDetails.length > 0 ? `
-              <div class="deduction-section">
-                <div class="deduction-title">Other Deductions:</div>
-                ${breakdown.otherDeductionDetails.map((deduction: any) => `
-                  <div class="detail-row deduction-detail">
-                    <span>${deduction.description} (${deduction.appliedAt})</span>
-                    <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                `
+              }
+              
+              // Show deduction payments separately
+              if (deductionPayments.length > 0) {
+                html += `
+                  <div class="deduction-section">
+                    <div class="deduction-title">Deduction Payments:</div>
+                    ${deductionPayments.map((ded: any) => `
+                      <div class="detail-row deduction-detail">
+                        <span>${ded.description}</span>
+                        <span class="deduction">-₱${ded.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    `).join('')}
                   </div>
-                `).join('')}
-              </div>
-            ` : ''}
+                `
+              }
+              
+              return html
+            })()}
             
-            ${breakdown.unpaidLeaveDeduction && breakdown.unpaidLeaveDeduction > 0 ? `
-              <div class="deduction-section">
-                <div class="deduction-title">Unpaid Leave:</div>
-                <div class="detail-row deduction-detail">
-                  <span>Unpaid Leave (${breakdown.unpaidLeaveDays} days)</span>
-                  <span class="deduction">-₱${breakdown.unpaidLeaveDeduction.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-            ` : ''}
+            ${(() => {
+              const mandatoryDeductions = breakdown.otherDeductionDetails?.filter((d: any) => d.isMandatory) || []
+              const otherDeductions = breakdown.otherDeductionDetails?.filter((d: any) => !d.isMandatory) || []
+              
+              let html = ''
+              
+              if (mandatoryDeductions.length > 0) {
+                html += `
+                  <div class="deduction-section">
+                    <div class="deduction-title">Mandatory Deductions:</div>
+                    ${mandatoryDeductions.map((deduction: any) => `
+                      <div class="detail-row deduction-detail">
+                        <span>${deduction.type}${deduction.description ? ` (${deduction.appliedAt})` : ''}</span>
+                        <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                `
+              }
+              
+              if (otherDeductions.length > 0) {
+                html += `
+                  <div class="deduction-section">
+                    <div class="deduction-title">Other Deductions:</div>
+                    ${otherDeductions.map((deduction: any) => `
+                      <div class="detail-row deduction-detail">
+                        <span>${deduction.description} (${deduction.appliedAt})</span>
+                        <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                `
+              }
+              
+              return html
+            })()}
             
             <div class="detail-row net-pay">
               <span>NET PAY:</span>
@@ -493,11 +556,13 @@ export async function POST(request: NextRequest) {
             font-size: 14px;
           }
           .logo-container {
-            margin-bottom: 0.5px;
+            margin-bottom: 2px;
           }
           .logo {
-            height: 14px;
+            height: 30px;
             width: auto;
+            max-width: 100px;
+            object-fit: contain;
           }
           .school-name {
             font-weight: bold;

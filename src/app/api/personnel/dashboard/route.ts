@@ -40,7 +40,8 @@ export async function GET() {
         personnelType: {
           select: {
             name: true,
-            basicSalary: true
+            basicSalary: true,
+            department: true
           }
         }
       }
@@ -213,6 +214,7 @@ export async function GET() {
         email: user.email,
         avatar: user.avatar,
         position: user.personnelType?.name || 'No position assigned',
+        department: user.personnelType?.department || 'No department assigned',
         basicSalary: basicSalary,
         periodSalary: periodSalary
       },

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Clock, Save } from "lucide-react"
+import { Clock, Save, Settings } from "lucide-react"
 import toast from "react-hot-toast"
 import { toPhilippinesDateString, calculateWorkingDaysInPhilippines } from "@/lib/timezone"
 
@@ -142,7 +142,10 @@ export default function AttendanceSettingsPage() {
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Attendance Settings</h2>
+          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Settings className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+            Attendance Settings
+          </h2>
           <p className="text-muted-foreground">Configure attendance time windows and Time Ins</p>
         </div>
         <Button onClick={saveSettings} disabled={saving}>

@@ -1,18 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Clock, 
   Calendar, 
   User, 
-  DollarSign, 
+  Banknote, 
   TrendingUp,
   CheckCircle,
   XCircle,
   AlertCircle,
-  Banknote,
-  CreditCard
+  CreditCard,
+  Home
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -21,6 +22,7 @@ type DashboardData = {
     name: string
     email: string
     position: string
+    department: string
     basicSalary: number
     periodSalary: number
   }
@@ -64,6 +66,7 @@ type DashboardData = {
 }
 
 export default function PersonnelDashboard() {
+  const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [liveHours, setLiveHours] = useState<number | null>(null)
@@ -108,6 +111,7 @@ export default function PersonnelDashboard() {
             name: payload.user?.name || 'User',
             email: payload.user?.email || 'user@example.com',
             position: payload.user?.position || 'Personnel',
+            department: payload.user?.department || 'No department',
             basicSalary: payload.user?.basicSalary || 0,
             periodSalary: payload.user?.periodSalary || 0,
           },
@@ -204,7 +208,10 @@ export default function PersonnelDashboard() {
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <Home className="h-8 w-8 text-blue-600" />
+            Dashboard
+          </h2>
           <p className="text-muted-foreground">Welcome back, {data.user.name}!</p>
         </div>
       </div>
@@ -215,7 +222,10 @@ export default function PersonnelDashboard() {
       {/* Main Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Today's Status */}
-        <Card>
+        <Card 
+          className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105"
+          onClick={() => router.push('/personnel/attendance')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Today's Status</CardTitle>
             {getStatusIcon(data.todayStatus.status)}
@@ -249,10 +259,13 @@ export default function PersonnelDashboard() {
         </Card>
 
         {/* Attendance This Month */}
-        <Card>
+        <Card 
+          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105"
+          onClick={() => router.push('/personnel/attendance')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Attendance This Month</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Calendar className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.monthlyAttendance.attendanceRate}%</div>
@@ -266,13 +279,19 @@ export default function PersonnelDashboard() {
         </Card>
 
         {/* Position */}
-        <Card>
+        <Card 
+          className="border-l-4 border-l-purple-500 cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105"
+          onClick={() => router.push('/personnel/profile')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Position</CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Position & Department</CardTitle>
+            <User className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.user.position}</div>
+            <div className="text-xs text-muted-foreground">
+              Department: {data.user.department}
+            </div>
             <div className="text-xs text-muted-foreground">
               Monthly Salary: ₱{data.user.basicSalary.toLocaleString()}
             </div>
@@ -280,10 +299,13 @@ export default function PersonnelDashboard() {
         </Card>
 
         {/* Current Salary */}
-        <Card>
+        <Card 
+          className="border-l-4 border-l-orange-500 cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105"
+          onClick={() => router.push('/personnel/payslips')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Current Period Salary</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <div className="text-lg font-bold text-orange-600">₱</div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">₱{data.currentPayroll.netPay.toLocaleString()}</div>
@@ -297,7 +319,10 @@ export default function PersonnelDashboard() {
       </div>
 
       {/* Next Payout Card */}
-      <Card>
+      <Card 
+        className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
+        onClick={() => router.push('/personnel/payslips')}
+      >
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Banknote className="h-5 w-5" />
@@ -327,7 +352,10 @@ export default function PersonnelDashboard() {
       {/* Deductions and Loans */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Current Deductions */}
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
+          onClick={() => router.push('/personnel/deductions')}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
@@ -356,7 +384,10 @@ export default function PersonnelDashboard() {
         </Card>
 
         {/* Active Loans */}
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
+          onClick={() => router.push('/personnel/loans')}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />

@@ -3,14 +3,15 @@ import { authOptions } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Users, 
-  DollarSign, 
+  Wallet, 
   UserCheck, 
   UserX, 
   Banknote, 
   Calendar as CalendarIcon,
   ArrowUpRight,
   ArrowDownRight,
-  FileText
+  FileText,
+  Home
 } from "lucide-react"
 import { AdminDashboardCharts } from "@/components/admin-dashboard-charts"
 import { AdminCalendar } from "@/components/admin-calendar"
@@ -39,33 +40,27 @@ export default async function AdminDashboard() {
       icon: Users,
       trend: "stable",
       color: "text-blue-600",
+      borderColor: "border-l-blue-500",
       href: "/admin/user-management"
     },
     {
       title: "Monthly Payroll",
-      value: `₱${dashboardStats.monthlyPayroll.toLocaleString()}`,
+      value: `₱${Math.round(Number(dashboardStats.monthlyPayroll)).toLocaleString()}`,
       description: "Current month total", 
-      icon: DollarSign,
+      icon: Wallet,
       trend: "up",
       color: "text-green-600",
+      borderColor: "border-l-green-500",
       href: "/admin/payroll"
     },
     {
       title: "Attendance Today",
-      value: dashboardStats.attendanceToday.toString(),
-      description: `${attendanceRate}% attendance rate`,
+      value: `${dashboardStats.attendanceToday} / ${dashboardStats.totalPersonnel}`,
+      description: `Present: ${dashboardStats.attendanceToday} • Absent: ${dashboardStats.absentToday}`,
       icon: UserCheck,
       trend: "stable",
-      color: "text-green-600",
-      href: "/admin/attendance"
-    },
-    {
-      title: "Absent Today",
-      value: dashboardStats.absentToday.toString(),
-      description: `${absentRate}% absence rate`,
-      icon: UserX,
-      trend: "stable",
-      color: "text-red-600",
+      color: "text-blue-600",
+      borderColor: "border-l-blue-500",
       href: "/admin/attendance"
     },
     {
@@ -75,6 +70,7 @@ export default async function AdminDashboard() {
       icon: Banknote,
       trend: "stable",
       color: "text-orange-600",
+      borderColor: "border-l-orange-500",
       href: "/admin/loans"
     },
     {
@@ -84,23 +80,28 @@ export default async function AdminDashboard() {
       icon: CalendarIcon,
       trend: "stable",
       color: "text-purple-600",
+      borderColor: "border-l-purple-500",
       href: "/admin/holidays"
     },
     {
-      title: "Pending Leaves",
-      value: dashboardStats.pendingLeaves.toString(),
-      description: "Awaiting approval",
+      title: "Total Deductions",
+      value: `₱${Math.round(Number(dashboardStats.totalDeductions)).toLocaleString()}`,
+      description: "Current month total",
       icon: FileText,
       trend: "stable",
-      color: "text-yellow-600",
-      href: "/admin/leaves"
+      color: "text-red-600",
+      borderColor: "border-l-red-500",
+      href: "/admin/deductions"
     },
   ]
 
   return (
-    <div className="space-y-8">
+    <div className="flex-1 space-y-8 p-4 pt-6">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Welcome back, {session?.user.name}!</h1>
+        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <Home className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+          Welcome back, {session?.user.name}!
+        </h1>
         <p className="text-muted-foreground">
           Here&apos;s what&apos;s happening with your CKCM Payroll Management System today.
         </p>
@@ -115,7 +116,7 @@ export default async function AdminDashboard() {
           const TrendIcon = stat.trend === "up" ? ArrowUpRight : stat.trend === "down" ? ArrowDownRight : null
           return (
             <Link key={stat.title} href={stat.href}>
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer hover:bg-accent/50">
+              <Card className={`cursor-pointer hover:shadow-xl transition-all duration-300 hover:scale-105 border-l-4 ${stat.borderColor}`}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     {stat.title}

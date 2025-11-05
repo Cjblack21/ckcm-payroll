@@ -24,7 +24,9 @@ import {
   CreditCard,
   Banknote,
   FileText,
-  Archive
+  Archive,
+  CreditCard as DeductionIcon,
+  Trash2
 } from "lucide-react"
 import { format } from "date-fns"
 
@@ -33,11 +35,13 @@ type LoanItem = {
   users_id: string
   userName: string | null
   userEmail: string
+  department?: string | null
   amount: number
   balance: number
   monthlyPaymentPercent: number
   termMonths: number
   status: string
+  purpose?: string | null
   createdAt: string
 }
 
@@ -60,6 +64,10 @@ export default function LoansPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{ amount: number; purpose: string; monthlyPaymentPercent: number; termMonths: number; status: string }>({ amount: 0, purpose: "", monthlyPaymentPercent: 0, termMonths: 0, status: "ACTIVE" })
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active')
+  const [isDeduction, setIsDeduction] = useState(false)
+  const [viewFilter, setViewFilter] = useState<'all' | 'loans' | 'deductions'>('all')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Auto-calculate monthly payment percentage when amount or term changes
   useEffect(() => {
@@ -101,6 +109,7 @@ export default function LoansPage() {
       console.error('Error loading archived loans', e)
     }
   }
+
 
   async function archiveLoan(loan: LoanItem) {
     try {
@@ -186,18 +195,90 @@ export default function LoansPage() {
       const res = await fetch(`/api/admin/loans/${loan.loans_id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete loan')
       await loadLoans()
+      await loadArchivedLoans()
     } catch (e) {
       console.error('Delete failed:', e)
     }
   }
 
+  async function bulkDelete() {
+    if (selectedIds.length === 0) return
+    
+    const ok = window.confirm(`Delete ${selectedIds.length} selected item(s)? This action cannot be undone.`)
+    if (!ok) return
+    
+    setIsDeleting(true)
+    try {
+      const deletePromises = selectedIds.map(id => 
+        fetch(`/api/admin/loans/${id}`, { method: 'DELETE' })
+      )
+      await Promise.all(deletePromises)
+      setSelectedIds([])
+      await loadLoans()
+      await loadArchivedLoans()
+    } catch (e) {
+      console.error('Bulk delete failed:', e)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  function toggleSelectAll() {
+    const currentList = activeTab === 'active' ? filtered : filteredArchived
+    if (selectedIds.length === currentList.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(currentList.map(item => item.loans_id))
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return items.filter(i =>
-      (i.userName || '').toLowerCase().includes(q) ||
-      i.userEmail.toLowerCase().includes(q)
-    )
-  }, [items, search])
+    let result = items.filter(i => {
+      const dateStr = format(new Date(i.createdAt), 'MMM dd, yyyy').toLowerCase()
+      return (
+        (i.userName || '').toLowerCase().includes(q) ||
+        i.userEmail.toLowerCase().includes(q) ||
+        dateStr.includes(q)
+      )
+    })
+    
+    // Apply view filter
+    if (viewFilter === 'loans') {
+      result = result.filter(i => !i.purpose?.startsWith('[DEDUCTION]'))
+    } else if (viewFilter === 'deductions') {
+      result = result.filter(i => i.purpose?.startsWith('[DEDUCTION]'))
+    }
+    
+    return result
+  }, [items, search, viewFilter])
+
+  const filteredArchived = useMemo(() => {
+    const q = search.toLowerCase()
+    let result = archivedItems.filter(i => {
+      const dateStr = format(new Date(i.createdAt), 'MMM dd, yyyy').toLowerCase()
+      return (
+        (i.userName || '').toLowerCase().includes(q) ||
+        i.userEmail.toLowerCase().includes(q) ||
+        dateStr.includes(q)
+      )
+    })
+    
+    // Apply view filter
+    if (viewFilter === 'loans') {
+      result = result.filter(i => !i.purpose?.startsWith('[DEDUCTION]'))
+    } else if (viewFilter === 'deductions') {
+      result = result.filter(i => i.purpose?.startsWith('[DEDUCTION]'))
+    }
+    
+    return result
+  }, [archivedItems, search, viewFilter])
 
   function initials(name: string | null, email: string) {
     if (name) return name.split(' ').map(n => n[0]).join('').toUpperCase()
@@ -213,7 +294,7 @@ export default function LoansPage() {
         body: JSON.stringify({
           users_id: form.users_id,
           amount: Number(form.amount),
-          purpose: form.purpose,
+          purpose: isDeduction ? `[DEDUCTION] ${form.purpose}` : form.purpose,
           monthlyPaymentPercent: Number(form.monthlyPaymentPercent),
           termMonths: Number(form.termMonths),
         })
@@ -221,6 +302,7 @@ export default function LoansPage() {
       if (!res.ok) throw new Error('Failed to create loan')
       setOpen(false)
       setForm({ users_id: "", amount: "", purpose: "", monthlyPaymentPercent: "", termMonths: "" })
+      setIsDeduction(false)
       await loadLoans()
     } catch (e) {
       console.error(e)
@@ -229,14 +311,29 @@ export default function LoansPage() {
     }
   }
 
-  // Calculate statistics
-  const totalLoans = items.length
-  const activeLoans = items.filter(item => item.status === 'ACTIVE').length
-  const completedLoans = items.filter(item => item.status === 'COMPLETED').length
-  const totalLoanAmount = items.reduce((sum, item) => sum + item.amount, 0)
-  const totalOutstanding = items.reduce((sum, item) => sum + item.balance, 0)
+
+  // Calculate statistics (exclude deductions marked with [DEDUCTION])
+  const loansOnly = items.filter(item => !item.purpose?.startsWith('[DEDUCTION]'))
+  const totalLoans = loansOnly.length
+  const activeLoans = loansOnly.filter(item => item.status === 'ACTIVE').length
+  const completedLoans = loansOnly.filter(item => item.status === 'COMPLETED').length
+  const totalLoanAmount = loansOnly.reduce((sum, item) => sum + item.amount, 0)
+  const totalOutstanding = loansOnly.reduce((sum, item) => sum + item.balance, 0)
   // Per payroll payment (system uses payroll periods rather than monthly)
-  const totalPerPayrollPayments = items.reduce((sum, item) => {
+  const totalPerPayrollPayments = loansOnly.reduce((sum, item) => {
+    const monthlyPayment = item.amount * (item.monthlyPaymentPercent / 100)
+    const perPayroll = monthlyPayment / 2
+    return sum + perPayroll
+  }, 0)
+
+  // Calculate deduction statistics
+  const deductionsOnly = items.filter(item => item.purpose?.startsWith('[DEDUCTION]'))
+  const totalDeductions = deductionsOnly.length
+  const activeDeductions = deductionsOnly.filter(item => item.status === 'ACTIVE').length
+  const completedDeductions = deductionsOnly.filter(item => item.status === 'COMPLETED').length
+  const totalDeductionAmount = deductionsOnly.reduce((sum, item) => sum + item.amount, 0)
+  const totalDeductionOutstanding = deductionsOnly.reduce((sum, item) => sum + item.balance, 0)
+  const totalDeductionPerPayrollPayments = deductionsOnly.reduce((sum, item) => {
     const monthlyPayment = item.amount * (item.monthlyPaymentPercent / 100)
     const perPayroll = monthlyPayment / 2
     return sum + perPayroll
@@ -249,17 +346,17 @@ export default function LoansPage() {
         <div className="space-y-1">
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Banknote className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-            Loan Management
+            Loan & Deduction Management
           </h2>
-          <p className="text-muted-foreground">Manage personnel loans and track payments</p>
+          <p className="text-muted-foreground">Manage personnel loans, deductions and track payments</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant={activeTab === 'archived' ? 'default' : 'outline'}
             onClick={() => setActiveTab(activeTab === 'active' ? 'archived' : 'active')}
           >
             <Archive className="h-4 w-4 mr-2" />
-            {activeTab === 'archived' ? 'Active Loans' : 'Archived Loans'}
+            {activeTab === 'archived' ? 'Active Loans & Deductions' : 'Archived Loans & Deductions'}
           </Button>
           <Dialog open={open} onOpenChange={(newOpen) => {
             setOpen(newOpen)
@@ -271,19 +368,50 @@ export default function LoansPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button variant="outline">
                 <Plus className="h-4 w-4 mr-2" />
-                Add New Loan
+                Add Loans & Deduction
               </Button>
             </DialogTrigger>
           <DialogContent className="w-[95vw] max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Plus className="h-5 w-5 text-blue-600" />
-                Add New Loan
+                <Plus className="h-5 w-5 text-orange-500" />
+                Add Loans & Deduction
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
+              {/* Toggle between Loan and Deduction */}
+              <div className="flex items-center justify-center gap-2 p-2 bg-muted rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setIsDeduction(false)}
+                  className={`flex-1 py-2 px-4 rounded-md font-medium transition-all ${
+                    !isDeduction
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-transparent text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <Banknote className="h-4 w-4" />
+                    Loan
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDeduction(true)}
+                  className={`flex-1 py-2 px-4 rounded-md font-medium transition-all ${
+                    isDeduction
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'bg-transparent text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <DeductionIcon className="h-4 w-4" />
+                    Deduction
+                  </div>
+                </button>
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-2">
                   <User className="h-4 w-4" />
@@ -340,18 +468,29 @@ export default function LoansPage() {
               <div className="space-y-2 sm:col-span-1">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <span className="text-lg font-semibold">₱</span>
-                    Loan Amount
+                    {isDeduction ? 'Deduction Amount' : 'Loan Amount'}
                   </label>
                   <div className="relative">
                     <Input 
                       type="text" 
                       value={form.amount ? Number(form.amount).toLocaleString() : ''}
                       onChange={(e) => {
-                        // Remove commas and non-numeric characters except digits
-                        const value = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')
-                        setForm(f => ({ ...f, amount: value }))
+                        const raw = e.target.value.replace(/,/g, '').trim()
+                        // Support shorthand like 20k => 20000, 1.5m => 1500000
+                        const match = raw.match(/^(\d+(?:\.\d+)?)([kKmM])?$/)
+                        if (match) {
+                          const base = parseFloat(match[1])
+                          const suffix = match[2]?.toLowerCase()
+                          const multiplier = suffix === 'k' ? 1_000 : suffix === 'm' ? 1_000_000 : 1
+                          const computed = isFinite(base) ? Math.round(base * multiplier) : 0
+                          setForm(f => ({ ...f, amount: computed ? String(computed) : '' }))
+                        } else {
+                          // Fallback: keep only digits
+                          const digitsOnly = raw.replace(/[^0-9]/g, '')
+                          setForm(f => ({ ...f, amount: digitsOnly }))
+                        }
                       }}
-                      placeholder="Enter loan amount"
+                      placeholder="e.g. 20k or 1.5m"
                       className="w-full"
                     />
                     {form.amount && (
@@ -385,26 +524,26 @@ export default function LoansPage() {
                 <div className="space-y-2 sm:col-span-2">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
-                    Loan Term (months)
+                    {isDeduction ? 'Deduction Term (months)' : 'Loan Term (months)'}
                   </label>
                   <Input 
                     type="number" 
                     min="1" 
                     value={form.termMonths} 
                     onChange={(e) => setForm(f => ({ ...f, termMonths: e.target.value }))}
-                    placeholder="Enter loan term in months"
+                    placeholder={isDeduction ? 'Enter deduction term in months' : 'Enter loan term in months'}
                     className="w-full"
                   />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <FileText className="h-4 w-4" />
-                    Loan Purpose
+                    {isDeduction ? 'Deduction Purpose' : 'Loan Purpose'}
                   </label>
                   <Input 
                     value={form.purpose} 
                     onChange={(e) => setForm(f => ({ ...f, purpose: e.target.value }))}
-                    placeholder="e.g., Medical expenses, Emergency fund"
+                    placeholder={isDeduction ? 'e.g., Uniform, Equipment, Training fees' : 'e.g., Medical expenses, Emergency fund'}
                     className="w-full"
                   />
                 </div>
@@ -487,9 +626,9 @@ export default function LoansPage() {
                 <Button 
                   disabled={saving || !form.users_id || !form.amount || !form.termMonths} 
                   onClick={submitLoan}
-                  className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                  className={`${isDeduction ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'} text-white w-full sm:w-auto`}
                 >
-                  {saving ? 'Creating Loan...' : 'Create Loan'}
+                  {saving ? (isDeduction ? 'Creating Deduction...' : 'Creating Loan...') : (isDeduction ? 'Create Deduction' : 'Create Loan')}
                 </Button>
               </div>
             </div>
@@ -498,15 +637,26 @@ export default function LoansPage() {
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Loan Statistics */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Banknote className="h-5 w-5 text-blue-600" />
+          Loan Statistics
+        </h3>
+      </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-l-4 border-l-blue-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Loans</CardTitle>
-            <FileText className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Personnel with Loans</CardTitle>
+            <User className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalLoans}</div>
+            <div className="text-2xl font-bold">
+              {(() => {
+                const uniqueUsers = new Set(items.map(loan => loan.users_id))
+                return uniqueUsers.size
+              })()}
+            </div>
             <p className="text-xs text-muted-foreground">
               {activeLoans} active, {completedLoans} completed
             </p>
@@ -516,7 +666,7 @@ export default function LoansPage() {
         <Card className="border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Loan Amount</CardTitle>
-            <span className="text-2xl font-bold text-green-600">₱</span>
+            <span className="text-2xl font-bold text-blue-600">₱</span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">₱{totalLoanAmount.toLocaleString()}</div>
@@ -529,7 +679,7 @@ export default function LoansPage() {
         <Card className="border-l-4 border-l-orange-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Outstanding Balance</CardTitle>
-            <TrendingUp className="h-4 w-4 text-orange-600" />
+            <TrendingUp className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">₱{totalOutstanding.toLocaleString()}</div>
@@ -551,32 +701,145 @@ export default function LoansPage() {
             </p>
           </CardContent>
         </Card>
+          </div>
+
+      {/* Deduction Statistics */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <DeductionIcon className="h-5 w-5 text-red-600" />
+          Deduction Statistics
+        </h3>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-red-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Personnel with Deductions</CardTitle>
+            <User className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {(() => {
+                const uniqueUsers = new Set(deductionsOnly.map(d => d.users_id))
+                return uniqueUsers.size
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {activeDeductions} active, {completedDeductions} completed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Deduction Amount</CardTitle>
+            <span className="text-2xl font-bold text-red-600">₱</span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₱{totalDeductionAmount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              All time deductions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-yellow-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Outstanding Balance</CardTitle>
+            <TrendingUp className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₱{totalDeductionOutstanding.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              Remaining to be paid
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-pink-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Per Payroll Deductions</CardTitle>
+            <CreditCard className="h-4 w-4 text-pink-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₱{totalDeductionPerPayrollPayments.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            <p className="text-xs text-muted-foreground">
+              Total per-payroll deductions
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              {activeTab === 'active' ? (
-                <>
-                  <User className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle>Active Loans</CardTitle>
-                </>
-              ) : (
-                <>
-                  <Archive className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle>Archived Loans</CardTitle>
-                </>
-              )}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                {activeTab === 'active' ? (
+                  <>
+                    <User className="h-5 w-5 text-muted-foreground" />
+                    <CardTitle>Active Loans</CardTitle>
+                  </>
+                ) : (
+                  <>
+                    <Archive className="h-5 w-5 text-muted-foreground" />
+                    <CardTitle>Archived Loans</CardTitle>
+                  </>
+                )}
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search by name, email, or date..." 
+                  value={search} 
+                  onChange={(e) => setSearch(e.target.value)} 
+                  className="w-full pl-10" 
+                />
+              </div>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search by name or email..." 
-                value={search} 
-                onChange={(e) => setSearch(e.target.value)} 
-                className="w-full pl-10" 
-              />
+            
+            {/* Filter Buttons */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('all')}
+                  className="text-xs"
+                >
+                  All ({activeTab === 'active' ? items.length : archivedItems.length})
+                </Button>
+                <Button
+                  variant={viewFilter === 'loans' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('loans')}
+                  className="text-xs"
+                >
+                  <Banknote className="h-3 w-3 mr-1" />
+                  Loans Only ({loansOnly.length})
+                </Button>
+                <Button
+                  variant={viewFilter === 'deductions' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('deductions')}
+                  className="text-xs"
+                >
+                  <DeductionIcon className="h-3 w-3 mr-1" />
+                  Deductions Only ({deductionsOnly.length})
+                </Button>
+              </div>
+              
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={bulkDelete}
+                  disabled={isDeleting}
+                  className="text-xs"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  {isDeleting ? 'Deleting...' : `Delete Selected (${selectedIds.length})`}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -585,10 +848,20 @@ export default function LoansPage() {
             <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length > 0 && selectedIds.length === (activeTab === 'active' ? filtered : filteredArchived).length}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                </TableHead>
                 <TableHead className="font-semibold">Profile</TableHead>
                 <TableHead className="font-semibold">Personnel</TableHead>
                 <TableHead className="font-semibold">Email</TableHead>
-                <TableHead className="font-semibold">Loan Amount</TableHead>
+                <TableHead className="font-semibold">Department</TableHead>
+                <TableHead className="font-semibold">Type</TableHead>
+                <TableHead className="font-semibold">Amount</TableHead>
                 <TableHead className="font-semibold">Balance</TableHead>
                 <TableHead className="font-semibold">Per Payroll Payment</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
@@ -597,14 +870,20 @@ export default function LoansPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(activeTab === 'active' ? filtered : archivedItems.filter(i =>
-                (i.userName || '').toLowerCase().includes(search.toLowerCase()) ||
-                i.userEmail.toLowerCase().includes(search.toLowerCase())
-              )).map(i => {
+              {(activeTab === 'active' ? filtered : filteredArchived).map(i => {
                 const monthlyPayment = i.amount * (i.monthlyPaymentPercent / 100)
                 const perPayrollPayment = monthlyPayment / 2
+                const isDeduction = i.purpose?.startsWith('[DEDUCTION]')
                 return (
                   <TableRow key={i.loans_id}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(i.loans_id)}
+                        onChange={() => toggleSelect(i.loans_id)}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                    </TableCell>
                     <TableCell>
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="" />
@@ -613,6 +892,23 @@ export default function LoansPage() {
                     </TableCell>
                     <TableCell className="font-medium">{i.userName || i.userEmail}</TableCell>
                     <TableCell>{i.userEmail}</TableCell>
+                    <TableCell>
+                      <div className="max-w-[220px] truncate text-muted-foreground text-xs">
+                        {i.department || '-'}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="outline"
+                        className={isDeduction ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}
+                      >
+                        {isDeduction ? (
+                          <><DeductionIcon className="h-3 w-3 mr-1" />Deduction</>
+                        ) : (
+                          <><Banknote className="h-3 w-3 mr-1" />Loan</>
+                        )}
+                      </Badge>
+                    </TableCell>
                     <TableCell>₱{i.amount.toLocaleString()}</TableCell>
                     <TableCell>₱{i.balance.toLocaleString()}</TableCell>
                     <TableCell>₱{perPayrollPayment.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
@@ -662,9 +958,9 @@ export default function LoansPage() {
                   </TableRow>
                 )
               })}
-              {filtered.length === 0 && (
+              {(activeTab === 'active' ? filtered : filteredArchived).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-12">
+                  <TableCell colSpan={12} className="text-center py-12">
                     <div className="flex flex-col items-center gap-3">
                       <div className="rounded-full bg-muted p-3">
                         <FileText className="h-6 w-6 text-muted-foreground" />
@@ -674,7 +970,7 @@ export default function LoansPage() {
                           {isLoading ? 'Loading loans...' : 'No loans found'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {isLoading ? 'Please wait while we fetch the data' : 'Try adjusting your search criteria or add a new loan'}
+                          {isLoading ? 'Please wait while we fetch the data' : 'Try adjusting your search criteria or add a new loan/deduction'}
                         </p>
                       </div>
                     </div>
@@ -727,11 +1023,11 @@ export default function LoansPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-muted-foreground">Loan Amount</label>
-                    <p className="text-lg font-bold text-green-600 break-words">₱{selectedLoan.amount.toLocaleString()}</p>
+                    <p className="text-lg font-bold text-blue-600 break-words">₱{selectedLoan.amount.toLocaleString()}</p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-muted-foreground">Remaining Balance</label>
-                    <p className="text-lg font-bold text-orange-600 break-words">₱{selectedLoan.balance.toLocaleString()}</p>
+                    <p className="text-lg font-bold text-blue-600 break-words">₱{selectedLoan.balance.toLocaleString()}</p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-muted-foreground">Monthly Payment Rate</label>
@@ -884,6 +1180,7 @@ export default function LoansPage() {
           </div>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

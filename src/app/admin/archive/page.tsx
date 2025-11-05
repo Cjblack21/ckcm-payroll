@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { format } from "date-fns"
-import { Eye, Calendar, Users, DollarSign, ArrowLeft, Clock, FileText, Printer, Archive, Banknote } from "lucide-react"
+import { Eye, Calendar, Users, Banknote, ArrowLeft, Clock, FileText, Printer, Archive } from "lucide-react"
 import { generatePayslipsHTML, PayslipData, HeaderSettings } from "@/lib/payslip-generator"
 
 type PayrollDetail = {
@@ -71,12 +71,32 @@ type ArchivedLoan = {
   users_id: string
   userName: string | null
   userEmail: string
+  department: string | null
   amount: number
   balance: number
   monthlyPaymentPercent: number
   termMonths: number
   status: string
+  purpose: string | null
   createdAt: string
+  archivedAt: string | null
+}
+
+type PayrollArchive = {
+  id: string
+  periodStart: string
+  periodEnd: string
+  totalEmployees: number
+  totalExpenses: number
+  totalDeductions: number
+  totalAttendanceDeductions: number
+  totalDatabaseDeductions: number
+  totalLoanPayments: number
+  totalGrossSalary: number
+  totalNetPay: number
+  releasedAt: string
+  releasedBy: string
+  payrolls: any[]
 }
 
 // Helper function to safely format dates
@@ -99,42 +119,13 @@ export default function ArchivePage() {
   const [viewState, setViewState] = useState<ViewState>('dates')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollDetail | null>(null)
-  const [payrollArchiveView, setPayrollArchiveView] = useState<'current' | 'archived'>('current')
-  const [loanArchiveView, setLoanArchiveView] = useState<'current' | 'archived'>('archived')
+  const [activeTab, setActiveTab] = useState<'overview' | 'payroll' | 'loans'>('overview')
+  const [payrollArchives, setPayrollArchives] = useState<PayrollArchive[]>([])
   const [archivedLoans, setArchivedLoans] = useState<ArchivedLoan[]>([])
-  const [isLoadingLoans, setIsLoadingLoans] = useState(false)
 
   useEffect(() => {
     loadArchive()
   }, [])
-
-  useEffect(() => {
-    if (loanArchiveView === 'archived') {
-      loadArchivedLoans()
-    }
-  }, [loanArchiveView])
-
-  async function loadArchivedLoans() {
-    setIsLoadingLoans(true)
-    try {
-      const res = await fetch('/api/admin/loans?archived=true')
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        console.error('Archived loans API error:', res.status, res.statusText)
-        console.error('Error details:', errorData)
-        setArchivedLoans([])
-        return
-      }
-      const data = await res.json()
-      console.log('Archived loans loaded:', data)
-      setArchivedLoans(data.items || [])
-    } catch (e) {
-      console.error('Error loading archived loans', e)
-      setArchivedLoans([])
-    } finally {
-      setIsLoadingLoans(false)
-    }
-  }
 
   async function loadArchive() {
     setIsLoading(true)
@@ -145,61 +136,90 @@ export default function ArchivePage() {
         console.error('Archive API error:', res.status, res.statusText)
         const errorData = await res.json().catch(() => ({}))
         console.error('Error details:', errorData)
-        setGroupedItems([])
+        setPayrollArchives([])
+        setArchivedLoans([])
         return
       }
       
       const data = await res.json()
       console.log('Archive API response:', data)
-      console.log('Grouped items:', data.groupedItems)
-      console.log('Total dates:', data.totalDates)
-      console.log('Total payrolls:', data.totalPayrolls)
-      setGroupedItems(data.groupedItems || [])
+      console.log('Payroll archives:', data.payrolls)
+      console.log('Loan archives:', data.loans)
+      setPayrollArchives(data.payrolls || [])
+      setArchivedLoans(data.loans || [])
     } catch (e) {
       console.error('Error loading archive', e)
-      setGroupedItems([])
+      setPayrollArchives([])
+      setArchivedLoans([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const filteredDates = useMemo(() => {
-    console.log('Filtering dates. groupedItems:', groupedItems, 'search:', search)
-    if (!search) return groupedItems
+  const filteredPayrollArchives = useMemo(() => {
+    if (!search) return payrollArchives
     const q = search.toLowerCase()
-    const filtered = groupedItems.filter(group => 
-      group.date.toLowerCase().includes(q) ||
-      group.payrolls.some(p => 
-        (p.userName || '').toLowerCase().includes(q) ||
-        p.userEmail.toLowerCase().includes(q)
+    return payrollArchives.filter(archive => 
+      archive.periodStart.toLowerCase().includes(q) ||
+      archive.periodEnd.toLowerCase().includes(q) ||
+      archive.payrolls.some((p: any) => 
+        (p.user?.name || '').toLowerCase().includes(q) ||
+        (p.user?.email || '').toLowerCase().includes(q)
       )
     )
-    console.log('Filtered dates:', filtered)
-    return filtered
-  }, [groupedItems, search])
-
-  const selectedDateGroup = groupedItems.find(g => g.date === selectedDate)
-
-  const filteredUsers = useMemo(() => {
-    if (!selectedDateGroup) return []
-    const q = search.toLowerCase()
-    return selectedDateGroup.payrolls.filter(p => 
-      (p.userName || '').toLowerCase().includes(q) ||
-      p.userEmail.toLowerCase().includes(q)
-    )
-  }, [selectedDateGroup, search])
+  }, [payrollArchives, search])
 
   const filteredLoans = useMemo(() => {
     if (!search) return archivedLoans
     const q = search.toLowerCase()
     return archivedLoans.filter(loan => 
       (loan.userName || '').toLowerCase().includes(q) ||
-      loan.userEmail.toLowerCase().includes(q)
+      loan.userEmail.toLowerCase().includes(q) ||
+      (loan.department || '').toLowerCase().includes(q)
     )
   }, [archivedLoans, search])
 
-  function handleViewDate(date: string) {
-    setSelectedDate(date)
+  // Calculate overview stats
+  const overviewStats = useMemo(() => {
+    const totalPayrollPeriods = payrollArchives.length
+    const totalPayrollAmount = payrollArchives.reduce((sum, p) => sum + p.totalNetPay, 0)
+    const totalEmployeesInPayroll = payrollArchives.reduce((sum, p) => sum + p.totalEmployees, 0)
+    const totalLoans = archivedLoans.length
+    const totalLoanAmount = archivedLoans.reduce((sum, l) => sum + l.amount, 0)
+    const totalLoanBalance = archivedLoans.reduce((sum, l) => sum + l.balance, 0)
+    
+    return {
+      totalPayrollPeriods,
+      totalPayrollAmount,
+      totalEmployeesInPayroll,
+      totalLoans,
+      totalLoanAmount,
+      totalLoanBalance
+    }
+  }, [payrollArchives, archivedLoans])
+
+  function handleViewPayrollPeriod(archive: PayrollArchive) {
+    // Convert PayrollArchive to DateGroup format for compatibility
+    const dateGroup: DateGroup = {
+      date: archive.periodStart,
+      totalEmployees: archive.totalEmployees,
+      totalNetPay: archive.totalNetPay,
+      payrolls: archive.payrolls.map((p: any) => ({
+        payroll_entries_id: p.payroll_entries_id,
+        users_id: p.users_id,
+        userName: p.user?.name || null,
+        userEmail: p.user?.email || '',
+        periodStart: archive.periodStart,
+        periodEnd: archive.periodEnd,
+        basicSalary: Number(p.basicSalary),
+        overtime: Number(p.overtime),
+        deductions: Number(p.deductions),
+        netPay: Number(p.netPay),
+        releasedAt: p.releasedAt,
+        processedAt: p.processedAt
+      }))
+    }
+    setSelectedDate(archive.periodStart)
     setViewState('users')
     setSearch('')
   }
@@ -312,6 +332,37 @@ export default function ArchivePage() {
     }
   }
 
+  // Get selected archive for detail view
+  const selectedArchive = payrollArchives.find(a => a.periodStart === selectedDate)
+  const selectedDateGroup: DateGroup | undefined = selectedArchive ? {
+    date: selectedArchive.periodStart,
+    totalEmployees: selectedArchive.totalEmployees,
+    totalNetPay: selectedArchive.totalNetPay,
+    payrolls: selectedArchive.payrolls.map((p: any) => ({
+      payroll_entries_id: p.payroll_entries_id,
+      users_id: p.users_id,
+      userName: p.user?.name || null,
+      userEmail: p.user?.email || '',
+      periodStart: selectedArchive.periodStart,
+      periodEnd: selectedArchive.periodEnd,
+      basicSalary: Number(p.basicSalary),
+      overtime: Number(p.overtime),
+      deductions: Number(p.deductions),
+      netPay: Number(p.netPay),
+      releasedAt: p.releasedAt,
+      processedAt: p.processedAt
+    }))
+  } : undefined
+
+  const filteredUsers = useMemo(() => {
+    if (!selectedDateGroup) return []
+    const q = search.toLowerCase()
+    return selectedDateGroup.payrolls.filter(p => 
+      (p.userName || '').toLowerCase().includes(q) ||
+      p.userEmail.toLowerCase().includes(q)
+    )
+  }, [selectedDateGroup, search])
+
   return (
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
@@ -323,95 +374,265 @@ export default function ArchivePage() {
             </Button>
           )}
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Payroll Archive</h2>
+            <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Archive className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              Archive
+            </h2>
             <p className="text-muted-foreground">
-              {viewState === 'dates' && 'Select a date to view payroll details'}
-              {viewState === 'users' && `Payrolls released on ${safeFormatDate(selectedDate, 'MMMM dd, yyyy', 'Unknown Date')}`}
-              {viewState === 'details' && `Payroll breakdown for ${selectedPayroll?.userName || selectedPayroll?.userEmail}`}
+              {activeTab === 'overview' && 'Overview of archived payrolls and loans'}
+              {activeTab === 'payroll' && viewState === 'dates' && 'Select a period to view payroll details'}
+              {activeTab === 'payroll' && viewState === 'users' && `Payrolls for period ${safeFormatDate(selectedDate, 'MMM dd', 'Unknown')} - ${safeFormatDate(selectedArchive?.periodEnd || '', 'MMM dd, yyyy', 'Unknown')}`}
+              {activeTab === 'payroll' && viewState === 'details' && `Payroll breakdown for ${selectedPayroll?.userName || selectedPayroll?.userEmail}`}
+              {activeTab === 'loans' && 'View all archived loans'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant={payrollArchiveView === 'current' ? 'default' : 'outline'}
-            onClick={() => {
-              setPayrollArchiveView('current')
-              setLoanArchiveView('archived')
-              setViewState('dates')
-            }}
-          >
-            <Archive className="h-4 w-4 mr-2" />
-            Payroll Archive
-          </Button>
-          <Button
-            variant={loanArchiveView === 'current' ? 'default' : 'outline'}
-            onClick={() => {
-              setLoanArchiveView('current')
-              setPayrollArchiveView('archived')
-              setViewState('dates')
-            }}
-          >
-            <Banknote className="h-4 w-4 mr-2" />
-            Loan Archive
-          </Button>
           <Input
-            placeholder={viewState === 'dates' ? 'Search dates...' : 'Search employees...'} 
+            placeholder="Search..." 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
             className="w-64" 
           />
-          <Button variant="outline" onClick={() => setSearch("")}>Clear</Button>
+          {search && <Button variant="outline" onClick={() => setSearch("")}>Clear</Button>}
         </div>
       </div>
 
-      {/* Dates View */}
-      {viewState === 'dates' && payrollArchiveView === 'current' && (
+      {/* Tab Navigation */}
+      {viewState === 'dates' && (
+        <div className="flex gap-2 border-b">
+          <Button
+            variant={activeTab === 'overview' ? 'default' : 'ghost'}
+            onClick={() => setActiveTab('overview')}
+            className="rounded-b-none"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Overview
+          </Button>
+          <Button
+            variant={activeTab === 'payroll' ? 'default' : 'ghost'}
+            onClick={() => setActiveTab('payroll')}
+            className="rounded-b-none"
+          >
+            <Calendar className="h-4 w-4 mr-2" />
+            Payroll Archives
+          </Button>
+          <Button
+            variant={activeTab === 'loans' ? 'default' : 'ghost'}
+            onClick={() => setActiveTab('loans')}
+            className="rounded-b-none"
+          >
+            <Banknote className="h-4 w-4 mr-2" />
+            Loan Archives
+          </Button>
+        </div>
+      )}
+
+      {/* Overview Tab */}
+      {viewState === 'dates' && activeTab === 'overview' && (
+        <div className="grid gap-6">
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Payroll Periods</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overviewStats.totalPayrollPeriods}</div>
+                <p className="text-xs text-muted-foreground">
+                  Archived periods
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Payroll Amount</CardTitle>
+                <Banknote className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">₱{overviewStats.totalPayrollAmount.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">
+                  Net pay distributed
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Employees Processed</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overviewStats.totalEmployeesInPayroll}</div>
+                <p className="text-xs text-muted-foreground">
+                  Total payroll entries
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Archived Loans</CardTitle>
+                <Banknote className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overviewStats.totalLoans}</div>
+                <p className="text-xs text-muted-foreground">
+                  Total archived loans
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Loan Amount</CardTitle>
+                <Banknote className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">₱{overviewStats.totalLoanAmount.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">
+                  Original loan amounts
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Remaining Balance</CardTitle>
+                <Banknote className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">₱{overviewStats.totalLoanBalance.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">
+                  Outstanding loan balance
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Payroll Periods */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Recent Payroll Periods
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {payrollArchives.slice(0, 5).map((archive) => (
+                  <div key={archive.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                    <div>
+                      <p className="font-medium">
+                        {safeFormatDate(archive.periodStart, 'MMM dd', 'Invalid')} — {safeFormatDate(archive.periodEnd, 'MMM dd, yyyy', 'Invalid')}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {archive.totalEmployees} employees • ₱{archive.totalNetPay.toLocaleString()} net pay
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setActiveTab('payroll')
+                      handleViewPayrollPeriod(archive)
+                    }}>
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </Button>
+                  </div>
+                ))}
+                {payrollArchives.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {isLoading ? 'Loading...' : 'No archived payrolls found.'}
+                  </div>
+                )}
+                {payrollArchives.length > 5 && (
+                  <Button variant="link" onClick={() => setActiveTab('payroll')} className="w-full">
+                    View all {payrollArchives.length} periods →
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Archived Loans */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Banknote className="h-5 w-5" />
+                Recent Archived Loans
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {archivedLoans.slice(0, 5).map((loan) => (
+                  <div key={loan.loans_id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <p className="font-medium">{loan.userName || loan.userEmail}</p>
+                      <p className="text-sm text-muted-foreground">
+                        ₱{loan.amount.toLocaleString()} • Balance: ₱{loan.balance.toLocaleString()} • {loan.status}
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {safeFormatDate(loan.archivedAt, 'MMM dd, yyyy', 'Unknown')}
+                    </span>
+                  </div>
+                ))}
+                {archivedLoans.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {isLoading ? 'Loading...' : 'No archived loans found.'}
+                  </div>
+                )}
+                {archivedLoans.length > 5 && (
+                  <Button variant="link" onClick={() => setActiveTab('loans')} className="w-full">
+                    View all {archivedLoans.length} loans →
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Payroll Archives Tab */}
+      {viewState === 'dates' && activeTab === 'payroll' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Payroll Release Dates
+              Payroll Periods
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4">
-              {filteredDates.map((group) => (
-                <div key={group.date} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+            <div className="space-y-3">
+              {filteredPayrollArchives.map((archive) => (
+                <div key={archive.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div>
                         <h3 className="font-semibold text-lg">
-                          {safeFormatDate(group.date, 'MMMM dd, yyyy', 'Unknown Date')}
+                          {safeFormatDate(archive.periodStart, 'MMM dd', 'Invalid')} — {safeFormatDate(archive.periodEnd, 'MMM dd, yyyy', 'Invalid')}
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          {safeFormatDate(group.date, 'EEEE', 'Date not available')}
+                          Released by {archive.releasedBy} on {safeFormatDate(archive.releasedAt, 'MMM dd, yyyy', 'Unknown')}
                         </p>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-1">
                           <Users className="h-4 w-4" />
-                          <span>{group.totalEmployees} employees</span>
+                          <span>{archive.totalEmployees} employees</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4" />
-                          <span>₱{group.totalNetPay.toLocaleString()}</span>
+                          <Banknote className="h-4 w-4" />
+                          <span>₱{archive.totalNetPay.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={() => handleViewDate(group.date)}>
+                      <Button onClick={() => handleViewPayrollPeriod(archive)}>
                         <Eye className="h-4 w-4 mr-2" />
                         View
-                      </Button>
-                      <Button variant="outline" onClick={() => printDateGroupPayrolls(group)}>
-                        <Printer className="h-4 w-4 mr-2" />
-                        Print
                       </Button>
                     </div>
                   </div>
                 </div>
               ))}
-              {filteredDates.length === 0 && (
+              {filteredPayrollArchives.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   {isLoading ? 'Loading...' : 'No archived payrolls found.'}
                 </div>
@@ -422,7 +643,7 @@ export default function ArchivePage() {
       )}
 
       {/* Users View */}
-      {viewState === 'users' && selectedDateGroup && payrollArchiveView === 'current' && (
+      {viewState === 'users' && selectedDateGroup && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -462,7 +683,7 @@ export default function ArchivePage() {
                           onClick={() => handleViewPayroll(payroll)}
                         >
                           <Eye className="h-4 w-4 mr-1" />
-                          View
+                          View Breakdown
                         </Button>
                         <Button 
                           variant="outline" 
@@ -489,8 +710,8 @@ export default function ArchivePage() {
         </Card>
       )}
 
-      {/* Archived Loans View */}
-      {loanArchiveView === 'current' && (
+      {/* Loans Tab */}
+      {viewState === 'dates' && activeTab === 'loans' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -504,12 +725,13 @@ export default function ArchivePage() {
                 <TableRow>
                   <TableHead>Employee</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead className="text-right">Loan Amount</TableHead>
                   <TableHead className="text-right">Balance</TableHead>
                   <TableHead className="text-right">Monthly %</TableHead>
                   <TableHead>Term</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Date Created</TableHead>
+                  <TableHead>Archived Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -519,6 +741,7 @@ export default function ArchivePage() {
                       {loan.userName || loan.userEmail}
                     </TableCell>
                     <TableCell>{loan.userEmail}</TableCell>
+                    <TableCell>{loan.department || 'N/A'}</TableCell>
                     <TableCell className="text-right">₱{loan.amount.toLocaleString()}</TableCell>
                     <TableCell className="text-right">₱{loan.balance.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{loan.monthlyPaymentPercent}%</TableCell>
@@ -532,13 +755,13 @@ export default function ArchivePage() {
                         {loan.status}
                       </span>
                     </TableCell>
-                    <TableCell>{safeFormatDate(loan.createdAt, 'MMM dd, yyyy', 'Invalid')}</TableCell>
+                    <TableCell>{safeFormatDate(loan.archivedAt, 'MMM dd, yyyy', 'Invalid')}</TableCell>
                   </TableRow>
                 ))}
                 {filteredLoans.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      {isLoadingLoans ? 'Loading archived loans...' : 'No archived loans found.'}
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      {isLoading ? 'Loading archived loans...' : 'No archived loans found.'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -549,7 +772,7 @@ export default function ArchivePage() {
       )}
 
       {/* Payroll Details Dialog */}
-      <Dialog open={viewState === 'details' && payrollArchiveView === 'current'} onOpenChange={(open) => !open && handleBackToUsers()}>
+      <Dialog open={viewState === 'details'} onOpenChange={(open) => !open && handleBackToUsers()}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
@@ -615,22 +838,22 @@ export default function ArchivePage() {
                 <div className="space-y-4">
                   <h4 className="font-semibold text-lg">Deductions</h4>
                   <div className="space-y-2">
-                    {selectedPayroll.breakdown && selectedPayroll.breakdown.totalAttendanceDeductions > 0 && (
+                    {selectedPayroll.breakdown && selectedPayroll.breakdown.totalAttendanceDeductions && selectedPayroll.breakdown.totalAttendanceDeductions > 0 && (
                       <div className="flex justify-between">
                         <span>Attendance Deductions:</span>
                         <span className="font-medium text-red-600">-₱{selectedPayroll.breakdown.totalAttendanceDeductions.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
-                    {selectedPayroll.breakdown && selectedPayroll.breakdown.loanDetails && selectedPayroll.breakdown.loanDetails.length > 0 && (
+                    {selectedPayroll.breakdown && selectedPayroll.breakdown.loanDetails && Array.isArray(selectedPayroll.breakdown.loanDetails) && selectedPayroll.breakdown.loanDetails.length > 0 && (
                       <div className="flex justify-between">
                         <span>Loan Deductions:</span>
-                        <span className="font-medium text-red-600">-₱{selectedPayroll.breakdown.loanDetails.reduce((sum, loan) => sum + loan.amount, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <span className="font-medium text-red-600">-₱{selectedPayroll.breakdown.loanDetails.reduce((sum, loan) => sum + (loan?.amount || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
-                    {selectedPayroll.breakdown && selectedPayroll.breakdown.otherDeductionDetails && selectedPayroll.breakdown.otherDeductionDetails.length > 0 && (
+                    {selectedPayroll.breakdown && selectedPayroll.breakdown.otherDeductionDetails && Array.isArray(selectedPayroll.breakdown.otherDeductionDetails) && selectedPayroll.breakdown.otherDeductionDetails.length > 0 && (
                       <div className="flex justify-between">
                         <span>Other Deductions:</span>
-                        <span className="font-medium text-red-600">-₱{selectedPayroll.breakdown.otherDeductionDetails.reduce((sum, deduction) => sum + deduction.amount, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <span className="font-medium text-red-600">-₱{selectedPayroll.breakdown.otherDeductionDetails.reduce((sum, deduction) => sum + (deduction?.amount || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
@@ -651,7 +874,7 @@ export default function ArchivePage() {
               {selectedPayroll.breakdown && (
                 <div className="space-y-6">
                   {/* Attendance Details */}
-                  {selectedPayroll.breakdown.attendanceDetails && selectedPayroll.breakdown.attendanceDetails.length > 0 && (
+                  {selectedPayroll.breakdown.attendanceDetails && Array.isArray(selectedPayroll.breakdown.attendanceDetails) && selectedPayroll.breakdown.attendanceDetails.length > 0 && (
                     <div className="space-y-4">
                       <h4 className="font-semibold text-lg">Attendance Details</h4>
                       <div className="overflow-x-auto">
@@ -697,7 +920,7 @@ export default function ArchivePage() {
                   {/* Attendance Deduction Details */}
                   <div className="space-y-4">
                     <h4 className="font-semibold text-lg">Attendance Deductions</h4>
-                    {selectedPayroll.breakdown?.attendanceDeductionDetails && selectedPayroll.breakdown.attendanceDeductionDetails.length > 0 ? (
+                    {selectedPayroll.breakdown?.attendanceDeductionDetails && Array.isArray(selectedPayroll.breakdown.attendanceDeductionDetails) && selectedPayroll.breakdown.attendanceDeductionDetails.length > 0 ? (
                       <div className="space-y-2">
                         {selectedPayroll.breakdown.attendanceDeductionDetails.map((deduction, index) => (
                           <div key={index} className="flex justify-between items-center p-3 bg-red-50 rounded border-l-4 border-red-400">
@@ -730,7 +953,7 @@ export default function ArchivePage() {
                   </div>
 
                   {/* Loan Details */}
-                  {selectedPayroll.breakdown.loanDetails && selectedPayroll.breakdown.loanDetails.length > 0 && (
+                  {selectedPayroll.breakdown.loanDetails && Array.isArray(selectedPayroll.breakdown.loanDetails) && selectedPayroll.breakdown.loanDetails.length > 0 && (
                     <div className="space-y-4">
                       <h4 className="font-semibold text-lg">Loan Deductions</h4>
                       <div className="space-y-2">
@@ -748,7 +971,7 @@ export default function ArchivePage() {
                   )}
 
                   {/* Other Deductions */}
-                  {selectedPayroll.breakdown.otherDeductionDetails && selectedPayroll.breakdown.otherDeductionDetails.length > 0 && (
+                  {selectedPayroll.breakdown.otherDeductionDetails && Array.isArray(selectedPayroll.breakdown.otherDeductionDetails) && selectedPayroll.breakdown.otherDeductionDetails.length > 0 && (
                     <div className="space-y-4">
                       <h4 className="font-semibold text-lg">Other Deductions</h4>
                       <div className="space-y-2">

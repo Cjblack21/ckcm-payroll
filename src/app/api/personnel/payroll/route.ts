@@ -6,6 +6,32 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+// Function to get current biweekly period (same as admin)
+function getCurrentBiweeklyPeriod() {
+  const now = new Date()
+  const year = now.getFullYear()
+  
+  // Find the first Monday of the year
+  const firstMonday = new Date(year, 0, 1)
+  const dayOfWeek = firstMonday.getDay()
+  const daysToAdd = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
+  firstMonday.setDate(firstMonday.getDate() + daysToAdd)
+  
+  // Calculate which biweekly period we're in
+  const daysSinceFirstMonday = Math.floor((now.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24))
+  const biweeklyPeriod = Math.floor(daysSinceFirstMonday / 14)
+  
+  // Calculate start and end of current biweekly period
+  const periodStart = new Date(firstMonday)
+  periodStart.setDate(periodStart.getDate() + (biweeklyPeriod * 14))
+  
+  const periodEnd = new Date(periodStart)
+  periodEnd.setDate(periodEnd.getDate() + 13)
+  periodEnd.setHours(23, 59, 59, 999)
+  
+  return { periodStart, periodEnd }
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log('=== PERSONNEL PAYROLL API CALLED ===')
@@ -42,68 +68,114 @@ export async function GET(request: NextRequest) {
 
     console.log('User ID:', userId)
 
-    // Determine period aligned with attendance settings (same approach as admin payroll)
-    let periodStart: Date
-    let periodEnd: Date
+    // Use attendance settings period (same as admin)
     const attendanceSettings = await prisma.attendanceSettings.findFirst()
-    if (attendanceSettings?.periodStart && attendanceSettings?.periodEnd) {
-      periodStart = new Date(attendanceSettings.periodStart)
-      periodEnd = new Date(attendanceSettings.periodEnd)
-      periodStart.setHours(0, 0, 0, 0)
-      periodEnd.setHours(23, 59, 59, 999)
-      console.log('Personnel payroll period aligned with attendance settings:', {
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString(),
-      })
-    } else {
-      const now = new Date()
-      const y = now.getFullYear()
-      const m = now.getMonth()
-      periodStart = new Date(y, m, 1)
-      periodStart.setHours(0, 0, 0, 0)
-      periodEnd = new Date(y, m + 1, 0)
-      periodEnd.setHours(23, 59, 59, 999)
-      console.log('Personnel payroll period fallback to current month:', {
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString(),
-      })
+    
+    if (!attendanceSettings?.periodStart || !attendanceSettings?.periodEnd) {
+      return NextResponse.json({ error: 'No attendance period configured' }, { status: 400 })
     }
+    
+    const periodStart = attendanceSettings.periodStart
+    const periodEnd = attendanceSettings.periodEnd
+    
+    console.log('Personnel payroll period (from attendance settings):', {
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+    })
 
-    // Note: We no longer cap the period end to today, so personnel can see the full period countdown
-    // This allows the countdown timer to work correctly even before the period end date
-
-    // SIMPLIFIED: Just get the latest RELEASED payroll for this user, period!
-    console.log(`Searching for RELEASED payroll for user: ${userId}`)
+    // Get most recent RELEASED (not ARCHIVED) payroll
+    // When admin generates new payroll, old one becomes ARCHIVED and personnel should see nothing
+    console.log(`Getting most recent RELEASED (non-archived) payroll for user: ${userId}`)
     
     let currentPayroll = await prisma.payrollEntry.findFirst({
       where: { 
-        users_id: userId, 
-        status: 'RELEASED' 
+        users_id: userId,
+        status: 'RELEASED',
+        // Exclude archived payrolls
+        NOT: {
+          status: 'ARCHIVED'
+        }
       },
       orderBy: { releasedAt: 'desc' },
-      include: {
-        user: { select: { name: true, email: true, personnelType: { select: { name: true, basicSalary: true } } } }
+      select: {
+        payroll_entries_id: true,
+        users_id: true,
+        periodStart: true,
+        periodEnd: true,
+        basicSalary: true,
+        overtime: true,
+        deductions: true,
+        netPay: true,
+        status: true,
+        releasedAt: true,
+        breakdownSnapshot: true, // INCLUDE SNAPSHOT
+        user: {
+          select: {
+            name: true,
+            email: true,
+            personnelType: {
+              select: {
+                name: true,
+                basicSalary: true
+              }
+            }
+          }
+        }
       }
     })
     
-    console.log(`Found RELEASED payroll by userId:`, currentPayroll ? 'YES' : 'NO')
+    console.log(`Found RELEASED (non-archived) payroll:`, currentPayroll ? 'YES' : 'NO')
+    
+    if (currentPayroll) {
+      console.log(`Payroll details:`, {
+        id: currentPayroll.payroll_entries_id,
+        status: currentPayroll.status,
+        period: `${currentPayroll.periodStart} to ${currentPayroll.periodEnd}`,
+        releasedAt: currentPayroll.releasedAt
+      })
+    }
     
     // Fallback: Try by email if userId didn't work
     if (!currentPayroll && session.user.email) {
       console.log(`Trying email fallback: ${session.user.email}`)
       currentPayroll = await prisma.payrollEntry.findFirst({
         where: { 
-          status: 'RELEASED', 
+          status: 'RELEASED',
+          NOT: {
+            status: 'ARCHIVED'
+          },
           user: { 
             email: session.user.email 
           } 
         },
         orderBy: { releasedAt: 'desc' },
-        include: {
-          user: { select: { name: true, email: true, personnelType: { select: { name: true, basicSalary: true } } } }
+        select: {
+          payroll_entries_id: true,
+          users_id: true,
+          periodStart: true,
+          periodEnd: true,
+          basicSalary: true,
+          overtime: true,
+          deductions: true,
+          netPay: true,
+          status: true,
+          releasedAt: true,
+          breakdownSnapshot: true, // INCLUDE SNAPSHOT
+          user: {
+            select: {
+              name: true,
+              email: true,
+              personnelType: {
+                select: {
+                  name: true,
+                  basicSalary: true
+                }
+              }
+            }
+          }
         }
       })
-      console.log(`Found RELEASED payroll by email:`, currentPayroll ? 'YES' : 'NO')
+      console.log(`Found RELEASED (non-archived) payroll by email:`, currentPayroll ? 'YES' : 'NO')
     }
     
     console.log('Current payroll found:', currentPayroll ? 'Yes' : 'No')
@@ -196,13 +268,20 @@ export async function GET(request: NextRequest) {
     const user = await prisma.user.findUnique({ where: { users_id: userId }, select: { personnelType: { select: { basicSalary: true } } } })
     const basicSalary = user?.personnelType?.basicSalary ? Number(user.personnelType.basicSalary) : 0
 
+    // Only fetch attendance up to today, not future dates
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    const attendanceEndDate = effectiveEnd > today ? today : effectiveEnd
+    
     const attendanceRecords = await prisma.attendance.findMany({
-      where: { users_id: userId, date: { gte: effectiveStart, lte: effectiveEnd } },
+      where: { users_id: userId, date: { gte: effectiveStart, lte: attendanceEndDate } },
       orderBy: { date: 'asc' }
     })
     let attendanceDeductionsTotal = 0
-    const attendanceDetails: { date: Date, type: string, amount: number }[] = []
+    const attendanceDetails: any[] = []
     for (const rec of attendanceRecords) {
+      let deduction = 0
+      
       if (rec.status === 'LATE' && rec.timeIn) {
         const timeIn = new Date(rec.timeIn)
         const expected = new Date(rec.date)
@@ -216,15 +295,11 @@ export async function GET(request: NextRequest) {
         const perSecond = (basicSalary / workingDaysInPeriod / 8 / 60 / 60)
         const secondsLate = Math.max(0, (timeIn.getTime() - expected.getTime()) / 1000)
         const daily = basicSalary / workingDaysInPeriod
-        const amount = Math.min(secondsLate * perSecond, daily * 0.5)
-        if (amount > 0) {
-          attendanceDeductionsTotal += amount
-          attendanceDetails.push({ date: rec.date, type: 'Late', amount })
-        }
+        deduction = Math.min(secondsLate * perSecond, daily * 0.5)
+        attendanceDeductionsTotal += deduction
       } else if (rec.status === 'ABSENT') {
-        const amount = basicSalary / workingDaysInPeriod
-        attendanceDeductionsTotal += amount
-        attendanceDetails.push({ date: rec.date, type: 'Absent', amount })
+        deduction = basicSalary / workingDaysInPeriod
+        attendanceDeductionsTotal += deduction
       } else if (rec.status === 'PARTIAL') {
         // If partial with timeIn/timeOut, approximate hours short
         let hoursShort = 0
@@ -237,12 +312,25 @@ export async function GET(request: NextRequest) {
           hoursShort = 8
         }
         const hourlyRate = (basicSalary / workingDaysInPeriod) / 8
-        const amount = hoursShort * hourlyRate
-        if (amount > 0) {
-          attendanceDeductionsTotal += amount
-          attendanceDetails.push({ date: rec.date, type: 'Partial', amount })
-        }
+        deduction = hoursShort * hourlyRate
+        attendanceDeductionsTotal += deduction
       }
+      
+      // Calculate work hours
+      let workHours = 0
+      if (rec.timeIn && rec.timeOut) {
+        workHours = (new Date(rec.timeOut).getTime() - new Date(rec.timeIn).getTime()) / (1000 * 60 * 60)
+      }
+      
+      // Add complete attendance detail
+      attendanceDetails.push({
+        date: rec.date,
+        status: rec.status,
+        timeIn: rec.timeIn,
+        timeOut: rec.timeOut,
+        workHours,
+        deduction
+      })
     }
 
     const loans = await prisma.loan.findMany({
@@ -252,58 +340,9 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Get approved unpaid leave requests for this period
-    const unpaidLeaveRequests = await prisma.leaveRequest.findMany({
-      where: {
-        users_id: userId,
-        status: 'APPROVED',
-        isPaid: false,
-        startDate: { lte: effectiveEnd },
-        endDate: { gte: effectiveStart }
-      },
-      orderBy: { startDate: 'asc' }
-    })
-
-    // Calculate unpaid leave deduction
-    let totalUnpaidLeaveDays = 0
-    const leaveDetails: { leaveType: string; startDate: Date; endDate: Date; days: number; amount: number }[] = []
-    
-    for (const leave of unpaidLeaveRequests) {
-      const leaveStart = new Date(leave.startDate) > effectiveStart ? new Date(leave.startDate) : effectiveStart
-      const leaveEnd = new Date(leave.endDate) < effectiveEnd ? new Date(leave.endDate) : effectiveEnd
-      
-      // Count working days only (exclude Sundays)
-      let leaveDays = 0
-      let currentDate = new Date(leaveStart)
-      while (currentDate <= leaveEnd) {
-        if (currentDate.getDay() !== 0) {  // Not Sunday
-          leaveDays++
-        }
-        currentDate.setDate(currentDate.getDate() + 1)
-      }
-      
-      totalUnpaidLeaveDays += leaveDays
-      
-      if (leaveDays > 0) {
-        const dailySalary = workingDaysInPeriod > 0 ? basicSalary / workingDaysInPeriod : 0
-        const leaveAmount = leaveDays * dailySalary
-        
-        leaveDetails.push({
-          leaveType: leave.type,
-          startDate: new Date(leave.startDate),
-          endDate: new Date(leave.endDate),
-          days: leaveDays,
-          amount: leaveAmount
-        })
-      }
-    }
-    
-    const totalUnpaidLeaveDeduction = leaveDetails.reduce((sum, leave) => sum + leave.amount, 0)
-
     // Calculate totals only for breakdown display; this does not surface pending payroll
     const totalDatabaseDeductions = otherDeductions.reduce((sum, deduction) => sum + Number(deduction.amount), 0)
     console.log('Database deductions total:', totalDatabaseDeductions)
-    console.log('Unpaid leave deduction total:', totalUnpaidLeaveDeduction)
 
     const periodDays = Math.floor((effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
     const factor = periodDays <= 16 ? 0.5 : 1.0
@@ -317,32 +356,114 @@ export async function GET(request: NextRequest) {
     console.log('Total loan payments calculated:', totalLoanPayments)
     console.log('Active loans found:', loans.length)
 
-    const serializePayroll = (p: any) => p ? {
-      payroll_entries_id: p.payroll_entries_id,
-      users_id: p.users_id,
-      periodStart: p.periodStart,
-      periodEnd: p.periodEnd,
-      basicSalary: Number(p.basicSalary),
-      overtime: Number(p.overtime),
-      deductions: Number(p.deductions),
-      netPay: Number(p.netPay),
-      status: p.status,
-      releasedAt: p.releasedAt,
-      user: p.user ? {
-        name: p.user.name,
-        email: p.user.email,
-        personnelType: p.user.personnelType ? {
-          name: p.user.personnelType.name,
-          basicSalary: Number(p.user.personnelType.basicSalary)
+    const serializePayroll = (p: any) => {
+      if (!p) return null
+      
+      // Parse breakdown snapshot if available
+      let breakdownData = null
+      if (p.breakdownSnapshot) {
+        try {
+          // Handle both string and object
+          breakdownData = typeof p.breakdownSnapshot === 'string' 
+            ? JSON.parse(p.breakdownSnapshot) 
+            : p.breakdownSnapshot
+          console.log('✅ SNAPSHOT PARSED:', JSON.stringify(breakdownData, null, 2))
+        } catch (e) {
+          console.error('Failed to parse breakdown snapshot:', e)
+        }
+      } else {
+        console.log('⚠️ NO SNAPSHOT FOUND for payroll:', p.payroll_entries_id)
+      }
+      
+      // DIRECT COPY - Return snapshot as-is
+      if (breakdownData) {
+        console.log('🔥 RETURNING EXACT SNAPSHOT:', breakdownData)
+        return {
+          payroll_entries_id: p.payroll_entries_id,
+          users_id: p.users_id,
+          periodStart: p.periodStart,
+          periodEnd: p.periodEnd,
+          basicSalary: Number(p.basicSalary),
+          overtime: Number(p.overtime),
+          deductions: Number(p.deductions),
+          netPay: Number(p.netPay),
+          status: p.status,
+          releasedAt: p.releasedAt,
+          breakdownSnapshot: breakdownData, // EXACT COPY - NO MODIFICATION
+          user: p.user ? {
+            name: p.user.name,
+            email: p.user.email,
+            personnelType: p.user.personnelType ? {
+              name: p.user.personnelType.name,
+              basicSalary: Number(p.user.personnelType.basicSalary)
+            } : null
+          } : null
+        }
+      }
+      
+      // Fallback for payroll without snapshot (shouldn't happen for released payroll)
+      return {
+        payroll_entries_id: p.payroll_entries_id,
+        users_id: p.users_id,
+        periodStart: p.periodStart,
+        periodEnd: p.periodEnd,
+        basicSalary: Number(p.basicSalary),
+        overtime: Number(p.overtime),
+        deductions: Number(p.deductions),
+        netPay: Number(p.netPay),
+        status: p.status,
+        releasedAt: p.releasedAt,
+        breakdownSnapshot: breakdownData,
+        user: p.user ? {
+          name: p.user.name,
+          email: p.user.email,
+          personnelType: p.user.personnelType ? {
+            name: p.user.personnelType.name,
+            basicSalary: Number(p.user.personnelType.basicSalary)
+          } : null
         } : null
-      } : null
-    } : null
+      }
+    }
 
+    // Fetch mandatory deductions to mark them properly
+    let mandatoryDeductions: any[] = []
+    try {
+      const types = await prisma.deductionType.findMany({
+        where: { isMandatory: true, isActive: true }
+      })
+      mandatoryDeductions = types.map(t => ({
+        type: t.name,
+        amount: Number(t.amount),
+        description: t.description || 'Mandatory deduction',
+        isMandatory: true
+      }))
+    } catch (e) {
+      console.error('Failed to fetch mandatory deductions:', e)
+    }
+
+    const mandatoryTypeNames = new Set(mandatoryDeductions.map((md: any) => md.type))
+    
     const serializedOtherDeductions = otherDeductions.map(d => ({
       name: d.deductionType.name,
       amount: Number(d.amount),
-      appliedAt: d.appliedAt
+      appliedAt: d.appliedAt,
+      description: d.deductionType.description || '-',
+      isMandatory: mandatoryTypeNames.has(d.deductionType.name)
     }))
+    
+    // Add mandatory deductions that aren't already in the list
+    mandatoryDeductions.forEach((md: any) => {
+      const exists = serializedOtherDeductions.find((d: any) => d.name === md.type)
+      if (!exists) {
+        serializedOtherDeductions.push({
+          name: md.type,
+          amount: md.amount,
+          appliedAt: new Date(),
+          description: md.description,
+          isMandatory: true
+        })
+      }
+    })
 
     const serializedLoans = loans.map(l => ({
       purpose: l.purpose,
@@ -351,34 +472,69 @@ export async function GET(request: NextRequest) {
       status: l.status
     }))
 
+    // Get scheduled release time from file (same source as admin)
+    let scheduledRelease = null
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      const scheduleFile = path.join(process.cwd(), 'payroll-schedule.json')
+      
+      if (fs.existsSync(scheduleFile)) {
+        const scheduleData = JSON.parse(fs.readFileSync(scheduleFile, 'utf8'))
+        scheduledRelease = scheduleData.releaseAt
+      }
+    } catch (error) {
+      console.error('Error reading schedule file:', error)
+    }
+
+    // If current payroll has snapshot, use snapshot breakdown data
+    let breakdownResponse = {
+      otherDeductions: serializedOtherDeductions,
+      attendanceDetails: attendanceDetails.map(a => ({ ...a, date: a.date })),
+      attendanceDeductionsTotal,
+      databaseDeductionsTotal: totalDatabaseDeductions,
+      loans: serializedLoans,
+      unpaidLeaves: [],
+      unpaidLeaveDeductionTotal: 0,
+      unpaidLeaveDays: 0,
+      totalDeductions: totalDatabaseDeductions + attendanceDeductionsTotal + totalLoanPayments,
+      totalLoanPayments
+    }
+    
+    // Override with snapshot data if available (released payroll)
+    if (currentPayroll?.breakdownSnapshot) {
+      try {
+        const snapshot = JSON.parse(currentPayroll.breakdownSnapshot)
+        console.log('✅ Using snapshot breakdown data for personnel view')
+        breakdownResponse = {
+          otherDeductions: snapshot.deductionDetails || serializedOtherDeductions,
+          attendanceDetails: snapshot.attendanceRecords || attendanceDetails.map(a => ({ ...a, date: a.date })),
+          attendanceDeductionsTotal: snapshot.attendanceDeductions || attendanceDeductionsTotal,
+          databaseDeductionsTotal: snapshot.databaseDeductions || totalDatabaseDeductions,
+          loans: serializedLoans,
+          unpaidLeaves: [],
+          unpaidLeaveDeductionTotal: 0,
+          unpaidLeaveDays: 0,
+          totalDeductions: snapshot.totalDeductions || (totalDatabaseDeductions + attendanceDeductionsTotal + totalLoanPayments),
+          totalLoanPayments: snapshot.loanPayments || totalLoanPayments
+        }
+      } catch (e) {
+        console.error('Failed to use snapshot breakdown:', e)
+      }
+    }
+
     const responseData = {
       currentPayroll: serializePayroll(currentPayroll),
       archivedPayrolls: archivedPayrolls.map(serializePayroll),
       periodInfo: {
         current: {
-          start: effectiveStart,
-          end: effectiveEnd,
-          releaseTime: attendanceSettings?.payrollReleaseTime || '17:00'
+          start: periodStart.toISOString(),  // Serialize to ISO string
+          end: periodEnd.toISOString(),      // Serialize to ISO string
+          releaseTime: attendanceSettings?.payrollReleaseTime || '17:00',
+          scheduledRelease: scheduledRelease
         }
       },
-      breakdown: {
-        otherDeductions: serializedOtherDeductions,
-        attendanceDetails: attendanceDetails.map(a => ({ ...a, date: a.date })),
-        attendanceDeductionsTotal,
-        databaseDeductionsTotal: totalDatabaseDeductions,
-        loans: serializedLoans,
-        unpaidLeaves: leaveDetails.map(l => ({
-          leaveType: l.leaveType,
-          startDate: l.startDate,
-          endDate: l.endDate,
-          days: l.days,
-          amount: l.amount
-        })),
-        unpaidLeaveDeductionTotal: totalUnpaidLeaveDeduction,
-        unpaidLeaveDays: totalUnpaidLeaveDays,
-        totalDeductions: totalDatabaseDeductions + attendanceDeductionsTotal + totalLoanPayments + totalUnpaidLeaveDeduction,
-        totalLoanPayments
-      }
+      breakdown: breakdownResponse
     }
     
     console.log('Response data prepared:', {

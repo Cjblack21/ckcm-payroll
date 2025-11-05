@@ -9,6 +9,7 @@ export async function createUserAccount(data: {
   name: string
   schoolId: string
   personnelTypeId: string
+  department?: string
   image?: string
 }): Promise<{
   success: boolean

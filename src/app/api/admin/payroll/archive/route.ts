@@ -104,22 +104,57 @@ export async function GET(request: NextRequest) {
           totalEmployees: 0,
           totalExpenses: 0,
           totalDeductions: 0,
+          totalAttendanceDeductions: 0,
+          totalDatabaseDeductions: 0,
+          totalLoanPayments: 0,
+          totalGrossSalary: 0,
           totalNetPay: 0,
           releasedAt: payroll.releasedAt?.toISOString() || '',
-          releasedBy: session.user.name || 'Admin' // Use actual admin name
+          releasedBy: session.user.name || 'Admin', // Use actual admin name
+          payrolls: [] // Add employee list
         }
       }
       
-      // Accumulate totals
+      // Parse snapshot data
+      let snapshot = null
+      try {
+        snapshot = payroll.breakdownSnapshot ? 
+          (typeof payroll.breakdownSnapshot === 'string' ? 
+            JSON.parse(payroll.breakdownSnapshot) : 
+            payroll.breakdownSnapshot) : null
+      } catch (e) {
+        console.error('Failed to parse snapshot:', e)
+      }
+      
+      // Use ONLY snapshot data for accurate totals
+      const grossSalary = snapshot ? Number(snapshot.periodSalary || 0) : Number(payroll.netPay || 0)
+      const totalDeductions = snapshot ? Number(snapshot.totalDeductions || 0) : Number(payroll.deductions || 0)
+      const netPay = snapshot ? Number(snapshot.netPay || 0) : Number(payroll.netPay || 0)
+      const attendanceDeductions = snapshot ? Number(snapshot.attendanceDeductions || 0) : 0
+      const databaseDeductions = snapshot ? Number(snapshot.databaseDeductions || 0) : 0
+      const loanPayments = snapshot ? Number(snapshot.loanPayments || 0) : 0
+      
       acc[periodKey].totalEmployees++
-      acc[periodKey].totalExpenses += Number(payroll.basicSalary)
-      acc[periodKey].totalDeductions += Number(payroll.deductions)
-      acc[periodKey].totalNetPay += Number(payroll.netPay)
+      acc[periodKey].totalExpenses += grossSalary
+      acc[periodKey].totalGrossSalary += grossSalary
+      acc[periodKey].totalDeductions += totalDeductions
+      acc[periodKey].totalAttendanceDeductions += attendanceDeductions
+      acc[periodKey].totalDatabaseDeductions += databaseDeductions
+      acc[periodKey].totalLoanPayments += loanPayments
+      acc[periodKey].totalNetPay += netPay
+      
+      // Add employee to payrolls array
+      acc[periodKey].payrolls.push(payroll)
       
       return acc
     }, {} as any)
 
     const archiveList = Object.values(groupedArchives)
+
+    // Debug logging
+    console.log('📦 Archive API - Total periods:', archiveList.length)
+    console.log('📦 Archive API - First period payrolls count:', archiveList[0]?.payrolls?.length)
+    console.log('📦 Archive API - Sample data:', JSON.stringify(archiveList[0], null, 2))
 
     return NextResponse.json({ 
       success: true, 

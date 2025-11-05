@@ -10,6 +10,8 @@ export const runtime = 'nodejs'
 
 const createSchema = z.object({
   name: z.string().min(1),
+  type: z.string().optional(),
+  department: z.string().optional(),
   basicSalary: z.number().min(0),
   isActive: z.boolean().optional().default(true)
 })
@@ -31,7 +33,10 @@ export async function GET() {
   if (!session || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  const types = await prisma.personnelType.findMany({ orderBy: { createdAt: 'desc' } })
+  const types = await prisma.personnelType.findMany({ 
+    where: { isActive: true },
+    orderBy: { createdAt: 'desc' } 
+  })
   return NextResponse.json(types)
 }
 
@@ -55,7 +60,9 @@ export async function POST(req: NextRequest) {
     
     const created = await prisma.personnelType.create({ 
       data: { 
-        name: data.name, 
+        name: data.name,
+        type: data.type,
+        department: data.department,
         basicSalary: data.basicSalary,
         isActive: data.isActive
       } 

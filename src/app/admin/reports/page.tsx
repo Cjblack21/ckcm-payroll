@@ -15,17 +15,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { 
-  FileText, 
+  BarChart3, 
   Download, 
   Calendar,
   Users,
-  DollarSign,
+  Banknote,
   TrendingUp,
   TrendingDown,
   Activity,
   LogIn,
   LogOut,
-  ClipboardList
+  ClipboardList,
+  FileText
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { SSRSafe } from "@/components/ssr-safe"
@@ -46,7 +47,9 @@ type PayrollSummary = {
   users_id: string
   name: string
   email: string
-  personnelType: string
+  position: string
+  personnelType: string | null
+  department: string
   basicSalary: number
   totalDeductions: number
   totalLoans: number
@@ -81,6 +84,7 @@ export default function ReportsPage() {
   const [currentView, setCurrentView] = useState<'reports' | 'logs' | 'attendance'>('reports')
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([])
   const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [payrollSearch, setPayrollSearch] = useState('')
 
   const months = [
     { value: 1, label: "January" },
@@ -185,10 +189,17 @@ export default function ReportsPage() {
   return (
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between rounded-md px-4 py-3 bg-transparent dark:bg-sidebar text-foreground dark:text-sidebar-foreground">
-        <h2 className="text-3xl font-bold tracking-tight">
-          {currentView === 'reports' ? 'Monthly Reports' : 
-           currentView === 'logs' ? 'Login Activity Logs' : 'Attendance Logs'}
-        </h2>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+            {currentView === 'reports' ? 'Monthly Reports' : 
+             currentView === 'logs' ? 'Login Activity Logs' : 'Attendance Logs'}
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            {currentView === 'reports' ? 'View and download monthly payroll reports' : 
+             currentView === 'logs' ? 'Monitor user login activity and sessions' : 'Track daily attendance records'}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant={currentView === 'reports' ? 'default' : 'outline'}
@@ -270,49 +281,50 @@ export default function ReportsPage() {
         <>
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            {/* Gradient card styling */}
+            <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <Users className="h-4 w-4 text-blue-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportData.totalEmployees}</div>
+                <div className="text-2xl font-bold text-blue-700">{reportData.totalEmployees}</div>
                 <p className="text-xs text-muted-foreground">
                   Active personnel
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Payroll</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <Banknote className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">₱{reportData.totalPayroll.toLocaleString()}</div>
+                <div className="text-2xl font-bold text-green-700">₱{reportData.totalPayroll.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">
                   Monthly total
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-l-4 border-l-purple-500 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Average Salary</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <TrendingUp className="h-4 w-4 text-purple-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">₱{reportData.averageSalary.toLocaleString()}</div>
+                <div className="text-2xl font-bold text-purple-700">₱{reportData.averageSalary.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">
                   Per employee
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-l-4 border-l-cyan-500 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Attendance Rate</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <TrendingUp className="h-4 w-4 text-cyan-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportData.attendanceRate.toFixed(1)}%</div>
+                <div className="text-2xl font-bold text-cyan-700">{reportData.attendanceRate.toFixed(1)}%</div>
                 <p className="text-xs text-muted-foreground">
                   Monthly average
                 </p>
@@ -322,9 +334,12 @@ export default function ReportsPage() {
 
           {/* Detailed Breakdown */}
           <div className="grid gap-4 md:grid-cols-3">
-            <Card>
+            <Card className="border-l-4 border-l-red-500 hover:shadow-lg transition-shadow">
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Total Deductions</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-red-600" />
+                  Total Deductions
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">₱{reportData.totalDeductions.toLocaleString()}</div>
@@ -333,9 +348,12 @@ export default function ReportsPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Total Loans</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-orange-600" />
+                  Total Loans
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">₱{reportData.totalLoans.toLocaleString()}</div>
@@ -344,12 +362,15 @@ export default function ReportsPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-l-4 border-l-indigo-500 hover:shadow-lg transition-shadow">
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Payroll Entries</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-indigo-600" />
+                  Payroll Entries
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportData.payrollEntries}</div>
+                <div className="text-2xl font-bold text-indigo-700">{reportData.payrollEntries}</div>
                 <p className="text-xs text-muted-foreground">
                   Processed entries
                 </p>
@@ -358,57 +379,101 @@ export default function ReportsPage() {
           </div>
 
           {/* Detailed Payroll Summary */}
-          <Card>
-            <CardHeader>
+          <Card className="border-t-4 border-t-blue-500 shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20">
               <div className="flex items-center justify-between">
-                <CardTitle>Detailed Payroll Summary</CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setShowDetailed(!showDetailed)}
-                >
-                  {showDetailed ? 'Hide Details' : 'Show Details'}
-                </Button>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-600" />
+                  Detailed Payroll Summary
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {showDetailed && (
+                    <Input
+                      placeholder="Search employees..."
+                      value={payrollSearch}
+                      onChange={(e) => setPayrollSearch(e.target.value)}
+                      className="w-64"
+                    />
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowDetailed(!showDetailed)}
+                  >
+                    {showDetailed ? 'Hide Details' : 'Show Details'}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {showDetailed ? (
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-muted/50">
                       <TableHead>Employee</TableHead>
-                      <TableHead>Personnel Type</TableHead>
-                      <TableHead>Basic Salary</TableHead>
-                      <TableHead>Deductions</TableHead>
-                      <TableHead>Loans</TableHead>
-                      <TableHead>Net Pay</TableHead>
-                      <TableHead>Attendance</TableHead>
+                      <TableHead>Position</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead className="text-right">Basic Salary</TableHead>
+                      <TableHead className="text-right">Deductions</TableHead>
+                      <TableHead className="text-right">Loans</TableHead>
+                      <TableHead className="text-right">Net Pay</TableHead>
+                      <TableHead className="text-center">Attendance</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payrollSummary.map((employee) => (
-                      <TableRow key={employee.users_id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{employee.name}</div>
-                            <div className="text-sm text-muted-foreground">{employee.email}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{employee.personnelType}</Badge>
-                        </TableCell>
-                        <TableCell>₱{employee.basicSalary.toLocaleString()}</TableCell>
-                        <TableCell className="text-red-600">₱{employee.totalDeductions.toLocaleString()}</TableCell>
-                        <TableCell className="text-orange-600">₱{employee.totalLoans.toLocaleString()}</TableCell>
-                        <TableCell className="font-medium">₱{employee.netPay.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            <div>{employee.attendanceDays}/{employee.totalDays} days</div>
-                            <div className="text-muted-foreground">{employee.attendanceRate.toFixed(1)}%</div>
-                          </div>
+                    {payrollSummary
+                      .filter((employee) => {
+                        if (!payrollSearch) return true
+                        const search = payrollSearch.toLowerCase()
+                        return (
+                          employee.name.toLowerCase().includes(search) ||
+                          employee.email.toLowerCase().includes(search) ||
+                          employee.position.toLowerCase().includes(search) ||
+                          employee.department.toLowerCase().includes(search)
+                        )
+                      })
+                      .map((employee) => (
+                        <TableRow key={employee.users_id} className="hover:bg-muted/50 transition-colors">
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{employee.name}</div>
+                              <div className="text-sm text-muted-foreground">{employee.email}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="font-medium">{employee.position}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{employee.department}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-medium">₱{employee.basicSalary.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-red-600 font-medium">-₱{employee.totalDeductions.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-orange-600 font-medium">-₱{employee.totalLoans.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-bold text-green-600">₱{employee.netPay.toLocaleString()}</TableCell>
+                          <TableCell className="text-center">
+                            <div className="text-sm">
+                              <div className="font-bold text-blue-600">{employee.attendanceRate.toFixed(1)}%</div>
+                              <div className="text-muted-foreground">{employee.attendanceDays}/{employee.totalDays} days</div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    {payrollSummary.filter((employee) => {
+                      if (!payrollSearch) return true
+                      const search = payrollSearch.toLowerCase()
+                      return (
+                        employee.name.toLowerCase().includes(search) ||
+                        employee.email.toLowerCase().includes(search) ||
+                        employee.position.toLowerCase().includes(search) ||
+                        employee.department.toLowerCase().includes(search)
+                      )
+                    }).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No employees found matching "{payrollSearch}"
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               ) : (

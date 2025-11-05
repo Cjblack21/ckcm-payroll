@@ -70,10 +70,16 @@ export async function getDashboardStats() {
       }
     })
 
-    // Get pending leave requests
-    const pendingLeaves = await prisma.leaveRequest.count({
+    // Get total deductions this month
+    const totalDeductions = await prisma.deduction.aggregate({
       where: {
-        status: "PENDING"
+        appliedAt: {
+          gte: startOfCurrentMonth,
+          lte: endOfCurrentMonth
+        }
+      },
+      _sum: {
+        amount: true
       }
     })
 
@@ -85,7 +91,8 @@ export async function getDashboardStats() {
       activeLoans,
       totalLoanAmount: totalLoanAmount._sum.balance || 0,
       holidaysThisMonth,
-      pendingLeaves
+      totalDeductions: totalDeductions._sum.amount || 0,
+      pendingLeaves: 0
     }
   } catch (error) {
     console.error("Error fetching dashboard stats:", error)
@@ -97,6 +104,7 @@ export async function getDashboardStats() {
       activeLoans: 0,
       totalLoanAmount: 0,
       holidaysThisMonth: 0,
+      totalDeductions: 0,
       pendingLeaves: 0
     }
   }

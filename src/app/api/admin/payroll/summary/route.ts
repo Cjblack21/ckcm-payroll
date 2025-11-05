@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { calculateLateDeduction, calculateAbsenceDeduction, calculatePartialDeduction, calculateEarnings } from "@/lib/attendance-calculations"
+import { getLiveAttendanceRecords } from "@/lib/attendance-live"
 
 // Function to get current biweekly period
 function getCurrentBiweeklyPeriod() {
@@ -39,9 +40,18 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-  const { periodStart, periodEnd } = getCurrentBiweeklyPeriod()
+  // Use attendance settings period instead of biweekly calculation
+  const attendanceSettingsForPeriod = await prisma.attendanceSettings.findFirst()
+  if (!attendanceSettingsForPeriod?.periodStartDate || !attendanceSettingsForPeriod?.periodEndDate) {
+    console.error('❌ Attendance settings not configured')
+    return NextResponse.json({ error: 'Attendance settings not configured' }, { status: 500 })
+  }
   
-  console.log('Period dates:', { periodStart, periodEnd })
+  const periodStart = new Date(attendanceSettingsForPeriod.periodStartDate)
+  const periodEnd = new Date(attendanceSettingsForPeriod.periodEndDate)
+  periodEnd.setHours(23, 59, 59, 999)
+  
+  console.log('✅ Using attendance settings period:', { periodStart, periodEnd })
 
   // Get users with their personnel type and basic salary
   const users = await prisma.user.findMany({
@@ -52,7 +62,9 @@ export async function GET() {
       email: true,
       personnelType: {
         select: {
-          basicSalary: true
+          basicSalary: true,
+          type: true,
+          department: true
         }
       }
     },
@@ -144,7 +156,8 @@ export async function GET() {
       deductionType: {
         select: {
           name: true,
-          description: true
+          description: true,
+          isMandatory: true
         }
       }
     },
@@ -303,7 +316,7 @@ export async function GET() {
     })
   })
 
-  // Group non-attendance deductions by user
+  // Group non-attendance deductions by user (includes mandatory and other deductions)
   const nonAttendanceDeductionsByUser = new Map()
   nonAttendanceDeductions.forEach(deduction => {
     const userId = deduction.users_id
@@ -315,6 +328,7 @@ export async function GET() {
       amount: Number(deduction.amount),
       type: deduction.deductionType.name,
       description: deduction.deductionType.description,
+      isMandatory: deduction.deductionType.isMandatory || false,
       appliedAt: deduction.appliedAt,
       notes: deduction.notes
     })
@@ -344,15 +358,70 @@ export async function GET() {
     loanPaymentsMap.set(loan.users_id, (loanPaymentsMap.get(loan.users_id) || 0) + biweeklyPayment)
   })
 
+  // SIMPLE: Just fetch from attendance API and use the deductions directly!
+  console.log('🔍 Fetching attendance data from API')
+  
+  const liveAttendanceDeductionsMap = new Map()
+  const liveAttendanceDetailsMap = new Map()
+  
+  try {
+    const attendanceUrl = `http://localhost:3000/api/admin/attendance/current-day`
+    console.log('Calling:', attendanceUrl)
+    
+    const res = await fetch(attendanceUrl, { cache: 'no-store' })
+    const attendanceData = await res.json()
+    
+    console.log('✅ Got attendance data:', attendanceData.attendance?.length, 'records')
+    
+    // Just use the deductions from the attendance API!
+    if (attendanceData.attendance) {
+      attendanceData.attendance.forEach((record: any) => {
+        const deduction = Number(record.deductions || 0)
+        
+        if (deduction > 0) {
+          console.log('💸 Deduction found:', record.userName, '-', deduction)
+          
+          const userId = record.users_id
+          const current = liveAttendanceDeductionsMap.get(userId) || 0
+          liveAttendanceDeductionsMap.set(userId, current + deduction)
+          
+          if (!liveAttendanceDetailsMap.has(userId)) {
+            liveAttendanceDetailsMap.set(userId, [])
+          }
+          
+          liveAttendanceDetailsMap.get(userId).push({
+            date: record.date,
+            status: record.status,
+            type: `${record.status} Deduction`,
+            amount: deduction,
+            description: `${record.status} deduction`
+          })
+        }
+      })
+    }
+    
+    console.log('📊 Total deductions:', liveAttendanceDeductionsMap.size, 'users')
+  } catch (error) {
+    console.error('❌ Error fetching attendance:', error)
+  }
+
+  // Group attendance records by user
+  const attendanceByUser = new Map()
+  attendance.forEach(record => {
+    if (!attendanceByUser.has(record.users_id)) {
+      attendanceByUser.set(record.users_id, [])
+    }
+    attendanceByUser.get(record.users_id).push(record)
+  })
+
   // Calculate real-time payroll for each user
   const rows = users.map(u => {
     const basicSalary = u.personnelType?.basicSalary ? Number(u.personnelType.basicSalary) : 0
     const biweeklyBasicSalary = basicSalary / 2 // Convert monthly to biweekly
-    const attendanceDeductionData = actualAttendanceDeductionsMap.get(u.users_id) || { total: 0, details: [] }
     const nonAttendanceDeductionData = nonAttendanceDeductionsMap.get(u.users_id) || { total: 0, details: [] }
-    const actualAttendanceDeductions = attendanceDeductionData.total // Use actual deduction records
+    const liveAttendanceDeductions = liveAttendanceDeductionsMap.get(u.users_id) || 0 // USE LIVE CALCULATION
+    const liveAttendanceDetails = liveAttendanceDetailsMap.get(u.users_id) || []
     const nonAttendanceDeductions = nonAttendanceDeductionData.total
-    const calculatedAttendanceDeductions = attendanceDeductionsMap.get(u.users_id) || 0 // Keep for reference
     const realTimeEarnings = earningsMap.get(u.users_id) || 0
     const realWorkHours = workHoursMap.get(u.users_id) || 0
     const loanPayments = loanPaymentsMap.get(u.users_id) || 0
@@ -360,8 +429,8 @@ export async function GET() {
     // Calculate overtime (if real-time earnings exceed biweekly basic salary)
     const overtimePay = Math.max(0, realTimeEarnings - biweeklyBasicSalary)
     
-    // Calculate total deductions (actual attendance + non-attendance + loans)
-    const totalDeductions = actualAttendanceDeductions + nonAttendanceDeductions + loanPayments
+    // Calculate total deductions (LIVE attendance + non-attendance + loans)
+    const totalDeductions = liveAttendanceDeductions + nonAttendanceDeductions + loanPayments
     
     // Calculate net pay (biweekly basic salary + overtime - total deductions)
     const grossPay = biweeklyBasicSalary + overtimePay
@@ -371,6 +440,9 @@ export async function GET() {
       users_id: u.users_id,
       name: u.name,
       email: u.email,
+      department: u.personnelType?.department || '-',
+      position: u.personnelType?.name || '-',
+      personnelType: u.personnelType?.type || null,
       totalHours: realWorkHours, // Now shows actual work hours
       totalSalary: netPay,
       released: releasedSet.has(u.users_id),
@@ -380,14 +452,31 @@ export async function GET() {
         realTimeEarnings,
         realWorkHours,
         overtimePay,
-        attendanceDeductions: actualAttendanceDeductions, // Show actual deduction records
+        attendanceDeductions: liveAttendanceDeductions, // Show LIVE attendance deductions
         nonAttendanceDeductions,
         loanPayments,
         grossPay,
         totalDeductions,
         netPay,
-        deductionDetails: [...attendanceDeductionData.details, ...nonAttendanceDeductionData.details] // Combine all deduction details
-      }
+        deductionDetails: [...liveAttendanceDetails, ...nonAttendanceDeductionData.details] // Combine live attendance + non-attendance deduction details
+      },
+      // Add attendance records - match with deductions from current-day API (cutoff-aware)
+      attendanceRecords: (attendanceByUser.get(u.users_id) || []).map((record: any) => {
+        // Find matching deduction from live attendance details (already cutoff-aware)
+        const matchingDetail = liveAttendanceDetails.find((d: any) => {
+          const detailDate = new Date(d.date)
+          const recordDate = new Date(record.date)
+          return detailDate.toDateString() === recordDate.toDateString()
+        })
+        return {
+          date: record.date.toISOString(),
+          timeIn: record.timeIn?.toISOString() || null,
+          timeOut: record.timeOut?.toISOString() || null,
+          status: record.status,
+          workHours: 0,
+          deductions: matchingDetail?.amount || 0 // Use cutoff-aware deduction from current-day API
+        }
+      })
     }
   })
 

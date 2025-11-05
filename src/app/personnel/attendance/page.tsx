@@ -95,7 +95,6 @@ export default function PersonnelAttendance() {
       PARTIAL: "secondary" as const,
       NON_WORKING: "outline" as const,
       PENDING: "secondary" as const,
-      ON_LEAVE: "outline" as const,
     }
 
     const labels = {
@@ -105,7 +104,6 @@ export default function PersonnelAttendance() {
       PARTIAL: "Partial",
       NON_WORKING: "Non-Working",
       PENDING: "Pending",
-      ON_LEAVE: "On Leave",
     }
 
     return (
@@ -197,7 +195,10 @@ export default function PersonnelAttendance() {
     <div className="flex-1 space-y-6 p-4 pt-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Attendance Logs</h2>
+          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <Calendar className="h-8 w-8 text-blue-600" />
+            Attendance Logs
+          </h2>
           <p className="text-muted-foreground">Your attendance history and statistics</p>
         </div>
       </div>
