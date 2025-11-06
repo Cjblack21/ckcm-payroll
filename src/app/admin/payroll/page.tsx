@@ -39,6 +39,8 @@ type PayrollEntry = {
   breakdown: {
     basicSalary: number
     monthlyBasicSalary?: number // Monthly reference (optional)
+    overloadPay?: number // Total additional pay
+    overloadPayDetails?: Array<{type: string, amount: number}> // Additional pay breakdown by type
     attendanceDeductions: number
     loanDeductions: number
     otherDeductions: number
@@ -490,16 +492,25 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
 
       // Fetch overload pays from API (same as admin/deduction page)
       let overloadPaysByUser = new Map<string, number>()
+      let overloadPayDetailsByUser = new Map<string, Array<{type: string, amount: number}>>()
       try {
         const overloadResponse = await fetch('/api/admin/overload-pay')
         if (overloadResponse.ok) {
           const overloadPays = await overloadResponse.json()
           console.log('💰 Fetched overload pays:', overloadPays)
           
-          // Sum overload pays by user
+          // Sum overload pays by user and store details by type
           overloadPays.forEach((op: any) => {
             const current = overloadPaysByUser.get(op.users_id) || 0
             overloadPaysByUser.set(op.users_id, current + Number(op.amount))
+            
+            // Store details with type
+            const details = overloadPayDetailsByUser.get(op.users_id) || []
+            details.push({
+              type: op.type || 'OVERTIME',
+              amount: Number(op.amount)
+            })
+            overloadPayDetailsByUser.set(op.users_id, details)
           })
           
           console.log('💰 Overload pays by user:', Array.from(overloadPaysByUser.entries()).map(([id, amt]) => `${id}: ₱${amt}`))
@@ -558,6 +569,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
             basicSalary: monthlyBasicSalary / 2, // Semi-monthly base salary (₱10,000) - MATCHES PAYSLIP
             monthlyBasicSalary, // Monthly reference for display (₱20,000)
             overloadPay: overloadPaysByUser.get(entry.users_id) || Number(entry?.totalAdditions ?? 0), // Overload pay (₱8,000)
+            overloadPayDetails: overloadPayDetailsByUser.get(entry.users_id) || [], // Additional pay details with types
             attendanceDeductions, // Real-time calculated attendance deductions
             loanDeductions,
             otherDeductions, // Database deductions (Philhealth, SSS, etc.)
@@ -3210,6 +3222,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                 loanDeductions: Number(snapshot.loanPayments || 0),
                 otherDeductions: Number(snapshot.databaseDeductions || 0),
                 overloadPay: Number(snapshot.totalAdditions || 0), // Overload pay (₱8,000)
+                overloadPayDetails: snapshot.overloadPayDetails || [], // Additional pay details with types
                 attendanceDetails: (snapshot.attendanceRecords || []).map((record: any) => ({
                   date: record.date,
                   timeIn: record.timeIn,

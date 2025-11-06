@@ -182,6 +182,10 @@ export async function POST(request: NextRequest) {
         }
       })
       const totalOverloadPay = overloadPayRecords.reduce((sum, op) => sum + Number(op.amount), 0)
+      const overloadPayDetails = overloadPayRecords.map(op => ({
+        type: op.type || 'OVERTIME',
+        amount: Number(op.amount)
+      }))
 
       // Get attendance settings
       const attendanceSettings = await prisma.attendanceSettings.findFirst()
@@ -308,6 +312,7 @@ export async function POST(request: NextRequest) {
           realTimeEarnings: semiMonthlyBasicSalary + totalOverloadPay,
           realWorkHours: attendanceDetails.reduce((sum, detail) => sum + detail.workHours, 0),
           overtimePay: totalOverloadPay, // This is actually overload pay
+          overloadPayDetails: overloadPayDetails, // Additional pay details with types
           attendanceDeductions: totalAttendanceDeductions,
           nonAttendanceDeductions: totalOtherDeductions,
           unpaidLeaveDeduction: 0,
@@ -375,12 +380,24 @@ export async function POST(request: NextRequest) {
               <span>Basic Salary (Semi-Monthly):</span>
               <span>₱${(breakdown.biweeklyBasicSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
-            ${(breakdown.overtimePay || 0) > 0 ? `
+            ${breakdown.overloadPayDetails && breakdown.overloadPayDetails.length > 0 ? 
+              breakdown.overloadPayDetails.map((detail: any) => `
             <div class="detail-row" style="color: #2e7d32;">
-              <span>+ Overload Pay (Additional Salary):</span>
+              <span>+ ${detail.type === 'POSITION_PAY' ? 'Position Pay' : 
+                         detail.type === 'BONUS' ? 'Bonus' : 
+                         detail.type === '13TH_MONTH' ? '13th Month Pay' : 
+                         detail.type === 'OVERTIME' ? 'Overtime' : 
+                         detail.type}:</span>
+              <span>₱${Number(detail.amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+              `).join('') : 
+              ((breakdown.overtimePay || 0) > 0 ? `
+            <div class="detail-row" style="color: #2e7d32;">
+              <span>+ Additional Pay:</span>
               <span>₱${(breakdown.overtimePay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
-            ` : ''}
+              ` : '')
+            }
             <div class="detail-row total">
               <span>GROSS PAY:</span>
               <span>₱${(breakdown.grossPay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>

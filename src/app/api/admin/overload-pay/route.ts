@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { amount, notes, selectAll, employees } = body
+    const { amount, notes, type, selectAll, employees } = body
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 })
@@ -74,17 +74,22 @@ export async function POST(request: NextRequest) {
         users_id: userId,
         amount: Number(amount),
         notes: notes || null,
+        type: type || 'OVERTIME',
         appliedAt: new Date()
       }))
     })
 
     return NextResponse.json({ 
       success: true, 
-      message: `Overload pay added to ${targetEmployees.length} employee(s)`,
+      message: `Additional pay added to ${targetEmployees.length} employee(s)`,
       count: records.count
     })
   } catch (error) {
-    console.error("Error creating overload pay:", error)
-    return NextResponse.json({ error: "Failed to create overload pay" }, { status: 500 })
+    console.error("Error creating additional pay:", error)
+    console.error("Error details:", error instanceof Error ? error.message : String(error))
+    return NextResponse.json({ 
+      error: "Failed to create additional pay", 
+      details: error instanceof Error ? error.message : String(error) 
+    }, { status: 500 })
   }
 }

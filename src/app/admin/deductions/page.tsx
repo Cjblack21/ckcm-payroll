@@ -57,6 +57,7 @@ type OverloadPay = {
   overload_pays_id: string
   amount: number
   notes?: string | null
+  type?: string | null
   user: {
     users_id: string
     name: string | null
@@ -123,10 +124,11 @@ export default function DeductionsPage() {
   const [notes, setNotes] = useState<string>("")
   const [employeeSearch, setEmployeeSearch] = useState("")
 
-  // Overload Pay dialog
+  // Additional Pay dialog (formerly Overload Pay)
   const [overloadPayOpen, setOverloadPayOpen] = useState(false)
   const [overloadAmount, setOverloadAmount] = useState("")
   const [overloadNotes, setOverloadNotes] = useState("")
+  const [overloadPayType, setOverloadPayType] = useState("OVERTIME")
   const [overloadSelectAll, setOverloadSelectAll] = useState(false)
   const [overloadSelectedEmployees, setOverloadSelectedEmployees] = useState<string[]>([])
   const [overloadEmployeeSearch, setOverloadEmployeeSearch] = useState("")
@@ -788,7 +790,7 @@ export default function DeductionsPage() {
         return
       }
 
-      // Check for duplicates
+      // Check for duplicates of the same type
       let targetEmployees: string[] = []
       if (overloadSelectAll) {
         targetEmployees = personnel.map(p => p.users_id)
@@ -796,9 +798,11 @@ export default function DeductionsPage() {
         targetEmployees = overloadSelectedEmployees
       }
 
-      // Find personnel who already have overload pay
-      const existingIds = overloadPays.map(op => op.user.users_id)
-      const duplicates = targetEmployees.filter(id => existingIds.includes(id))
+      // Find personnel who already have additional pay of the same type
+      const existingIdsWithSameType = overloadPays
+        .filter(op => op.type === overloadPayType)
+        .map(op => op.user.users_id)
+      const duplicates = targetEmployees.filter(id => existingIdsWithSameType.includes(id))
 
       if (duplicates.length > 0) {
         // Get names of duplicate personnel
@@ -825,6 +829,7 @@ export default function DeductionsPage() {
       const payload = {
         amount: Number(overloadAmount),
         notes: overloadNotes,
+        type: overloadPayType,
         selectAll: overloadSelectAll,
         employees: overloadSelectedEmployees
       }
@@ -837,23 +842,26 @@ export default function DeductionsPage() {
 
       if (!res.ok) {
         const errorData = await res.json()
-        throw new Error(errorData.error || 'Failed to add overload pay')
+        console.error('API Error Response:', errorData)
+        toast.error(errorData.error || 'Failed to add additional pay')
+        throw new Error(errorData.error || 'Failed to add additional pay')
       }
 
       const data = await res.json()
-      toast.success(data.message || "Overload pay added successfully")
+      toast.success(data.message || "Additional pay added successfully")
       setOverloadPayOpen(false)
       setShowOverloadConfirmModal(false)
       setOverloadAmount("")
       setOverloadNotes("")
+      setOverloadPayType("OVERTIME")
       setOverloadSelectAll(false)
       setOverloadSelectedEmployees([])
       setOverloadEmployeeSearch("")
       setDuplicatePersonnel([])
       loadAll()
     } catch (error) {
-      console.error('Error adding overload pay:', error)
-      toast.error(error instanceof Error ? error.message : "Failed to add overload pay")
+      console.error('Error adding additional pay:', error)
+      toast.error(error instanceof Error ? error.message : "Failed to add additional pay")
     }
   }
 
@@ -1212,15 +1220,29 @@ export default function DeductionsPage() {
           <Dialog open={overloadPayOpen} onOpenChange={setOverloadPayOpen}>
             <DialogTrigger asChild>
               <Button className="bg-green-500 hover:bg-green-600 text-white">
-                <Plus className="h-4 w-4 mr-2" />Add Overload Pay
+                <Plus className="h-4 w-4 mr-2" />Add Additional Pay
               </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Add Overload Pay</DialogTitle>
+                <DialogTitle>Add Additional Pay</DialogTitle>
                 <DialogDescription>Add additional compensation to selected employees.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="overload-pay-type">Type</Label>
+                  <Select value={overloadPayType} onValueChange={setOverloadPayType}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="POSITION_PAY">Position Pay</SelectItem>
+                      <SelectItem value="BONUS">Bonus</SelectItem>
+                      <SelectItem value="13TH_MONTH">13th Month Pay</SelectItem>
+                      <SelectItem value="OVERTIME">Overtime</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="overload-amount">Amount (₱)</Label>
                   <Input
@@ -1292,7 +1314,7 @@ export default function DeductionsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOverloadPayOpen(false)}>Cancel</Button>
-                <Button onClick={checkAndSaveOverloadPay} className="bg-green-500 hover:bg-green-600">Save Overload Pay</Button>
+                <Button onClick={checkAndSaveOverloadPay} className="bg-green-500 hover:bg-green-600">Save Additional Pay</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -1539,11 +1561,11 @@ export default function DeductionsPage() {
         </CardContent>
       </Card>
 
-      {/* Overload Pay Card */}
+      {/* Additional Pay Card */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Overload Pay</CardTitle>
+            <CardTitle>Additional Pay</CardTitle>
             {selectedOverloadPays.length > 0 && (
               <Button
                 variant="destructive"
@@ -1583,6 +1605,7 @@ export default function DeductionsPage() {
                   </TableHead>
                   <TableHead>Personnel</TableHead>
                   <TableHead>Department</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Applied Date</TableHead>
@@ -1612,6 +1635,15 @@ export default function DeductionsPage() {
                         {o.user.personnelType?.department || '-'}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        {o.type === 'POSITION_PAY' ? 'Position Pay' : 
+                         o.type === 'BONUS' ? 'Bonus' : 
+                         o.type === '13TH_MONTH' ? '13th Month Pay' : 
+                         o.type === 'OVERTIME' ? 'Overtime' : 
+                         o.type || 'Overtime'}
+                      </span>
+                    </TableCell>
                     <TableCell className="font-semibold text-green-600">₱{o.amount.toLocaleString()}</TableCell>
                     <TableCell>{o.notes || '-'}</TableCell>
                     <TableCell>{new Date(o.appliedAt).toLocaleDateString()}</TableCell>
@@ -1630,7 +1662,7 @@ export default function DeductionsPage() {
                 ))}
                 {overloadPays.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No overload pay records found.</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No additional pay records found.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -1802,13 +1834,13 @@ export default function DeductionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Overload Pay Duplicate Confirmation Modal */}
+      {/* Additional Pay Duplicate Confirmation Modal */}
       <Dialog open={showOverloadConfirmModal} onOpenChange={setShowOverloadConfirmModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Duplicate Overload Pay Detected</DialogTitle>
+            <DialogTitle>Duplicate Additional Pay Detected</DialogTitle>
             <DialogDescription>
-              The following personnel already have overload pay:
+              The following personnel already have additional pay:
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2 p-3 bg-muted rounded-md">
@@ -1819,7 +1851,7 @@ export default function DeductionsPage() {
             </ul>
           </div>
           <p className="text-sm text-muted-foreground mt-4">
-            Do you want to add additional overload pay to them?
+            Do you want to add additional pay to them?
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowOverloadConfirmModal(false)}>
@@ -1832,12 +1864,12 @@ export default function DeductionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Overload Pay Dialog */}
+      {/* Edit Additional Pay Dialog */}
       <Dialog open={editOverloadPayOpen} onOpenChange={setEditOverloadPayOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Overload Pay</DialogTitle>
-            <DialogDescription>Update the amount and notes for this overload pay.</DialogDescription>
+            <DialogTitle>Edit Additional Pay</DialogTitle>
+            <DialogDescription>Update the amount and notes for this additional pay.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -1867,13 +1899,13 @@ export default function DeductionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Overload Pay Confirmation Modal (Single) */}
+      {/* Delete Additional Pay Confirmation Modal (Single) */}
       <Dialog open={showDeleteOverloadPayModal} onOpenChange={setShowDeleteOverloadPayModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Remove Overload Pay?</DialogTitle>
+            <DialogTitle>Remove Additional Pay?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove this overload pay? This action cannot be undone.
+              Are you sure you want to remove this additional pay? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1888,13 +1920,13 @@ export default function DeductionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Overload Pays Confirmation Modal (Bulk) */}
+      {/* Delete Additional Pays Confirmation Modal (Bulk) */}
       <Dialog open={showDeleteOverloadPaysModal} onOpenChange={setShowDeleteOverloadPaysModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete Overload Pays?</DialogTitle>
+            <DialogTitle>Delete Additional Pays?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {selectedOverloadPays.length} overload pay(s)? This action cannot be undone.
+              Are you sure you want to delete {selectedOverloadPays.length} additional pay(s)? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

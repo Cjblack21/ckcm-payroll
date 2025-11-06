@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       periodSalary: breakdownData.basicSalary + (breakdownData.overloadPay || 0), // Gross pay
       totalDeductions: breakdownData.attendanceDeductions + breakdownData.loanDeductions + breakdownData.otherDeductions,
       totalAdditions: breakdownData.overloadPay || 0,
+      overloadPayDetails: breakdownData.overloadPayDetails || [], // Include additional pay details with types
       netPay: (breakdownData.basicSalary + (breakdownData.overloadPay || 0)) - (breakdownData.attendanceDeductions + breakdownData.loanDeductions + breakdownData.otherDeductions),
       totalWorkHours: 0, // Can be added if needed
       attendanceDeductions: breakdownData.attendanceDeductions,

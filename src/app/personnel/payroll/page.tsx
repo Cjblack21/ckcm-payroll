@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Calendar, FileText, Archive, Clock } from 'lucide-react'
+import { Calendar, FileText, Archive, Clock, ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
 import PayrollBreakdownDialog from '@/components/payroll/PayrollBreakdownDialog'
 
@@ -41,10 +41,96 @@ export default function PersonnelPayrollPage() {
   const [loadingBreakdown, setLoadingBreakdown] = useState(false)
   const [timeUntilRelease, setTimeUntilRelease] = useState('')
   const [canRelease, setCanRelease] = useState(false)
+  const [fetchedDetails, setFetchedDetails] = useState<any>(null)
+  const [selectedPayrolls, setSelectedPayrolls] = useState<string[]>([])
+  const [selectAll, setSelectAll] = useState(false)
 
   useEffect(() => {
     loadPayrollData()
+    fetchPayrollDetails()
   }, [])
+
+  const fetchPayrollDetails = async () => {
+    try {
+      const res = await fetch('/api/personnel/payroll-details')
+      if (res.ok) {
+        const data = await res.json()
+        setFetchedDetails(data)
+      }
+    } catch (error) {
+      console.error('Error fetching details:', error)
+    }
+  }
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedPayrolls([])
+    } else {
+      const allIds = archivedPayrolls?.map((p: any) => p.payroll_entries_id) || []
+      setSelectedPayrolls(allIds)
+    }
+    setSelectAll(!selectAll)
+  }
+
+  const handleSelectPayroll = (id: string) => {
+    if (selectedPayrolls.includes(id)) {
+      setSelectedPayrolls(selectedPayrolls.filter(pid => pid !== id))
+    } else {
+      setSelectedPayrolls([...selectedPayrolls, id])
+    }
+  }
+
+  const deleteSelectedPayrolls = async () => {
+    if (selectedPayrolls.length === 0) return
+    
+    if (!confirm(`Are you sure you want to delete ${selectedPayrolls.length} payroll(s)?`)) {
+      return
+    }
+
+    try {
+      const res = await fetch('/api/personnel/payroll/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payrollIds: selectedPayrolls })
+      })
+
+      if (res.ok) {
+        alert('Payrolls deleted successfully')
+        setSelectedPayrolls([])
+        setSelectAll(false)
+        loadPayrollData()
+      } else {
+        alert('Failed to delete payrolls')
+      }
+    } catch (error) {
+      console.error('Error deleting payrolls:', error)
+      alert('Error deleting payrolls')
+    }
+  }
+
+  const deletePayroll = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this payroll?')) {
+      return
+    }
+
+    try {
+      const res = await fetch('/api/personnel/payroll/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payrollIds: [id] })
+      })
+
+      if (res.ok) {
+        alert('Payroll deleted successfully')
+        loadPayrollData()
+      } else {
+        alert('Failed to delete payroll')
+      }
+    } catch (error) {
+      console.error('Error deleting payroll:', error)
+      alert('Error deleting payroll')
+    }
+  }
 
   const loadPayrollData = async () => {
     try {
@@ -129,15 +215,11 @@ export default function PersonnelPayrollPage() {
   }
 
   const viewDetails = async (payroll: any) => {
-    console.log('👁️ View details clicked for payroll:', payroll)
     setSelectedPayroll(payroll)
     setSelectedBreakdown(null)
     setDetailsOpen(true)
-    
-    // Fetch breakdown with the payroll data directly
-    await fetchBreakdownForPayroll(payroll)
   }
-  
+
   const fetchBreakdownForPayroll = async (payroll: any) => {
     setLoadingBreakdown(true)
     
@@ -297,9 +379,9 @@ export default function PersonnelPayrollPage() {
         </div>
       </div>
 
-      {/* Summary Cards - Latest Payroll */}
-      {(currentPayroll || (archivedPayrolls && archivedPayrolls.length > 0)) && (() => {
-        const latestPayroll = currentPayroll || archivedPayrolls[0]
+      {/* Summary Cards - Current Payroll Only */}
+      {currentPayroll && (() => {
+        const latestPayroll = currentPayroll
         let snapshot = latestPayroll.breakdownSnapshot
         if (snapshot && typeof snapshot === 'string') {
           try {
@@ -342,7 +424,7 @@ export default function PersonnelPayrollPage() {
 
             <Card className="border-l-4 border-l-emerald-500">
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-1">Overload Pay</p>
+                <p className="text-xs text-muted-foreground mb-1">Additional Pay</p>
                 <p className="text-2xl font-bold text-emerald-600">
                   +{formatCurrency(overloadPay)}
                 </p>
@@ -378,7 +460,7 @@ export default function PersonnelPayrollPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            My Payroll History
+            Current Payroll
           </CardTitle>
           <CardDescription>
             View your current and archived payrolls
@@ -443,7 +525,7 @@ export default function PersonnelPayrollPage() {
                           onClick={() => viewDetails(currentPayroll)}
                         >
                           <FileText className="h-4 w-4 mr-2" />
-                          View Payslip
+                          Payroll Details
                         </Button>
                       </td>
                     </tr>
@@ -452,25 +534,52 @@ export default function PersonnelPayrollPage() {
               </div>
             ) : (
               <p className="text-center text-muted-foreground py-8">
-                No current payroll available.
+                Waiting for new payroll release...
               </p>
             )
           ) : (
             // Archived Tab - Show all older released payrolls
             archivedPayrolls && archivedPayrolls.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-3 font-semibold">Period</th>
-                    <th className="text-left p-3 font-semibold">Net Pay</th>
-                    <th className="text-left p-3 font-semibold">Status</th>
-                    <th className="text-center p-3 font-semibold">Actions</th>
-                  </tr>
-                </thead>
+              <>
+                <div className="mb-4 flex gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteSelectedPayrolls}
+                    disabled={selectedPayrolls.length === 0}
+                  >
+                    Delete Selected ({selectedPayrolls.length})
+                  </Button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3 font-semibold w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectAll}
+                          onChange={handleSelectAll}
+                          className="cursor-pointer"
+                        />
+                      </th>
+                      <th className="text-left p-3 font-semibold">Period</th>
+                      <th className="text-left p-3 font-semibold">Net Pay</th>
+                      <th className="text-left p-3 font-semibold">Status</th>
+                      <th className="text-center p-3 font-semibold">Actions</th>
+                    </tr>
+                  </thead>
                 <tbody>
                   {archivedPayrolls.map((payroll: any) => (
                     <tr key={payroll.payroll_entries_id} className="border-b hover:bg-muted/50">
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedPayrolls.includes(payroll.payroll_entries_id)}
+                          onChange={() => handleSelectPayroll(payroll.payroll_entries_id)}
+                          className="cursor-pointer"
+                        />
+                      </td>
                       <td className="p-3">
                         {formatDate(payroll.periodStart)} - {formatDate(payroll.periodEnd)}
                       </td>
@@ -484,10 +593,23 @@ export default function PersonnelPayrollPage() {
                         </Badge>
                       </td>
                       <td className="p-3 text-center">
-                        <div className="text-sm">
-                          <div className="font-semibold">Period Salary: {formatCurrency(Number(payroll.basicSalary))}</div>
-                          <div className="text-green-600">+ Overload: {formatCurrency(Number(payroll.breakdownSnapshot?.totalAdditions || 0))}</div>
-                          <div className="text-red-600">- Deductions: {formatCurrency(Number(payroll.deductions))}</div>
+                        <div className="flex gap-2 justify-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewDetails(payroll)}
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deletePayroll(payroll.payroll_entries_id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            Delete
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -495,6 +617,7 @@ export default function PersonnelPayrollPage() {
                 </tbody>
               </table>
             </div>
+            </>
             ) : (
               <p className="text-center text-muted-foreground py-8">
                 No archived payrolls yet.
@@ -509,7 +632,7 @@ export default function PersonnelPayrollPage() {
 
       {/* Digital Payslip Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Payslip</DialogTitle>
           </DialogHeader>
@@ -534,26 +657,72 @@ export default function PersonnelPayrollPage() {
             const dbNetPay = Number(selectedPayroll.netPay || 0)
             const deductions = Number(selectedPayroll.deductions || 0)
             
-            // Calculate overload: if netPay is 18000 and periodSalary is 10000, overload = 8000
-            let overloadPay = Number(snapshot?.totalAdditions || 0)
-            if (overloadPay === 0 && dbNetPay > periodSalary) {
-              overloadPay = dbNetPay - periodSalary + deductions
-              console.log('🔥 CALCULATED overload from netPay:', overloadPay)
+            // Get details from snapshot (archived) or fetched data (current)
+            let overloadPayDetails = snapshot?.overloadPayDetails || []
+            let deductionDetails = snapshot?.deductionDetails || []
+            
+            // If no snapshot, use fetched details
+            if (overloadPayDetails.length === 0 && fetchedDetails?.additionalPay) {
+              overloadPayDetails = fetchedDetails.additionalPay
             }
             
-            console.log('💰 Final values:', { monthlyBasic, periodSalary, overloadPay, deductions, dbNetPay })
+            if (deductionDetails.length === 0 && fetchedDetails?.deductions) {
+              deductionDetails = fetchedDetails.deductions
+            }
+            
+            // Calculate overload pay
+            let overloadPay = overloadPayDetails.reduce((sum: number, detail: any) => sum + Number(detail.amount), 0)
+            
+            // Fallback: if still 0, calculate from netPay
+            if (overloadPay === 0 && dbNetPay > periodSalary) {
+              overloadPay = dbNetPay - periodSalary + deductions
+            }
+            
+            const mandatoryDeductions = deductionDetails.filter((d: any) => d.isMandatory)
+            const otherDeductions = deductionDetails.filter((d: any) => !d.isMandatory)
             
             const grossPay = periodSalary + overloadPay
             const netPay = grossPay - deductions
             
             return (
             <div className="space-y-4">
-              {/* Header */}
-              <div className="text-center border-b pb-4">
-                <h2 className="text-2xl font-bold">{selectedPayroll.user?.name || 'Personnel'}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {formatDate(selectedPayroll.periodStart)} - {formatDate(selectedPayroll.periodEnd)}
-                </p>
+              {/* Header with Logo */}
+              <div className="text-center border-b-2 border-gray-300 dark:border-gray-700 pb-4">
+                <div className="flex justify-center mb-3">
+                  <img src="/ckcm.png" alt="CKCM Logo" className="h-16 w-16" />
+                </div>
+                <h3 className="font-bold text-base">Christ the King College De Maranding</h3>
+                <p className="text-xs text-muted-foreground">Maranding Lala Lanao del Norte</p>
+                <p className="text-xs text-muted-foreground">CKCM PMS (Payroll Management System)</p>
+                <h2 className="font-bold text-xl mt-3">PAYSLIP</h2>
+              </div>
+
+              {/* Personnel Information */}
+              <div className="space-y-1 text-sm border-b pb-3">
+                <div className="flex justify-between">
+                  <span className="font-semibold">Personnel:</span>
+                  <span>{selectedPayroll.user?.name || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">Email:</span>
+                  <span className="text-xs">{selectedPayroll.user?.email || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">Department:</span>
+                  <span>{selectedPayroll.user?.department || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">Position:</span>
+                  <span>{selectedPayroll.user?.position || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">Personnel Type:</span>
+                  <span>{selectedPayroll.user?.personnelType?.name || snapshot?.personnelType || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">Period:</span>
+                  <span>{formatDate(selectedPayroll.periodStart)} - {formatDate(selectedPayroll.periodEnd)}</span>
+                </div>
               </div>
 
               {/* Salary Details */}
@@ -566,14 +735,69 @@ export default function PersonnelPayrollPage() {
                   <span className="font-semibold">Period Salary (Semi-Monthly)</span>
                   <span className="text-green-600 font-bold">{formatCurrency(periodSalary)}</span>
                 </div>
-                <div className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
-                  <span className="font-semibold">+ Overload Pay</span>
-                  <span className="text-emerald-600 font-bold">+{formatCurrency(overloadPay)}</span>
+                
+                {/* Additional Pay Details */}
+                {overloadPayDetails.length > 0 ? (
+                  overloadPayDetails.map((detail: any, idx: number) => (
+                    <div key={idx} className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
+                      <span className="font-semibold">
+                        + {detail.type === 'POSITION_PAY' ? 'Position Pay' : 
+                           detail.type === 'BONUS' ? 'Bonus' : 
+                           detail.type === '13TH_MONTH' ? '13th Month Pay' : 
+                           detail.type === 'OVERTIME' ? 'Overtime' : 
+                           detail.type}
+                      </span>
+                      <span className="text-emerald-600 font-bold">+{formatCurrency(Number(detail.amount))}</span>
+                    </div>
+                  ))
+                ) : (
+                  overloadPay > 0 && (
+                    <div className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
+                      <span className="font-semibold">+ Additional Pay</span>
+                      <span className="text-emerald-600 font-bold">+{formatCurrency(overloadPay)}</span>
+                    </div>
+                  )
+                )}
+                
+                {/* GROSS PAY */}
+                <div className="flex justify-between py-3 bg-blue-50 dark:bg-blue-950/20 px-2 rounded font-bold text-lg">
+                  <span>GROSS PAY</span>
+                  <span className="text-blue-600">{formatCurrency(grossPay)}</span>
                 </div>
-                <div className="flex justify-between py-2 border-b bg-red-50 dark:bg-red-950/20 px-2">
-                  <span className="font-semibold">- Total Deductions</span>
-                  <span className="text-red-600 font-bold">-{formatCurrency(deductions)}</span>
-                </div>
+                
+                {/* Deduction Details */}
+                {mandatoryDeductions.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground mt-2">Mandatory Deductions:</p>
+                    {mandatoryDeductions.map((deduction: any, idx: number) => (
+                      <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
+                        <span className="text-sm">{deduction.type}</span>
+                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                
+                {otherDeductions.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground mt-2">Other Deductions:</p>
+                    {otherDeductions.map((deduction: any, idx: number) => (
+                      <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
+                        <span className="text-sm">{deduction.type}</span>
+                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                
+                {(mandatoryDeductions.length === 0 && otherDeductions.length === 0) && deductions > 0 && (
+                  <div className="flex justify-between py-2 border-b bg-red-50 dark:bg-red-950/20 px-2">
+                    <span className="font-semibold">- Total Deductions</span>
+                    <span className="text-red-600 font-bold">-{formatCurrency(deductions)}</span>
+                  </div>
+                )}
+                
+                {/* NET PAY */}
                 <div className="flex justify-between py-3 bg-primary/10 px-2 rounded">
                   <span className="text-lg font-bold">NET PAY</span>
                   <span className="text-lg font-bold text-primary">{formatCurrency(netPay)}</span>

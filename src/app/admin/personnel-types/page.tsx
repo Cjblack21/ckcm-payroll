@@ -295,12 +295,11 @@ export default function PersonnelTypesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="INDEPENDENT">Independent / Unassigned</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN COMPUTER SCIENCE">Bachelor of Science in Computer Science</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN CRIMINOLOGY">Bachelor of Science in Criminology</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN EDUCATION">Bachelor of Science in Education</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN BUSINESS ADMINISTRATION">Bachelor of Science in Business Administration</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN SOCIAL WORK">Bachelor of Science in Social Work</SelectItem>
-                      <SelectItem value="BACHELOR OF ARTS IN SOCIAL LANGUAGE STUDIES">Bachelor of Arts in Social Language Studies</SelectItem>
+                      <SelectItem value="COLLEGE DEPARTMENT">College department</SelectItem>
+                      <SelectItem value="HIGH SCHOOL DEPARTMENT">High school department</SelectItem>
+                      <SelectItem value="ELEMENTARY DEPARTMENT">Elementary department</SelectItem>
+                      <SelectItem value="SUP">SUP</SelectItem>
+                      <SelectItem value="BED">BED</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -543,12 +542,11 @@ export default function PersonnelTypesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="INDEPENDENT">Independent / Unassigned</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN COMPUTER SCIENCE">Bachelor of Science in Computer Science</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN CRIMINOLOGY">Bachelor of Science in Criminology</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN EDUCATION">Bachelor of Science in Education</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN BUSINESS ADMINISTRATION">Bachelor of Science in Business Administration</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN SOCIAL WORK">Bachelor of Science in Social Work</SelectItem>
-                      <SelectItem value="BACHELOR OF ARTS IN SOCIAL LANGUAGE STUDIES">Bachelor of Arts in Social Language Studies</SelectItem>
+                      <SelectItem value="COLLEGE DEPARTMENT">College department</SelectItem>
+                      <SelectItem value="HIGH SCHOOL DEPARTMENT">High school department</SelectItem>
+                      <SelectItem value="ELEMENTARY DEPARTMENT">Elementary department</SelectItem>
+                      <SelectItem value="SUP">SUP</SelectItem>
+                      <SelectItem value="BED">BED</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

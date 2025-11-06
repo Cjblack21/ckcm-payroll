@@ -186,6 +186,7 @@ model OverloadPay {
   users_id         String
   amount           Decimal
   notes            String?
+  type             String?  @default("OVERTIME") // POSITION_PAY, BONUS, 13TH_MONTH, OVERTIME
   appliedAt        DateTime @default(now())
   archivedAt       DateTime?
   createdAt        DateTime @default(now())

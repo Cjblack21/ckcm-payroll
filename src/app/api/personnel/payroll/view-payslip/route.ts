@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     const monthlyBasicSalary = snapshot?.monthlyBasicSalary || 0
     const semiMonthlyBase = monthlyBasicSalary / 2
     const overloadPay = snapshot?.totalAdditions || 0
+    const overloadPayDetails = snapshot?.overloadPayDetails || []
     const grossPay = snapshot?.periodSalary || 0
     const attendanceDeductions = snapshot?.attendanceDeductions || 0
     const totalDeductions = snapshot?.totalDeductions || 0
@@ -206,12 +207,21 @@ export async function POST(request: NextRequest) {
       <span>Basic Salary (Semi-Monthly):</span>
       <span>₱${semiMonthlyBase.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
     </div>
-    ${overloadPay > 0 ? `
+    ${overloadPayDetails.length > 0 ? overloadPayDetails.map((detail: any) => `
     <div class="amount-row">
-      <span>+ Overload Pay (Additional Salary):</span>
+      <span>+ ${detail.type === 'POSITION_PAY' ? 'Position Pay' : 
+                 detail.type === 'BONUS' ? 'Bonus' : 
+                 detail.type === '13TH_MONTH' ? '13th Month Pay' : 
+                 detail.type === 'OVERTIME' ? 'Overtime' : 
+                 detail.type}:</span>
+      <span style="color: #2e7d32;">₱${Number(detail.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+    </div>
+    `).join('') : (overloadPay > 0 ? `
+    <div class="amount-row">
+      <span>+ Additional Pay:</span>
       <span style="color: #2e7d32;">₱${overloadPay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
     </div>
-    ` : ''}
+    ` : '')}
     <div class="amount-row gross-row">
       <span>GROSS PAY:</span>
       <span>₱${grossPay.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>

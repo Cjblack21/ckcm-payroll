@@ -41,10 +41,11 @@ type PayrollBreakdown = {
   basicSalary: number
   monthlyBasicSalary?: number // Add optional monthly reference
   attendanceDeductions: number
-  leaveDeductions: number
+  leaveDeductions?: number
   loanDeductions: number
   otherDeductions: number
   overloadPay?: number // Overload pay (additional salary)
+  overloadPayDetails?: Array<{type: string, amount: number}> // Additional pay breakdown by type
   attendanceDetails: AttendanceDetail[]
   loanDetails: LoanDetail[]
   otherDeductionDetails: DeductionDetail[]
@@ -720,14 +721,34 @@ export default function PayrollBreakdownDialog({
                     <span className="text-2xl font-bold text-green-900 dark:text-green-100">{formatCurrency(entry.breakdown.monthlyBasicSalary ? entry.breakdown.monthlyBasicSalary / 2 : entry.breakdown.basicSalary)}</span>
                   </div>
                   
-                  {/* Overload Pay - Always show */}
-                  <div className="flex justify-between items-center p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-300 dark:border-emerald-700">
-                    <div>
-                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">+ Overload Pay (Additional Salary)</span>
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Extra compensation</p>
-                    </div>
-                    <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">+{formatCurrency(entry.breakdown.overloadPay || 0)}</span>
-                  </div>
+                  {/* Additional Pay - Show by type */}
+                  {entry.breakdown.overloadPayDetails && entry.breakdown.overloadPayDetails.length > 0 ? (
+                    entry.breakdown.overloadPayDetails.map((detail, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-300 dark:border-emerald-700">
+                        <div>
+                          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                            + {detail.type === 'POSITION_PAY' ? 'Position Pay' : 
+                               detail.type === 'BONUS' ? 'Bonus' : 
+                               detail.type === '13TH_MONTH' ? '13th Month Pay' : 
+                               detail.type === 'OVERTIME' ? 'Overtime' : 
+                               detail.type}
+                          </span>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Additional compensation</p>
+                        </div>
+                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">+{formatCurrency(detail.amount)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    entry.breakdown.overloadPay && entry.breakdown.overloadPay > 0 && (
+                      <div className="flex justify-between items-center p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-300 dark:border-emerald-700">
+                        <div>
+                          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">+ Additional Pay</span>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Extra compensation</p>
+                        </div>
+                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">+{formatCurrency(entry.breakdown.overloadPay)}</span>
+                      </div>
+                    )
+                  )}
 
                   {/* Divider */}
                   <div className="border-t-2 border-dashed my-3"></div>
