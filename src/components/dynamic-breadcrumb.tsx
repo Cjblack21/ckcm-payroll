@@ -13,7 +13,7 @@ export function DynamicBreadcrumb() {
       '/admin/dashboard': 'Dashboard',
       '/admin/attendance': 'Attendance',
       '/admin/payroll': 'Payroll',
-      '/admin/deductions': 'Mandatory & Overload',
+      '/admin/deductions': 'Mandatory & Add Pay',
       '/admin/users': 'Personnel',
       '/admin/loans': 'Loan & Deduction Management',
       '/admin/profile': 'Profile',

@@ -1022,9 +1022,9 @@ export default function DeductionsPage() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <BadgeMinus className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-            Mandatory & Overload
+            Mandatory & Overtime
           </h2>
-          <p className="text-muted-foreground text-sm">Manage mandatory deduction & overload pay for personnel</p>
+          <p className="text-muted-foreground text-sm">Manage mandatory deduction & overtime pay for personnel</p>
         </div>
         <div className="flex gap-2">
           <div className="flex items-center gap-2">
@@ -1240,6 +1240,7 @@ export default function DeductionsPage() {
                       <SelectItem value="BONUS">Bonus</SelectItem>
                       <SelectItem value="13TH_MONTH">13th Month Pay</SelectItem>
                       <SelectItem value="OVERTIME">Overtime</SelectItem>
+                      <SelectItem value="OVERLOAD">Overload</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1641,6 +1642,7 @@ export default function DeductionsPage() {
                          o.type === 'BONUS' ? 'Bonus' : 
                          o.type === '13TH_MONTH' ? '13th Month Pay' : 
                          o.type === 'OVERTIME' ? 'Overtime' : 
+                         o.type === 'OVERLOAD' ? 'Overload' : 
                          o.type || 'Overtime'}
                       </span>
                     </TableCell>

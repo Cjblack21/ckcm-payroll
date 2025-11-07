@@ -173,7 +173,7 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
                 <SidebarMenuButton asChild>
                   <Link href="/admin/deductions">
                     <Receipt />
-                    <span>Mandatory & Overload</span>
+                    <span>Mandatory & Add Pay</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
