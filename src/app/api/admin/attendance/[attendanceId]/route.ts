@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 // DELETE - Delete an attendance record
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { attendanceId: string } }
+  context: { params: Promise<{ attendanceId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -18,6 +18,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const params = await context.params
     const { attendanceId } = params
 
     // Check if the attendance record exists
