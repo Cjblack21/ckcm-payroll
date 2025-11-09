@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Banknote, TrendingUp, Calendar, FileText, Clock, CheckCircle, AlertCircle, CreditCard as DeductionIcon, Archive } from 'lucide-react'
@@ -387,7 +386,7 @@ export default function PersonnelLoansPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="text-center p-3 bg-blue-50 rounded-lg">
                       <p className="text-sm text-gray-600">Original Amount</p>
                       <p className="font-bold text-blue-600">{formatCurrency(loan.loanAmount)}</p>
@@ -403,18 +402,6 @@ export default function PersonnelLoansPage() {
                     <div className="text-center p-3 bg-red-50 rounded-lg">
                       <p className="text-sm text-gray-600">Remaining Balance</p>
                       <p className="font-bold text-red-600">{formatCurrency(loan.remainingBalance)}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Payment Progress</span>
-                      <span>{loan.progressPercentage.toFixed(1)}%</span>
-                    </div>
-                    <Progress value={loan.progressPercentage} className="h-2" />
-                    <div className="flex justify-between text-xs text-gray-600">
-                      <span>Paid: {formatCurrency(loan.totalPaymentsMade)}</span>
-                      <span>Remaining: {loan.paymentsRemaining} payments</span>
                     </div>
                   </div>
                 </div>
@@ -601,32 +588,6 @@ export default function PersonnelLoansPage() {
                 </Table>
               </div>
 
-              {/* Progress Information */}
-              <div>
-                <h4 className="font-medium mb-3">Payment Progress</h4>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span>Progress</span>
-                      <span>{selectedLoan.progressPercentage.toFixed(1)}%</span>
-                    </div>
-                    <Progress value={selectedLoan.progressPercentage} className="h-3" />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Payments Remaining</p>
-                      <p className="font-bold text-blue-600 dark:text-blue-400">{selectedLoan.paymentsRemaining}</p>
-                    </div>
-                    <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Estimated Completion</p>
-                      <p className="font-bold text-green-600 dark:text-green-400">
-                        {formatDate(selectedLoan.estimatedCompletionDate)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </DialogContent>

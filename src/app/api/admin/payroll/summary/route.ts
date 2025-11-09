@@ -93,7 +93,7 @@ export async function GET() {
   console.log('Attendance records found:', attendance.length)
 
   // Get attendance settings to check time-out window
-  const attendanceSettings = await prisma.attendanceSettings.findFirst()
+  const attendanceSettingsData = await prisma.attendanceSettings.findFirst()
   
   // Create a map of attendance records by user and date
   const attendanceMap = new Map()
@@ -358,52 +358,98 @@ export async function GET() {
     loanPaymentsMap.set(loan.users_id, (loanPaymentsMap.get(loan.users_id) || 0) + biweeklyPayment)
   })
 
-  // SIMPLE: Just fetch from attendance API and use the deductions directly!
-  console.log('🔍 Fetching attendance data from API')
+  // Recalculate attendance deductions with correct logic (no cap + early timeout)
+  console.log('🔍 Recalculating attendance deductions')
   
   const liveAttendanceDeductionsMap = new Map()
   const liveAttendanceDetailsMap = new Map()
   
-  try {
-    const attendanceUrl = `http://localhost:3000/api/admin/attendance/current-day`
-    console.log('Calling:', attendanceUrl)
+  // Get attendance settings for time windows
+  const attendanceSettings = await prisma.attendanceSettings.findFirst()
+  const timeInEnd = attendanceSettings?.timeInEnd || '08:02'
+  const timeOutStart = attendanceSettings?.timeOutStart || '17:00'
+  
+  // Group attendance by user
+  const attendanceByUserId = new Map()
+  attendance.forEach(record => {
+    if (!attendanceByUserId.has(record.users_id)) {
+      attendanceByUserId.set(record.users_id, [])
+    }
+    attendanceByUserId.get(record.users_id).push(record)
+  })
+  
+  // Calculate deductions for each user
+  attendanceByUserId.forEach((records, userId) => {
+    const user = users.find(u => u.users_id === userId)
+    if (!user) return
     
-    const res = await fetch(attendanceUrl, { cache: 'no-store' })
-    const attendanceData = await res.json()
+    const monthlyBasicSalary = user.personnelType?.basicSalary ? Number(user.personnelType.basicSalary) : 0
+    const dailySalary = monthlyBasicSalary / 22
+    const perSecondRate = dailySalary / 8 / 60 / 60
     
-    console.log('✅ Got attendance data:', attendanceData.attendance?.length, 'records')
+    let totalDeductions = 0
+    const details: any[] = []
     
-    // Just use the deductions from the attendance API!
-    if (attendanceData.attendance) {
-      attendanceData.attendance.forEach((record: any) => {
-        const deduction = Number(record.deductions || 0)
+    records.forEach((record: any) => {
+      if (record.status === 'ABSENT') {
+        totalDeductions += dailySalary
+        details.push({
+          date: record.date,
+          status: 'ABSENT',
+          type: 'Absence Deduction',
+          amount: dailySalary,
+          description: 'Absence deduction'
+        })
+      } else if (record.status === 'LATE' && record.timeIn) {
+        const timeIn = new Date(record.timeIn)
+        const expected = new Date(record.date)
+        const [h, m] = timeInEnd.split(':').map(Number)
+        expected.setHours(h, m + 1, 0, 0) // Add 1 minute grace period
+        const secondsLate = Math.max(0, (timeIn.getTime() - expected.getTime()) / 1000)
+        const lateAmount = secondsLate * perSecondRate // No 50% cap
         
-        if (deduction > 0) {
-          console.log('💸 Deduction found:', record.userName, '-', deduction)
-          
-          const userId = record.users_id
-          const current = liveAttendanceDeductionsMap.get(userId) || 0
-          liveAttendanceDeductionsMap.set(userId, current + deduction)
-          
-          if (!liveAttendanceDetailsMap.has(userId)) {
-            liveAttendanceDetailsMap.set(userId, [])
-          }
-          
-          liveAttendanceDetailsMap.get(userId).push({
+        // Check for early timeout
+        let earlyAmount = 0
+        if (record.timeOut) {
+          const timeOut = new Date(record.timeOut)
+          const expectedTimeOut = new Date(record.date)
+          const [outH, outM] = timeOutStart.split(':').map(Number)
+          expectedTimeOut.setHours(outH, outM, 0, 0)
+          const secondsEarly = Math.max(0, (expectedTimeOut.getTime() - timeOut.getTime()) / 1000)
+          earlyAmount = secondsEarly * perSecondRate
+        }
+        
+        if (lateAmount > 0) {
+          totalDeductions += lateAmount
+          details.push({
             date: record.date,
-            status: record.status,
-            type: `${record.status} Deduction`,
-            amount: deduction,
-            description: `${record.status} deduction`
+            status: 'LATE',
+            type: 'Late Deduction',
+            amount: lateAmount,
+            description: `Late arrival - ${Math.round(secondsLate / 60)} minutes late`
           })
         }
-      })
-    }
+        
+        if (earlyAmount > 0) {
+          totalDeductions += earlyAmount
+          details.push({
+            date: record.date,
+            status: 'EARLY',
+            type: 'Early Timeout Deduction',
+            amount: earlyAmount,
+            description: `Early departure - ${Math.round(earlyAmount / perSecondRate / 60)} minutes early`
+          })
+        }
+      }
+    })
     
-    console.log('📊 Total deductions:', liveAttendanceDeductionsMap.size, 'users')
-  } catch (error) {
-    console.error('❌ Error fetching attendance:', error)
-  }
+    if (totalDeductions > 0) {
+      liveAttendanceDeductionsMap.set(userId, totalDeductions)
+      liveAttendanceDetailsMap.set(userId, details)
+    }
+  })
+  
+  console.log('📊 Recalculated deductions for', liveAttendanceDeductionsMap.size, 'users')
 
   // Group attendance records by user
   const attendanceByUser = new Map()
@@ -505,7 +551,15 @@ export async function GET() {
     console.error('Error reading schedule file:', error)
   }
 
-  return NextResponse.json({ periodStart, periodEnd, rows, scheduledRelease })
+  return NextResponse.json(
+    { periodStart, periodEnd, rows, scheduledRelease },
+    { 
+      headers: { 
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache'
+      } 
+    }
+  )
   
   } catch (error) {
     console.error('Error in payroll summary API:', error)

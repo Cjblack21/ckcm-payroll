@@ -22,6 +22,7 @@ import {
 } from '@/lib/timezone'
 import { Label } from '@/components/ui/label'
 import PayrollBreakdownDialog from '@/components/payroll/PayrollBreakdownDialog'
+import ArchivedPayrollDetailsDialog from '@/components/payroll/ArchivedPayrollDetailsDialog'
 
 // Types
 type PayrollEntry = {
@@ -314,6 +315,7 @@ export default function PayrollPage() {
   const [selectedArchivedPeriod, setSelectedArchivedPeriod] = useState<any>(null)
   const [archivedPersonnelList, setArchivedPersonnelList] = useState<any[]>([])
   const [selectedArchivedEntry, setSelectedArchivedEntry] = useState<any>(null)
+  const [selectedPersonnelForPeriods, setSelectedPersonnelForPeriods] = useState<any>(null)
   const [showDeleteArchiveModal, setShowDeleteArchiveModal] = useState(false)
   const [archiveSearchTerm, setArchiveSearchTerm] = useState('')
   const [newArchivedPayrollId, setNewArchivedPayrollId] = useState<string | null>(null)
@@ -1698,43 +1700,6 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                 <p className="text-xs text-muted-foreground">{currentPeriod.type} period</p>
               </div>
 
-              {/* Total Payroll */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <div className="p-1.5 bg-green-100 dark:bg-green-950/30 rounded flex items-center justify-center">
-                    <span className="text-green-600 dark:text-green-400 font-bold text-base">₱</span>
-                  </div>
-                  <span className="text-sm font-medium">Total Net Pay</span>
-                </div>
-                {hasGeneratedForSettings ? (
-                  <>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {formatCurrency(payrollEntries.reduce((sum, entry) => {
-                        const mergedDeductions = getMergedDeductions(entry)
-                        const mandatoryDeductions = mergedDeductions.filter((d: any) => isMandatoryDeduction(d))
-                        const totalMandatoryDeductions = mandatoryDeductions.reduce((s, d) => s + d.amount, 0)
-                        const otherDeductionsOnly = mergedDeductions.filter((d: any) => {
-                          const type = d.type.toLowerCase()
-                          const isMandatory = isMandatoryDeduction(d)
-                          const isAttendance = type.includes('late') || type.includes('absent') || type.includes('absence') || type.includes('early') || type.includes('tardiness') || type.includes('partial')
-                          return !isMandatory && !isAttendance
-                        })
-                        const totalOtherDeductions = otherDeductionsOnly.reduce((s, d) => s + d.amount, 0)
-                        const todayAbsenceDeduction = getTodayAbsenceDeduction(entry)
-                        const totalDeductions = Number(entry.breakdown.attendanceDeductions) + todayAbsenceDeduction + Number(entry.breakdown.loanDeductions) + totalMandatoryDeductions + totalOtherDeductions
-                        const overloadPay = Number(entry.breakdown.overloadPay || 0)
-                        return sum + (Number(entry.breakdown.basicSalary) + overloadPay - totalDeductions)
-                      }, 0))}
-                    </p>
-                    <p className="text-xs text-muted-foreground">For this period</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">Pending</p>
-                    <p className="text-xs text-muted-foreground">Generate payroll first</p>
-                  </>
-                )}
-              </div>
 
               {/* Release Status */}
               <div className="space-y-2">
@@ -1789,7 +1754,6 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="current">Current Payroll</TabsTrigger>
-          <TabsTrigger value="saved">Saved Payroll Breakdown</TabsTrigger>
           <TabsTrigger value="archived" className="relative">
             Archived Payrolls
             {(archivedPayrolls.length > 0 && !hasViewedNewestPayroll) && (
@@ -1799,7 +1763,6 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
           <TabsTrigger value="settings">Payroll Time Settings</TabsTrigger>
         </TabsList>
 
@@ -1807,14 +1770,26 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
         <TabsContent value="current" className="space-y-4">
           {!hasGeneratedForSettings ? (
             /* Empty State - Payroll Not Generated */
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <div className="text-center space-y-4">
-                  <h3 className="text-2xl font-bold">Payroll Waiting to be Generated...</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    Click to generate payroll
-                  </p>
-                  <Button onClick={handleGeneratePayroll} disabled={loading} size="lg" className="mt-4">
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
+              <CardContent className="flex flex-col items-center justify-center py-20">
+                <div className="text-center space-y-6">
+                  <div className="flex justify-center">
+                    <div className="p-6 bg-gradient-to-br from-slate-100 to-gray-100 dark:from-slate-900/30 dark:to-gray-900/30 rounded-2xl">
+                      <FileText className="h-20 w-20 text-slate-600 dark:text-slate-400" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-bold text-foreground mb-2">Payroll Waiting to be Generated</h3>
+                    <p className="text-muted-foreground max-w-md text-lg">
+                      Click the button below to generate payroll for the current period
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={handleGeneratePayroll} 
+                    disabled={loading} 
+                    size="lg" 
+                    className="mt-4 bg-gradient-to-r from-slate-600 to-gray-700 hover:from-slate-700 hover:to-gray-800 text-white shadow-lg hover:shadow-xl transition-all px-8 py-6 text-lg"
+                  >
                     <FileText className="h-5 w-5 mr-2" />
                     Generate Payroll Now
                   </Button>
@@ -1843,29 +1818,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
               {/* Payroll Table */}
               <Card className="border-0 shadow-lg bg-card">
                 <CardHeader className="border-b px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-bold">Payroll Summary</CardTitle>
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-semibold text-lg">
-                        Total: {formatCurrency(filteredEntries.reduce((sum, entry) => {
-                          const mergedDeductions = getMergedDeductions(entry)
-                          const mandatoryDeductions = mergedDeductions.filter((d: any) => isMandatoryDeduction(d))
-                          const totalMandatoryDeductions = mandatoryDeductions.reduce((s, d) => s + d.amount, 0)
-                          const otherDeductionsOnly = mergedDeductions.filter((d: any) => {
-                            const type = d.type.toLowerCase()
-                            const isMandatory = isMandatoryDeduction(d)
-                            const isAttendance = type.includes('late') || type.includes('absent') || type.includes('absence') || type.includes('early') || type.includes('tardiness') || type.includes('partial')
-                            return !isMandatory && !isAttendance
-                          })
-                          const totalOtherDeductions = otherDeductionsOnly.reduce((s, d) => s + d.amount, 0)
-                          const todayAbsenceDeduction = getTodayAbsenceDeduction(entry)
-                          const totalDeductions = Number(entry.breakdown.attendanceDeductions) + todayAbsenceDeduction + Number(entry.breakdown.loanDeductions) + totalMandatoryDeductions + totalOtherDeductions
-                          const overloadPay = Number(entry.breakdown.overloadPay || 0)
-                          return sum + (Number(entry.breakdown.basicSalary) + overloadPay - totalDeductions)
-                        }, 0))}
-                      </span>
-                    </div>
-                  </div>
+                  <CardTitle className="text-xl font-bold">Payroll Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -1878,7 +1831,6 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Position</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Personnel Type</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Work Hours</TableHead>
-                          <TableHead className="font-semibold text-xs uppercase tracking-wider h-12 text-right">Net Pay</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Status</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12 text-center px-6">Actions</TableHead>
                         </TableRow>
@@ -1886,7 +1838,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                       <TableBody>
                         {loading ? (
                           <TableRow>
-                            <TableCell colSpan={9} className="text-center py-16">
+                            <TableCell colSpan={8} className="text-center py-16">
                               <div className="flex flex-col items-center gap-3">
                                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                                 <span className="text-sm text-muted-foreground">Loading payroll data...</span>
@@ -1895,7 +1847,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                           </TableRow>
                         ) : filteredEntries.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={9} className="text-center py-16">
+                            <TableCell colSpan={8} className="text-center py-16">
                               <div className="flex flex-col items-center gap-3">
                                 <FileText className="h-16 w-16 text-muted-foreground/30" />
                                 <div>
@@ -2001,11 +1953,6 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                               now={now}
                             />
                           </TableCell>
-                          <TableCell className="py-4 text-right">
-                            <span className="font-bold text-green-600 dark:text-green-400 text-base">
-                              {formatCurrency(netPay)}
-                            </span>
-                          </TableCell>
                           <TableCell className="py-4">
                             <div className="flex flex-col gap-1.5">
                               {getStatusBadge(entry.status)}
@@ -2044,119 +1991,174 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
           )}
         </TabsContent>
 
-        {/* Saved Payroll Breakdown Tab - Shows RELEASED payrolls */}
-        <TabsContent value="saved" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Saved Payroll Breakdowns</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Released payrolls with saved breakdown snapshots (Personnel can view these)
-              </p>
-            </CardHeader>
-            <CardContent>
-              {payrollEntries.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  No payroll data. Generate payroll first.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Personnel</TableHead>
-                        <TableHead>Department</TableHead>
-                        <TableHead>Position</TableHead>
-                        <TableHead>Net Pay</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {payrollEntries
-                        .map((entry) => {
-                          // Calculate exact net pay from breakdown
-                          const basicSalary = entry.breakdown.basicSalary || 0
-                          const overloadPay = (entry.breakdown as any).overloadPay || 0
-                          const totalDeductions = (entry.breakdown.attendanceDeductions || 0) + 
-                                                 (entry.breakdown.loanDeductions || 0) + 
-                                                 (entry.breakdown.otherDeductions || 0)
-                          const exactNetPay = basicSalary + overloadPay - totalDeductions
-                          
-                          return (
-                          <TableRow key={entry.users_id}>
-                            <TableCell className="font-medium">{entry.name}</TableCell>
-                            <TableCell>{entry.department || 'N/A'}</TableCell>
-                            <TableCell>{entry.personnelType || 'N/A'}</TableCell>
-                            <TableCell className="font-semibold text-green-600">
-                              {formatCurrency(exactNetPay)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="default" className="bg-green-600">
-                                {entry.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedEntry(entry)
-                                  setBreakdownDialogOpen(true)
-                                }}
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Saved Breakdown
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          )
-                        })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Archived Payrolls Tab */}
-        <TabsContent value="archived" className="space-y-4">
+        <TabsContent value="archived" className="space-y-6">
           {/* Search Bar */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 dark:text-slate-400" />
               <Input
                 placeholder="Search by period, date, or released by..."
                 value={archiveSearchTerm}
                 onChange={(e) => setArchiveSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
               />
             </div>
-            <div className="text-sm text-muted-foreground">
-              {archivedPayrolls.filter(payroll => {
-                const searchLower = archiveSearchTerm.toLowerCase()
-                const periodStart = formatDateForDisplay(new Date(payroll.periodStart)).toLowerCase()
-                const periodEnd = formatDateForDisplay(new Date(payroll.periodEnd)).toLowerCase()
-                const releasedAt = formatDateForDisplay(new Date(payroll.releasedAt)).toLowerCase()
-                const releasedBy = payroll.releasedBy.toLowerCase()
-                return periodStart.includes(searchLower) || 
-                       periodEnd.includes(searchLower) || 
-                       releasedAt.includes(searchLower) ||
-                       releasedBy.includes(searchLower)
-              }).length} of {archivedPayrolls.length} record(s)
+            <div className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300">
+                {archivedPayrolls.filter(payroll => {
+                  const searchLower = archiveSearchTerm.toLowerCase()
+                  const periodStart = formatDateForDisplay(new Date(payroll.periodStart)).toLowerCase()
+                  const periodEnd = formatDateForDisplay(new Date(payroll.periodEnd)).toLowerCase()
+                  const releasedAt = formatDateForDisplay(new Date(payroll.releasedAt)).toLowerCase()
+                  const releasedBy = payroll.releasedBy.toLowerCase()
+                  return periodStart.includes(searchLower) || 
+                         periodEnd.includes(searchLower) || 
+                         releasedAt.includes(searchLower) ||
+                         releasedBy.includes(searchLower)
+                }).length} / {archivedPayrolls.length}
+              </span>
+              <span className="text-muted-foreground">results</span>
             </div>
           </div>
 
-          <Card className="border-0 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 border-b">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 border-b-2 border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-slate-100 dark:bg-slate-900 rounded-lg">
-                    <Archive className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-gradient-to-br from-slate-600 to-gray-700 rounded-xl shadow-lg">
+                    <Archive className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <CardTitle className="text-xl">Archived Payrolls</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-0.5">{archivedPayrolls.length} total archived record(s)</p>
+                    <CardTitle className="text-2xl font-bold text-foreground flex items-center gap-3">
+                      Archived Payrolls
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={archivedPayrolls.length === 0}
+                            className="gap-2"
+                          >
+                            <FileText className="h-4 w-4" />
+                            View Payroll
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="!max-w-none w-[98vw] h-[95vh] !max-h-none overflow-hidden flex flex-col" style={{ maxWidth: '98vw', width: '98vw', height: '95vh', maxHeight: '95vh' }}>
+                          <DialogHeader>
+                            <DialogTitle>View Payroll for Personnel</DialogTitle>
+                            <DialogDescription>
+                              Select a personnel, then choose a payroll period to view their payroll details
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid grid-cols-2 gap-6 flex-1 overflow-hidden">
+                            {/* Left: Personnel List */}
+                            <div className="border-r pr-6">
+                              <h3 className="font-semibold mb-4 text-base text-muted-foreground">Select Personnel</h3>
+                              <div className="space-y-2 max-h-[75vh] overflow-y-auto">
+                                {(() => {
+                                  // Get unique personnel from all archived payrolls
+                                  const personnelMap = new Map()
+                                  archivedPayrolls.forEach(payroll => {
+                                    payroll.payrolls?.forEach((person: any) => {
+                                      if (!personnelMap.has(person.users_id)) {
+                                        personnelMap.set(person.users_id, person)
+                                      }
+                                    })
+                                  })
+                                  const uniquePersonnel = Array.from(personnelMap.values())
+                                  
+                                  return uniquePersonnel.map((person: any) => (
+                                    <Button
+                                      key={person.users_id}
+                                      variant={selectedPersonnelForPeriods?.users_id === person.users_id ? "default" : "outline"}
+                                      className="justify-start h-auto py-4 px-4 hover:bg-primary/5 w-full"
+                                      onClick={() => {
+                                        setSelectedPersonnelForPeriods(person)
+                                        // Get all periods for this personnel
+                                        const personnelPeriods = archivedPayrolls.filter(payroll => 
+                                          payroll.payrolls?.some((p: any) => p.users_id === person.users_id)
+                                        )
+                                        setArchivedPersonnelList(personnelPeriods)
+                                      }}
+                                    >
+                                      <div className="flex items-center gap-4 w-full">
+                                        <div className="flex-1 text-left">
+                                          <p className="font-semibold text-base">{person.user?.name || 'N/A'}</p>
+                                          <p className="text-sm text-muted-foreground">{person.user?.personnelType?.name || 'N/A'} • {person.user?.personnelType?.department || 'N/A'}</p>
+                                        </div>
+                                      </div>
+                                    </Button>
+                                  ))
+                                })()}
+                              </div>
+                            </div>
+                            
+                            {/* Right: Period List for selected personnel */}
+                            <div className="pl-6">
+                              <h3 className="font-semibold mb-4 text-base text-muted-foreground">
+                                {selectedPersonnelForPeriods ? 'Select Payroll Period' : 'Select a personnel first'}
+                              </h3>
+                              <div className="space-y-2 max-h-[75vh] overflow-y-auto">
+                                {selectedPersonnelForPeriods && archivedPersonnelList.length > 0 ? (
+                                  archivedPersonnelList.map((payroll: any) => {
+                                    // Find this personnel's data in this period
+                                    const personnelData = payroll.payrolls?.find((p: any) => p.users_id === selectedPersonnelForPeriods.users_id)
+                                    
+                                    return (
+                                      <Button
+                                        key={payroll.id}
+                                        variant="outline"
+                                        className="justify-start h-auto py-3 px-3 w-full hover:bg-primary/5"
+                                        onClick={() => {
+                                          setSelectedArchivedPeriod(payroll)
+                                          setSelectedArchivedEntry(personnelData)
+                                          setHasViewedNewestPayroll(true)
+                                          setShowArchiveNotification(false)
+                                          setNewArchivedPayrollId(null)
+                                          localStorage.removeItem('hasNewArchivedPayroll')
+                                        }}
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <div className="flex flex-col items-start gap-1">
+                                            <div className="flex items-center gap-2">
+                                              <Calendar className="h-4 w-4" />
+                                              <span className="font-semibold text-sm">
+                                                {formatDateForDisplay(new Date(payroll.periodStart))} - {formatDateForDisplay(new Date(payroll.periodEnd))}
+                                              </span>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground">
+                                              Released {formatDateForDisplay(new Date(payroll.releasedAt))}
+                                            </span>
+                                          </div>
+                                          {personnelData && (
+                                            <div className="text-right">
+                                              <p className="font-bold text-green-600 text-sm">{formatCurrency(Number(personnelData.netPay))}</p>
+                                              <p className="text-xs text-muted-foreground">Net Pay</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </Button>
+                                    )
+                                  })
+                                ) : selectedPersonnelForPeriods ? (
+                                  <p className="text-center text-muted-foreground py-8">No payroll periods found for this personnel</p>
+                                ) : (
+                                  <p className="text-center text-muted-foreground py-8">Select a personnel to view their payroll periods</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300">
+                        {archivedPayrolls.length} Records
+                      </span>
+                      <span className="text-muted-foreground">•</span>
+                      <span>Historical payroll data</span>
+                    </p>
                   </div>
                 </div>
                 {selectedArchives.length > 0 && (
@@ -2165,6 +2167,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                     size="sm"
                     onClick={promptBulkDeleteArchives}
                     disabled={loading}
+                    className="shadow-lg hover:shadow-xl transition-all"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete Selected ({selectedArchives.length})
@@ -2194,18 +2197,23 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                       <TableHead className="font-semibold text-xs uppercase tracking-wider">Period</TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider">Personnel</TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider">Released</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider">View</TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider text-center w-[80px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {archivedPayrolls.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-16">
-                          <div className="flex flex-col items-center gap-3">
-                            <Archive className="h-16 w-16 text-muted-foreground/30" />
+                        <TableCell colSpan={5} className="text-center py-20">
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="p-6 bg-gradient-to-br from-slate-100 to-gray-100 dark:from-slate-900/20 dark:to-gray-900/20 rounded-2xl">
+                              <Archive className="h-16 w-16 text-slate-600 dark:text-slate-400" />
+                            </div>
                             <div>
-                              <p className="text-base font-medium text-foreground">No archived payrolls</p>
-                              <p className="text-sm text-muted-foreground mt-1">Released payrolls will appear here</p>
+                              <p className="text-lg font-semibold text-foreground">No Archived Payrolls Yet</p>
+                              <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                                Released payrolls will be automatically archived and displayed here for historical reference
+                              </p>
                             </div>
                           </div>
                         </TableCell>
@@ -2225,26 +2233,34 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                                  releasedBy.includes(searchLower)
                         })
                         .map((payroll) => (
-                        <TableRow key={payroll.id} className="border-b border-border/50">
-                          <TableCell className="py-4">
+                        <TableRow key={payroll.id} className="border-b border-border/50 hover:bg-slate-50/50 dark:hover:bg-slate-950/20 transition-colors">
+                          <TableCell className="py-5">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleToggleArchive(payroll.id)}
-                              className="h-8 w-8 p-0"
+                              className="h-8 w-8 p-0 hover:bg-slate-100 dark:hover:bg-slate-900/30"
                             >
                               {selectedArchives.includes(payroll.id) ? (
                                 <CheckSquare className="h-4 w-4 text-primary" />
                               ) : (
-                                <Square className="h-4 w-4" />
+                                <Square className="h-4 w-4 text-muted-foreground" />
                               )}
                             </Button>
                           </TableCell>
-                          <TableCell className="py-4">
+                          <TableCell className="py-5">
                             <div className="flex items-center gap-3 relative">
-                              <div className="flex flex-col">
-                                <span className="font-medium text-sm">{formatDateForDisplay(new Date(payroll.periodStart))}</span>
-                                <span className="text-xs text-muted-foreground">to {formatDateForDisplay(new Date(payroll.periodEnd))}</span>
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-gradient-to-br from-slate-100 to-gray-100 dark:from-slate-900/30 dark:to-gray-900/30 rounded-lg">
+                                  <Calendar className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold text-sm text-foreground">{formatDateForDisplay(new Date(payroll.periodStart))}</span>
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <span>to</span>
+                                    <span className="font-medium">{formatDateForDisplay(new Date(payroll.periodEnd))}</span>
+                                  </span>
+                                </div>
                               </div>
                               {(archivedPayrolls.indexOf(payroll) === 0 && !hasViewedNewestPayroll) && (
                                 <span className="relative flex h-3 w-3 flex-shrink-0">
@@ -2254,16 +2270,42 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="py-4">
-                            <Badge variant="secondary" className="font-medium">
-                              {payroll.totalEmployees}
+                          <TableCell className="py-5">
+                            <Badge variant="secondary" className="font-semibold bg-gradient-to-r from-slate-100 to-gray-100 dark:from-slate-900/30 dark:to-gray-900/30 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800">
+                              {payroll.totalEmployees} Personnel
                             </Badge>
                           </TableCell>
-                          <TableCell className="py-4">
-                            <div className="flex flex-col">
-                              <span className="text-sm">{formatDateForDisplay(new Date(payroll.releasedAt))}</span>
-                              <span className="text-xs text-muted-foreground">by {payroll.releasedBy}</span>
+                          <TableCell className="py-5">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm font-medium text-foreground">{formatDateForDisplay(new Date(payroll.releasedAt))}</span>
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                by {payroll.releasedBy}
+                              </span>
                             </div>
+                          </TableCell>
+                          <TableCell className="py-5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedArchivedPeriod(payroll)
+                                setArchivedPersonnelList(payroll.payrolls || [])
+                                setArchivedBreakdownOpen(true)
+                                
+                                // Clear notification if viewing the first/newest archived payroll
+                                if (archivedPayrolls.indexOf(payroll) === 0) {
+                                  setHasViewedNewestPayroll(true)
+                                  setShowArchiveNotification(false)
+                                  setNewArchivedPayrollId(null)
+                                  localStorage.removeItem('hasNewArchivedPayroll')
+                                }
+                              }}
+                              className="gap-2"
+                            >
+                              <FileText className="h-4 w-4" />
+                              View Payroll
+                            </Button>
                           </TableCell>
                           <TableCell className="py-4 text-center">
                             <DropdownMenu>
@@ -2274,13 +2316,23 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48">
                                 <DropdownMenuItem onClick={() => {
+                                  // View individual personnel payrolls
                                   setSelectedArchivedPeriod(payroll)
                                   setArchivedPersonnelList(payroll.payrolls || [])
                                   setArchivedBreakdownOpen(true)
+                                  
+                                  // Clear notification if viewing the first/newest archived payroll
+                                  if (archivedPayrolls.indexOf(payroll) === 0) {
+                                    setHasViewedNewestPayroll(true)
+                                    setShowArchiveNotification(false)
+                                    setNewArchivedPayrollId(null)
+                                    localStorage.removeItem('hasNewArchivedPayroll')
+                                  }
                                 }}>
                                   <FileText className="mr-2 h-4 w-4" />
-                                  View Breakdown
+                                  View Personnel
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => {
                                   // Clear notification if viewing the first/newest archived payroll
                                   if (archivedPayrolls.indexOf(payroll) === 0) {
@@ -2354,81 +2406,33 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
           </Card>
         </TabsContent>
 
-        {/* Reports Tab */}
-        <TabsContent value="reports" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Company Summary Report</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Total Salary Expenses:</span>
-                    <span className="font-medium">{formatCurrency(payrollEntries.reduce((sum, entry) => sum + entry.breakdown.basicSalary, 0))}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Deductions:</span>
-                    <span className="font-medium text-red-600">{formatCurrency(payrollEntries.reduce((sum, entry) => sum + entry.breakdown.attendanceDeductions + entry.breakdown.loanDeductions + entry.breakdown.otherDeductions, 0))}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Net Pay:</span>
-                    <span className="font-medium text-green-600">{formatCurrency(payrollEntries.reduce((sum, entry) => sum + entry.finalNetPay, 0))}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Employee Contribution Report</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Per-employee deduction breakdown for SSS, PhilHealth, Pag-IBIG, and taxes.
-                </p>
-                <Button variant="outline" className="mt-4">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Report
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Audit Log Report</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Track admin actions, payroll releases, and payslip printing history.
-                </p>
-                <Button variant="outline" className="mt-4">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Report
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Next Period Settings Tab */}
-        <TabsContent value="settings" className="space-y-4">
+        {/* Payroll Time Settings Tab */}
+        <TabsContent value="settings" className="space-y-6">
           {/* Payroll Time Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Payroll Time Settings
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Set the payroll period dates. This will be used to calculate working days and generate payroll.
-              </p>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 border-b-2 border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-slate-600 to-gray-700 rounded-xl shadow-lg">
+                  <Clock className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-2xl font-bold text-foreground">
+                    Payroll Time Settings
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Set the payroll period dates. This will be used to calculate working days and generate payroll.
+                  </p>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {/* Quick Duration Shortcuts */}
-                <div>
-                  <Label className="mb-2 block">Quick Duration</Label>
+                <div className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <Label className="mb-3 block text-base font-semibold flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Quick Duration
+                  </Label>
                   <div className="flex gap-2 flex-wrap">
                     <Button
                       type="button"
@@ -2488,9 +2492,9 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                       1 Month
                     </Button>
                   </div>
-                  <div className="flex items-end gap-2 mt-2">
+                  <div className="flex items-end gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                     <div className="flex-1">
-                      <Label>Custom Days</Label>
+                      <Label className="font-medium">Custom Days</Label>
                       <Input 
                         type="number" 
                         placeholder="Enter days" 
@@ -2522,7 +2526,9 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <Label className="mb-3 block text-base font-semibold">Period Configuration</Label>
+                  <div className="grid grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="payrollPeriodStart">Period Start Date</Label>
                     <Input
@@ -2555,20 +2561,29 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                       Automatically set to time-out end time from attendance settings
                     </p>
                   </div>
-                </div>
-                
-                {payrollPeriodStart && payrollPeriodEnd && (
-                  <div className="text-sm text-muted-foreground">
-                    <strong>Working Days:</strong> {
-                      calculateWorkingDaysInPhilippines(new Date(payrollPeriodStart), new Date(payrollPeriodEnd))
-                    } days (excludes Sundays)
                   </div>
-                )}
+                  
+                  {payrollPeriodStart && payrollPeriodEnd && (
+                    <div className="mt-4 p-3 bg-slate-100 dark:bg-slate-900/30 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <div className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                        <strong>Working Days:</strong> 
+                        <span className="text-slate-700 dark:text-slate-300">{
+                          calculateWorkingDaysInPhilippines(new Date(payrollPeriodStart), new Date(payrollPeriodEnd))
+                        } days</span>
+                        <span className="text-xs text-muted-foreground">(excludes Sundays)</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 
                 {/* Testing Release Button */}
                 {hasGeneratedForSettings && currentPeriod?.status !== 'Released' && (
-                  <div className="border-t pt-4">
-                    <Label className="text-base font-semibold">🧪 Testing Controls</Label>
+                  <div className="bg-purple-50 dark:bg-purple-950/20 p-4 rounded-xl border-2 border-purple-200 dark:border-purple-800">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <span>🧪</span>
+                      Testing Controls
+                    </Label>
                     <p className="text-xs text-muted-foreground mt-1 mb-3">Development mode only - bypass time restrictions</p>
                     <Button 
                       onClick={handleReleasePayroll} 
@@ -2598,19 +2613,26 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Reschedule Payroll Period
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Configure the next payroll period or reschedule the current one.
-              </p>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 border-b-2 border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-slate-600 to-gray-700 rounded-xl shadow-lg">
+                  <Settings className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-2xl font-bold text-foreground">
+                    Reschedule Payroll Period
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Configure the next payroll period or reschedule the current one.
+                  </p>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium">Period Type</label>
                     <select 
@@ -2652,6 +2674,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                       onChange={(e) => setNextPeriodNotes(e.target.value)}
                     />
                   </div>
+                </div>
                 </div>
                 <div className="flex gap-2">
                   <Button 
@@ -3176,81 +3199,13 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
         </DialogContent>
       </Dialog>
 
-      {/* Archived Individual Breakdown Dialog */}
-      {selectedArchivedEntry && selectedArchivedPeriod && (
-        <PayrollBreakdownDialog
-          entry={{
-            users_id: selectedArchivedEntry.users_id,
-            name: selectedArchivedEntry.user?.name || 'N/A',
-            email: selectedArchivedEntry.user?.email || '',
-            avatar: selectedArchivedEntry.user?.avatar || null,
-            personnelType: selectedArchivedEntry.user?.personnelType?.name || 'N/A',
-            personnelTypeCategory: selectedArchivedEntry.user?.personnelType?.type || null,
-            department: selectedArchivedEntry.user?.personnelType?.department || null,
-            totalWorkHours: selectedArchivedEntry.breakdownSnapshot?.totalWorkHours || 0,
-            finalNetPay: Number(selectedArchivedEntry.netPay),
-            status: 'Archived',
-            breakdown: (() => {
-              const snapshot = selectedArchivedEntry.breakdownSnapshot ? 
-                (typeof selectedArchivedEntry.breakdownSnapshot === 'string' ? 
-                  JSON.parse(selectedArchivedEntry.breakdownSnapshot) : 
-                  selectedArchivedEntry.breakdownSnapshot) : null
-
-              if (!snapshot) {
-                return {
-                  basicSalary: Number(selectedArchivedEntry.basicSalary) || 0,
-                  monthlyBasicSalary: Number(selectedArchivedEntry.user?.personnelType?.basicSalary) || 0,
-                  attendanceDeductions: 0,
-                  leaveDeductions: 0,
-                  loanDeductions: 0,
-                  otherDeductions: Number(selectedArchivedEntry.deductions) || 0,
-                  overloadPay: 0,
-                  attendanceDetails: [],
-                  loanDetails: [],
-                  otherDeductionDetails: []
-                }
-              }
-
-              const monthlyBasic = snapshot.monthlyBasicSalary || Number(selectedArchivedEntry.user?.personnelType?.basicSalary) || 0
-              const semiMonthlyBase = monthlyBasic / 2 // ₱10,000 (matches payslip)
-
-              return {
-                basicSalary: semiMonthlyBase, // Semi-monthly base salary (₱10,000) - MATCHES PAYSLIP
-                monthlyBasicSalary: monthlyBasic, // Monthly reference (₱20,000)
-                attendanceDeductions: Number(snapshot.attendanceDeductions || 0),
-                leaveDeductions: 0,
-                loanDeductions: Number(snapshot.loanPayments || 0),
-                otherDeductions: Number(snapshot.databaseDeductions || 0),
-                overloadPay: Number(snapshot.totalAdditions || 0), // Overload pay (₱8,000)
-                overloadPayDetails: snapshot.overloadPayDetails || [], // Additional pay details with types
-                attendanceDetails: (snapshot.attendanceRecords || []).map((record: any) => ({
-                  date: record.date,
-                  timeIn: record.timeIn,
-                  timeOut: record.timeOut,
-                  workHours: Number(record.workHours || 0),
-                  status: record.status,
-                  deduction: Number(record.deductions || 0)
-                })),
-                loanDetails: [],
-                otherDeductionDetails: (snapshot.deductionDetails || []).map((d: any) => ({
-                  type: d.type,
-                  amount: Number(d.amount),
-                  description: d.description || '-',
-                  isMandatory: d.isMandatory || false
-                }))
-              }
-            })()
-          }}
-          currentPeriod={{
-            periodStart: selectedArchivedPeriod.periodStart,
-            periodEnd: selectedArchivedPeriod.periodEnd,
-            type: 'Semi-Monthly',
-            status: 'Archived'
-          }}
-          isOpen={true}
-          onClose={() => setSelectedArchivedEntry(null)}
-        />
-      )}
+      {/* Archived Individual Payslip Dialog - Matches Personnel/Payroll Layout */}
+      <ArchivedPayrollDetailsDialog
+        entry={selectedArchivedEntry}
+        period={selectedArchivedPeriod}
+        isOpen={!!selectedArchivedEntry}
+        onClose={() => setSelectedArchivedEntry(null)}
+      />
 
     </div>
   )

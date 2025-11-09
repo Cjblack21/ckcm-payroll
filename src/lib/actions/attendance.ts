@@ -950,20 +950,26 @@ export async function getPersonnelHistory(userId: string): Promise<{
         } else if (recordDateString === todayDateString) {
           // Current date - check if we're past the cutoff time (Time Out End)
           const timeOutEnd = attendanceSettings?.timeOutEnd || '21:00' // Default 9:00 PM
+          const timeInEnd = attendanceSettings?.timeInEnd || '05:02' // Time In window end
           const currentPhilTime = getNowInPhilippines()
           const currentTime = getPhilippinesTimeString(currentPhilTime)
           
-          console.log(`🔍 Personnel History Debug - User: ${user.name}, Current Date: ${recordDateString}, Current Time: ${currentTime}, Cutoff: ${timeOutEnd}`)
+          console.log(`🔍 Personnel History Debug - User: ${user.name}, Current Date: ${recordDateString}, Current Time: ${currentTime}, Cutoff: ${timeOutEnd}, Time In End: ${timeInEnd}`)
           
           if (currentTime > timeOutEnd) {
             // Past cutoff - mark as ABSENT and charge deduction (use daily rate)
             statusToShow = 'ABSENT'
             dailyDeductions = dailyRate
             console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: ABSENT (past cutoff ${timeOutEnd}), Daily Deduction: ₱${dailyDeductions.toFixed(2)}`)
+          } else if (currentTime > timeInEnd) {
+            // Past Time In window but before Time Out cutoff - mark as LATE
+            statusToShow = 'LATE'
+            dailyDeductions = 0 // Will calculate actual late deduction when they punch in
+            console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: LATE (past time in window ${timeInEnd}), waiting for punch in`)
           } else {
-            // Still before cutoff - keep as PENDING
+            // Still within Time In window - keep as PENDING
             statusToShow = 'PENDING'
-            console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: PENDING (before cutoff ${timeOutEnd}), can still punch in`)
+            console.log(`🔍 Personnel History Debug - User: ${user.name}, Date: ${recordDateString}, Status: PENDING (before time in end ${timeInEnd}), can still punch in on time`)
           }
         } else {
           // Future date - keep as PENDING

@@ -90,10 +90,10 @@ export default function PayrollBreakdownDialog({
 }: PayrollBreakdownDialogProps) {
   const [attendanceSettings, setAttendanceSettings] = React.useState<any>(null)
   const [expandedItems, setExpandedItems] = React.useState<Set<number>>(new Set())
-  const [deductionTypes, setDeductionTypes] = React.useState<any[]>([])
   const [liveDeductions, setLiveDeductions] = React.useState<any[]>([])
-  const [todayAttendanceStatus, setTodayAttendanceStatus] = React.useState<string | null>(null)
   const [liveLoans, setLiveLoans] = React.useState<any[]>([])
+  const [liveAttendance, setLiveAttendance] = React.useState<any[]>([])
+  const [todayAttendanceStatus, setTodayAttendanceStatus] = React.useState<string | null>(null)
   
   // Load attendance settings for early timeout detection
   React.useEffect(() => {
@@ -110,25 +110,6 @@ export default function PayrollBreakdownDialog({
     }
     if (isOpen) {
       loadSettings()
-    }
-  }, [isOpen])
-  
-  // Load deduction types to get live isMandatory status
-  React.useEffect(() => {
-    async function loadDeductionTypes() {
-      try {
-        const response = await fetch('/api/admin/deduction-types')
-        if (response.ok) {
-          const types = await response.json()
-          setDeductionTypes(types)
-          console.log('🔍 Loaded deduction types:', types.map((t: any) => `${t.name}: isMandatory=${t.isMandatory}`))
-        }
-      } catch (error) {
-        console.error('Error loading deduction types:', error)
-      }
-    }
-    if (isOpen) {
-      loadDeductionTypes()
     }
   }, [isOpen])
   
@@ -210,6 +191,38 @@ export default function PayrollBreakdownDialog({
     }
   }, [isOpen, entry?.users_id, entry?.status])
   
+  // Load live attendance data for this user
+  React.useEffect(() => {
+    async function loadLiveAttendance() {
+      if (!entry?.users_id) return
+      
+      // Skip live data for archived entries
+      if (entry.status === 'Archived') {
+        console.log('⏭️ Skipping live attendance fetch for archived entry')
+        return
+      }
+      
+      console.log('🔍 FETCHING LIVE ATTENDANCE for user:', entry.name, entry.users_id)
+      
+      try {
+        const response = await fetch(`/api/admin/attendance/personnel-history?userId=${entry.users_id}&_t=${Date.now()}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.attendance) {
+            console.log('🔍 Live attendance fetched:', data.attendance.length, 'records')
+            setLiveAttendance(data.attendance)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading live attendance:', error)
+      }
+    }
+    if (isOpen && entry) {
+      setLiveAttendance([])
+      loadLiveAttendance()
+    }
+  }, [isOpen, entry?.users_id, entry?.status])
+  
   // Load live loans for this user to show all active loans/deductions (skip for archived)
   React.useEffect(() => {
     async function loadLiveLoans() {
@@ -269,8 +282,9 @@ export default function PayrollBreakdownDialog({
     // Start with cached deductions from payroll snapshot
     const deductionsMap = new Map()
     
-    // Add all deductions from payroll data
-    entry.breakdown.otherDeductionDetails.forEach((d: any) => {
+    // Add all deductions from payroll data (with null check)
+    const otherDeductionDetails = entry.breakdown?.otherDeductionDetails || []
+    otherDeductionDetails.forEach((d: any) => {
       deductionsMap.set(d.type.toLowerCase(), {
         type: d.type,
         amount: d.amount,
@@ -317,8 +331,10 @@ export default function PayrollBreakdownDialog({
     
     const loansMap = new Map()
     
-    // Add cached loans from payroll
-    entry.breakdown.loanDetails.forEach((item: any) => {
+    // Add cached loans from payroll (with null check)
+    const loanDetails = entry.breakdown?.loanDetails || []
+    console.log('🔍 CACHED LOAN DETAILS from payroll:', loanDetails)
+    loanDetails.forEach((item: any) => {
       loansMap.set(item.type, {
         type: item.type,
         amount: item.amount,
@@ -327,6 +343,7 @@ export default function PayrollBreakdownDialog({
     })
     
     // Override/add with live loans
+    console.log('🔍 LIVE LOANS to merge:', liveLoans)
     liveLoans.forEach((loan: any) => {
       const isDeduction = loan.purpose?.startsWith('[DEDUCTION]')
       const displayName = isDeduction ? loan.purpose : loan.purpose || 'Loan'
@@ -342,7 +359,9 @@ export default function PayrollBreakdownDialog({
       })
     })
     
-    return Array.from(loansMap.values())
+    const merged = Array.from(loansMap.values())
+    console.log('🔍 MERGED LOANS RESULT:', merged)
+    return merged
   }, [entry, liveLoans])
   
   if (!entry) return null
@@ -365,17 +384,19 @@ export default function PayrollBreakdownDialog({
     return `${wholeHours}h ${minutes.toString().padStart(2, '0')}m`
   }
   
-  // Calculate total work hours from attendance details for this period
-  const calculatedTotalWorkHours = entry.breakdown.attendanceDetails.reduce(
+  // Calculate total work hours from attendance details for this period (with null check)
+  // Use live attendance data if available, otherwise fall back to cached data
+  const attendanceDetails = liveAttendance.length > 0 ? liveAttendance : (entry.breakdown?.attendanceDetails || [])
+  const calculatedTotalWorkHours = attendanceDetails.reduce(
     (sum, detail) => sum + (detail.workHours || 0),
     0
   )
   
   // Add today's live absence deduction if applicable
   const todayString = new Date().toISOString().split('T')[0]
-  const hasTodayInRecords = entry.breakdown.attendanceDetails.some(d => d.date.startsWith(todayString))
+  const hasTodayInRecords = attendanceDetails.some(d => d.date.startsWith(todayString))
   const todayAbsenceDeduction = (todayAttendanceStatus === 'ABSENT' && !hasTodayInRecords) 
-    ? entry.breakdown.basicSalary / 11 
+    ? (entry.breakdown?.basicSalary || 0) / 11 
     : 0
 
   // Debug: Log all deductions with their isMandatory flag
@@ -393,14 +414,14 @@ export default function PayrollBreakdownDialog({
       return true
     }
     
-    // If deductionTypes are loaded, check the live data from admin/deduction-types
-    if (deductionTypes.length > 0) {
-      const deductionType = deductionTypes.find((t: any) => 
-        t.name.toLowerCase() === deduction.type.toLowerCase()
+    // If live deductions are loaded, check if this deduction type is mandatory
+    if (liveDeductions.length > 0) {
+      const liveDeduction = liveDeductions.find((d: any) => 
+        d.type?.toLowerCase() === deduction.type?.toLowerCase()
       )
-      if (deductionType) {
-        console.log(`🔍 Live lookup for ${deduction.type}: isMandatory=${deductionType.isMandatory}`)
-        return deductionType.isMandatory === true
+      if (liveDeduction && liveDeduction.isMandatory) {
+        console.log(`🔍 Live lookup for ${deduction.type}: isMandatory=${liveDeduction.isMandatory}`)
+        return true
       }
     }
     
@@ -442,10 +463,50 @@ export default function PayrollBreakdownDialog({
   const actualDeductions = mergedLoans.filter((item: any) => item.type?.startsWith('[DEDUCTION]'))
   const totalLoanPayments = actualLoans.reduce((sum, loan) => sum + loan.amount, 0)
   const totalDeductionPayments = actualDeductions.reduce((sum, ded) => sum + ded.amount, 0)
+  
+  console.log('🎯 ACTUAL LOANS (filtered):', actualLoans)
+  console.log('🎯 ACTUAL DEDUCTIONS (filtered):', actualDeductions)
+  console.log('🎯 Total Loan Payments:', totalLoanPayments)
+  console.log('🎯 Total Deduction Payments:', totalDeductionPayments)
 
-  // Calculate total deductions from all deduction sources
+  // Recalculate attendance deductions from live data FIRST
+  const perSecondRate = 0.031566
+  let recalculatedAttendanceDeductions = 0
+  attendanceDetails.forEach(detail => {
+    if (detail.timeIn) {
+      // Has time-in, calculate late and early deductions
+      const timeIn = new Date(detail.timeIn)
+      const recordDate = new Date(detail.date)
+      const [hours, minutes] = (attendanceSettings?.timeInEnd || '08:02').split(':').map(Number)
+      const expectedTimeIn = new Date(recordDate)
+      expectedTimeIn.setHours(hours, minutes + 1, 0, 0)
+      
+      const lateSeconds = Math.max(0, (timeIn.getTime() - expectedTimeIn.getTime()) / 1000)
+      const lateDeduction = (lateSeconds) * perSecondRate
+      
+      let earlyDeduction = 0
+      if (detail.timeOut && attendanceSettings?.timeOutStart) {
+        const timeOut = new Date(detail.timeOut)
+        const [outHours, outMinutes] = attendanceSettings.timeOutStart.split(':').map(Number)
+        const expectedTimeOut = new Date(recordDate)
+        expectedTimeOut.setHours(outHours, outMinutes, 0, 0)
+        const earlySeconds = Math.max(0, (expectedTimeOut.getTime() - timeOut.getTime()) / 1000)
+        earlyDeduction = (earlySeconds) * perSecondRate
+      }
+      
+      recalculatedAttendanceDeductions += lateDeduction + earlyDeduction
+    } else if (detail.status === 'ABSENT') {
+      // No time-in, use full deduction
+      recalculatedAttendanceDeductions += detail.deduction || 0
+    }
+  })
+  
+  const attendanceDeductionsAmount = recalculatedAttendanceDeductions > 0 ? recalculatedAttendanceDeductions : Number(entry.breakdown?.attendanceDeductions || 0)
+
+  // Calculate total deductions from all deduction sources (with null checks)
+  // Use recalculated attendance deductions instead of cached value
   const totalDeductions = 
-    Number(entry.breakdown.attendanceDeductions) +
+    attendanceDeductionsAmount +
     todayAbsenceDeduction +
     totalLoanPayments +
     totalDeductionPayments +
@@ -453,21 +514,22 @@ export default function PayrollBreakdownDialog({
     totalOtherDeductions
 
   // Get overload pay (additional salary)
-  const overloadPay = Number(entry.breakdown.overloadPay || 0)
+  const overloadPay = Number(entry.breakdown?.overloadPay || 0)
 
   // The breakdown.basicSalary is the semi-monthly base salary WITHOUT overload
   // We need to add overload pay to get the gross pay
-  const storedBasicSalary = Number(entry.breakdown.basicSalary)
+  const storedBasicSalary = Number(entry.breakdown?.basicSalary || 0)
   const grossPay = storedBasicSalary + overloadPay
   
   // Calculate net pay correctly: Gross Pay - Total Deductions
   const netPay = grossPay - totalDeductions
   
   console.log('💰 NET PAY CALCULATION:')
-  console.log('  Monthly Basic Salary:', entry.breakdown.monthlyBasicSalary)
+  console.log('  Monthly Basic Salary:', entry.breakdown?.monthlyBasicSalary)
   console.log('  Stored Basic Salary (includes overload):', storedBasicSalary)
   console.log('  Overload Pay (for display only):', overloadPay)
   console.log('  Gross Pay:', grossPay)
+  console.log('  Recalculated Attendance Deductions:', attendanceDeductionsAmount)
   console.log('  Total Deductions:', totalDeductions)
   console.log('  NET PAY:', netPay)
 
@@ -475,8 +537,8 @@ export default function PayrollBreakdownDialog({
   const deductionBreakdown = [
     {
       label: 'Attendance Deductions',
-      amount: entry.breakdown.attendanceDeductions + todayAbsenceDeduction,
-      percentage: totalDeductions > 0 ? ((entry.breakdown.attendanceDeductions + todayAbsenceDeduction) / totalDeductions) * 100 : 0,
+      amount: attendanceDeductionsAmount + todayAbsenceDeduction,
+      percentage: totalDeductions > 0 ? ((attendanceDeductionsAmount + todayAbsenceDeduction) / totalDeductions) * 100 : 0,
       color: 'bg-red-500',
       description: todayAbsenceDeduction > 0 ? `Late, Absent, Partial Day (includes today: ₱${formatCurrency(todayAbsenceDeduction)})` : 'Late, Absent, Partial Day'
     },
@@ -505,7 +567,7 @@ export default function PayrollBreakdownDialog({
              deduction.type.toLowerCase().includes('bir') ? 'bg-purple-500' :
              'bg-indigo-500',
       description: deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue 
-        ? `${deduction.percentageValue}% of ${formatCurrency(entry.breakdown.monthlyBasicSalary || entry.breakdown.basicSalary * 2)}` 
+        ? `${deduction.percentageValue}% of ${formatCurrency(entry.breakdown?.monthlyBasicSalary || storedBasicSalary * 2)}` 
         : (deduction.description || 'Mandatory payroll deduction'),
       calculationType: deduction.calculationType,
       percentageValue: deduction.percentageValue
@@ -521,8 +583,8 @@ export default function PayrollBreakdownDialog({
   ].filter(item => item.amount > 0)
 
   // Calculate net pay percentage
-  const netPayPercentage = entry.breakdown.basicSalary > 0 
-    ? (netPay / entry.breakdown.basicSalary) * 100 
+  const netPayPercentage = storedBasicSalary > 0 
+    ? (netPay / storedBasicSalary) * 100 
     : 0
 
   return (
@@ -596,20 +658,20 @@ export default function PayrollBreakdownDialog({
 
         <div className="px-6 py-6 space-y-6">
           {/* Monthly Reference Card */}
-          {entry.breakdown.monthlyBasicSalary && (
+          {entry.breakdown?.monthlyBasicSalary && (
             <Card className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Monthly Basic Salary (Reference)</p>
                     <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
-                      {formatCurrency(entry.breakdown.monthlyBasicSalary)}
+                      {formatCurrency(entry.breakdown?.monthlyBasicSalary || 0)}
                     </p>
                   </div>
                   <div className="text-center border-l border-blue-300 dark:border-blue-700 pl-4">
                     <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">Period Salary</p>
                     <p className="text-lg font-semibold text-blue-800 dark:text-blue-300">
-                      {formatCurrency(entry.breakdown.basicSalary)}
+                      {formatCurrency(storedBasicSalary)}
                     </p>
                     <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">(÷ 2 for semi-monthly)</p>
                   </div>
@@ -702,13 +764,13 @@ export default function PayrollBreakdownDialog({
               <CardContent className="p-6">
                 <div className="space-y-2">
                   {/* Monthly Basic Salary Reference */}
-                  {entry.breakdown.monthlyBasicSalary && (
+                  {entry.breakdown?.monthlyBasicSalary && (
                     <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div>
                         <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Monthly Basic Salary</span>
                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">(Reference)</p>
                       </div>
-                      <span className="text-lg font-bold text-blue-900 dark:text-blue-100">{formatCurrency(entry.breakdown.monthlyBasicSalary)}</span>
+                      <span className="text-lg font-bold text-blue-900 dark:text-blue-100">{formatCurrency(entry.breakdown?.monthlyBasicSalary || 0)}</span>
                     </div>
                   )}
                   
@@ -718,11 +780,11 @@ export default function PayrollBreakdownDialog({
                       <span className="text-base font-bold text-green-900 dark:text-green-100">Period Salary (Semi-Monthly)</span>
                       <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">÷ 2 for semi-monthly</p>
                     </div>
-                    <span className="text-2xl font-bold text-green-900 dark:text-green-100">{formatCurrency(entry.breakdown.monthlyBasicSalary ? entry.breakdown.monthlyBasicSalary / 2 : entry.breakdown.basicSalary)}</span>
+                    <span className="text-2xl font-bold text-green-900 dark:text-green-100">{formatCurrency(entry.breakdown?.monthlyBasicSalary ? entry.breakdown.monthlyBasicSalary / 2 : storedBasicSalary)}</span>
                   </div>
                   
                   {/* Additional Pay - Show by type */}
-                  {entry.breakdown.overloadPayDetails && entry.breakdown.overloadPayDetails.length > 0 ? (
+                  {entry.breakdown?.overloadPayDetails && entry.breakdown.overloadPayDetails.length > 0 ? (
                     entry.breakdown.overloadPayDetails.map((detail, idx) => (
                       <div key={idx} className="flex justify-between items-center p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-300 dark:border-emerald-700">
                         <div>
@@ -739,13 +801,13 @@ export default function PayrollBreakdownDialog({
                       </div>
                     ))
                   ) : (
-                    entry.breakdown.overloadPay && entry.breakdown.overloadPay > 0 && (
+                    overloadPay > 0 && (
                       <div className="flex justify-between items-center p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-300 dark:border-emerald-700">
                         <div>
                           <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">+ Additional Pay</span>
                           <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Extra compensation</p>
                         </div>
-                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">+{formatCurrency(entry.breakdown.overloadPay)}</span>
+                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">+{formatCurrency(overloadPay)}</span>
                       </div>
                     )
                   )}
@@ -758,10 +820,10 @@ export default function PayrollBreakdownDialog({
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Deductions</p>
                     
                     {/* Attendance Deductions */}
-                    {entry.breakdown.attendanceDeductions > 0 && (
+                    {attendanceDeductionsAmount > 0 && (
                       <div className="flex justify-between items-center p-2.5 bg-red-50 dark:bg-red-950/20 rounded-lg">
                         <span className="text-sm text-red-700 dark:text-red-300">Attendance Deductions</span>
-                        <span className="font-semibold text-red-700 dark:text-red-300">-{formatCurrency(entry.breakdown.attendanceDeductions)}</span>
+                        <span className="font-semibold text-red-700 dark:text-red-300">-{formatCurrency(attendanceDeductionsAmount)}</span>
                       </div>
                     )}
 
@@ -780,21 +842,35 @@ export default function PayrollBreakdownDialog({
                       </div>
                     ))}
 
-                    {/* Loan Payments */}
-                    {totalLoanPayments > 0 && (
-                      <div className="flex justify-between items-center p-2.5 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg">
-                        <span className="text-sm text-yellow-700 dark:text-yellow-300">Loan Payments</span>
-                        <span className="font-semibold text-yellow-700 dark:text-yellow-300">-{formatCurrency(totalLoanPayments)}</span>
+                    {/* Loan Payments - Show individual loans */}
+                    {actualLoans.map((loan, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2.5 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg">
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{loan.type}</span>
+                          {loan.remainingBalance > 0 && (
+                            <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5">
+                              Remaining: {formatCurrency(loan.remainingBalance)}
+                            </p>
+                          )}
+                        </div>
+                        <span className="font-semibold text-yellow-700 dark:text-yellow-300">-{formatCurrency(loan.amount)}</span>
                       </div>
-                    )}
+                    ))}
 
-                    {/* Other Deductions */}
-                    {totalDeductionPayments > 0 && (
-                      <div className="flex justify-between items-center p-2.5 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
-                        <span className="text-sm text-orange-700 dark:text-orange-300">Other Deductions</span>
-                        <span className="font-semibold text-orange-700 dark:text-orange-300">-{formatCurrency(totalDeductionPayments)}</span>
+                    {/* Deduction Payments - Show individual deductions */}
+                    {actualDeductions.map((deduction, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2.5 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-orange-700 dark:text-orange-300">{deduction.type}</span>
+                          {deduction.remainingBalance > 0 && (
+                            <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                              Remaining: {formatCurrency(deduction.remainingBalance)}
+                            </p>
+                          )}
+                        </div>
+                        <span className="font-semibold text-orange-700 dark:text-orange-300">-{formatCurrency(deduction.amount)}</span>
                       </div>
-                    )}
+                    ))}
 
                     {/* Non-mandatory Other Deductions */}
                     {otherDeductionsOnly.map((deduction, idx) => (
@@ -842,7 +918,7 @@ export default function PayrollBreakdownDialog({
             // Filter out future dates and PENDING status (current day before cutoff) before displaying
             const today = new Date()
             today.setHours(23, 59, 59, 999)
-            const filteredDetails = entry.breakdown.attendanceDetails.filter(detail => {
+            const filteredDetails = attendanceDetails.filter(detail => {
               const recordDate = new Date(detail.date)
               // Don't show future dates
               if (recordDate > today) return false
@@ -937,13 +1013,13 @@ export default function PayrollBreakdownDialog({
                       }
                     }
                     
-                    // Split the total deduction proportionally based on late/early minutes
-                    if (detail.deduction > 0 && (lateMinutes > 0 || earlyMinutes > 0)) {
-                      const totalMinutes = lateMinutes + earlyMinutes
-                      if (totalMinutes > 0) {
-                        lateDeduction = (lateMinutes / totalMinutes) * detail.deduction
-                        earlyDeduction = (earlyMinutes / totalMinutes) * detail.deduction
-                      }
+                    // Calculate late and early deductions independently using per-second rate
+                    const perSecondRate = 0.031566 // This should ideally come from settings
+                    if (lateMinutes > 0) {
+                      lateDeduction = (lateMinutes * 60) * perSecondRate
+                    }
+                    if (earlyMinutes > 0) {
+                      earlyDeduction = (earlyMinutes * 60) * perSecondRate
                     }
                     
                     // Check if this is a future date (shouldn't show as absent)
@@ -951,9 +1027,22 @@ export default function PayrollBreakdownDialog({
                     today.setHours(0, 0, 0, 0) // Start of today
                     const isFutureDate = recordDate > today
                     
-                    // Force absent detection: if no time in/out AND has deduction, it's absent
-                    const isAbsent = !isFutureDate && !detail.timeIn && !detail.timeOut
+                    // Force absent detection: Only mark as absent if status is explicitly ABSENT
+                    // AND we're past the cutoff time (5:01 PM) AND no time-in recorded
+                    const now = new Date()
+                    const currentHour = now.getHours()
+                    const currentMinute = now.getMinutes()
+                    const currentTimeInMinutes = currentHour * 60 + currentMinute
+                    const cutoffTimeInMinutes = 17 * 60 + 1 // 5:01 PM
+                    const isPastCutoff = currentTimeInMinutes > cutoffTimeInMinutes
+                    
+                    // If there's a time-in, they're not absent - they're either LATE or PRESENT
+                    const hasTimeIn = !!detail.timeIn
+                    
+                    // Only show as ABSENT if no time-in AND past cutoff time
+                    const isAbsent = !hasTimeIn && !isFutureDate && (detail.status === 'ABSENT' || isPastCutoff)
                     const isPartial = detail.status === 'PARTIAL' && !isAbsent
+                    const isLateWaiting = !hasTimeIn && !isFutureDate && !isPastCutoff && detail.status === 'ABSENT'
                     
                     console.log('🔍 ABSENT DETECTION:', {
                       date: new Date(detail.date).toLocaleDateString(),
@@ -965,9 +1054,9 @@ export default function PayrollBreakdownDialog({
                       cardColorWillBe: isAbsent ? 'RED' : isLate ? 'ORANGE' : 'GREEN'
                     })
                     
-                    // Calculate absence deduction consistently
+                    // Calculate total deduction based on late and early deductions
                     let displayDeduction = detail.deduction
-                    if (isAbsent && entry.breakdown.basicSalary > 0) {
+                    if (isAbsent && storedBasicSalary > 0) {
                       // Always use the database deduction if available, otherwise calculate
                       if (detail.deduction > 0) {
                         displayDeduction = detail.deduction
@@ -975,17 +1064,20 @@ export default function PayrollBreakdownDialog({
                         // Calculate daily rate: Semi-Monthly Salary / Working Days
                         // Estimate working days as ~11 for semi-monthly period
                         const workingDays = 11
-                        displayDeduction = entry.breakdown.basicSalary / workingDays
+                        displayDeduction = storedBasicSalary / workingDays
                         console.log(`📊 Calculated absence deduction for ${new Date(detail.date).toLocaleDateString()}: ₱${displayDeduction.toFixed(2)}`)
                       }
+                    } else if (isLate || hasEarlyTimeout) {
+                      // For late/early, use the sum of independently calculated deductions
+                      displayDeduction = lateDeduction + earlyDeduction
                     }
                     
                     return (
                       <Card 
                         key={index} 
                         className={`border-l-4 transition-all ${
-                          (isAbsent || detail.workHours === 0) ? 'border-l-red-600 bg-red-50 dark:bg-red-950/20' :
-                          isLate ? 'border-l-orange-500 bg-orange-50 dark:bg-orange-950/20' :
+                          isAbsent ? 'border-l-red-600 bg-red-50 dark:bg-red-950/20' :
+                          (isLate || detail.status === 'LATE') ? 'border-l-orange-500 bg-orange-50 dark:bg-orange-950/20' :
                           hasEarlyTimeout ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20' :
                           isPartial ? 'border-l-purple-500 bg-purple-50 dark:bg-purple-950/20' :
                           'border-l-green-500 bg-green-50 dark:bg-green-950/20'
@@ -1004,8 +1096,20 @@ export default function PayrollBreakdownDialog({
                                 </div>
                               </div>
                               
-                              {/* Time In/Out Details - Show special layout for absent */}
-                              {(isAbsent || detail.workHours === 0) ? (
+                              {/* Time In/Out Details - Show special layout for absent or late waiting */}
+                              {isLateWaiting ? (
+                                <div className="flex-1 flex items-center justify-center">
+                                  <div className="text-center py-2">
+                                    <Clock className="w-8 h-8 mx-auto mb-2 text-orange-500" />
+                                    <Badge variant="outline" className="text-sm px-3 py-1 font-bold bg-orange-50 text-orange-700 border-orange-200">
+                                      LATE
+                                    </Badge>
+                                    <div className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-1">
+                                      Waiting for time in
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (isAbsent || (detail.workHours === 0 && !hasTimeIn)) ? (
                                 <div className="flex-1 flex items-center justify-center">
                                   <div className="text-center py-2">
                                     <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-500" />
@@ -1346,7 +1450,7 @@ export default function PayrollBreakdownDialog({
                                   {deduction.percentageValue}%
                                 </span>
                                 <div className="text-xs text-muted-foreground mt-1">
-                                  {deduction.percentageValue}% of {formatCurrency(entry.breakdown.monthlyBasicSalary || entry.breakdown.basicSalary * 2)}
+                                  {deduction.percentageValue}% of {formatCurrency(entry.breakdown?.monthlyBasicSalary || storedBasicSalary * 2)}
                                 </div>
                               </div>
                             ) : (

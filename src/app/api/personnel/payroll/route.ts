@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
     effectiveEnd.setHours(23,59,59,999)
 
     // Get archived payroll entries (older than effective period)
-    const archivedPayrolls = await prisma.payrollEntry.findMany({
+    const archivedEntries = await prisma.payrollEntry.findMany({
       where: {
         users_id: userId,
         periodEnd: { lt: effectiveStart }
@@ -220,7 +220,27 @@ export async function GET(request: NextRequest) {
       }
     })
     
-    console.log(`Found ${archivedPayrolls.length} archived payroll entries`)
+    // Group archived payrolls by period (same start and end dates)
+    const groupedArchived = new Map<string, any>()
+    archivedEntries.forEach(entry => {
+      const key = `${entry.periodStart.toISOString()}_${entry.periodEnd.toISOString()}`
+      if (!groupedArchived.has(key)) {
+        groupedArchived.set(key, {
+          periodStart: entry.periodStart,
+          periodEnd: entry.periodEnd,
+          status: entry.status,
+          payroll_entries_id: entry.payroll_entries_id, // Use first entry's ID
+          user: entry.user,
+          netPay: entry.netPay,
+          deductions: entry.deductions,
+          breakdownSnapshot: entry.breakdownSnapshot
+        })
+      }
+    })
+    
+    const archivedPayrolls = Array.from(groupedArchived.values())
+    
+    console.log(`Found ${archivedEntries.length} archived payroll entries, grouped into ${archivedPayrolls.length} periods`)
 
     // Get user's deductions and loans for current period
     const deductions = await prisma.deduction.findMany({

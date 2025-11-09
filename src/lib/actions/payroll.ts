@@ -905,6 +905,10 @@ export async function getPayrollSummary(): Promise<{
         })(),
         loanPayments: totalLoanPayments,
         loanDetails: loanDetails,
+        overloadPayDetails: userOverloadPays.map(op => ({
+          type: op.type || 'OVERTIME',
+          amount: Number(op.amount)
+        })),
         // Separate deduction breakdowns for frontend
         attendanceDeductions: totalAttendanceDeductions,
         databaseDeductions: totalDatabaseDeductions,
@@ -1027,13 +1031,8 @@ export async function generatePayroll(): Promise<{
     const periodStart = attendanceSettings.periodStart
     const periodEnd = attendanceSettings.periodEnd
 
-    // Clear any existing payroll entries for the current settings period to force fresh generation
-    await prisma.payrollEntry.deleteMany({
-      where: {
-        periodStart: periodStart,
-        periodEnd: periodEnd
-      }
-    })
+    // Don't delete anything - just stack new payroll entries on top of existing ones
+    // This allows unlimited payroll generations without period restrictions
 
     // Update attendance settings timestamp to signal fresh generation
     await prisma.attendanceSettings.updateMany({
@@ -1049,44 +1048,26 @@ export async function generatePayroll(): Promise<{
 
     const summary = freshSummaryResult.summary!
 
-    // Create/update payroll entries in database without relying on a composite unique constraint
+    // Always create NEW payroll entries - no period restriction
+    // This allows multiple payrolls for the same person in the same period
     for (const entry of summary.payrollEntries) {
       const periodStartDate = new Date(summary.periodStart)
       const periodEndDate = new Date(summary.periodEnd)
 
-      const existing = await prisma.payrollEntry.findFirst({
-        where: {
+      // Always create a new entry - stack them all!
+      await prisma.payrollEntry.create({
+        data: {
           users_id: entry.users_id,
           periodStart: periodStartDate,
-          periodEnd: periodEndDate
+          periodEnd: periodEndDate,
+          basicSalary: entry.grossSalary,
+          overtime: 0,
+          deductions: entry.totalDeductions,
+          netPay: entry.netSalary,
+          status: 'PENDING',
+          createdAt: new Date() // Track when each payroll was generated
         }
       })
-
-      if (existing) {
-        await prisma.payrollEntry.update({
-          where: { payroll_entries_id: existing.payroll_entries_id },
-          data: {
-            basicSalary: entry.grossSalary,
-            overtime: 0,
-            deductions: entry.totalDeductions,
-            netPay: entry.netSalary,
-            status: 'PENDING'
-          }
-        })
-      } else {
-        await prisma.payrollEntry.create({
-          data: {
-            users_id: entry.users_id,
-            periodStart: periodStartDate,
-            periodEnd: periodEndDate,
-            basicSalary: entry.grossSalary,
-            overtime: 0,
-            deductions: entry.totalDeductions,
-            netPay: entry.netSalary,
-            status: 'PENDING'
-          }
-        })
-      }
     }
 
     // Auto-archive all RELEASED payroll entries when generating new payroll
@@ -1165,12 +1146,12 @@ export async function releasePayroll(entryIds: string[]): Promise<{
       )
       
       if (summaryEntry) {
-        // Create snapshot of ALL breakdown information
+        // Create snapshot of ALL breakdown information including detailed breakdowns
         const breakdownSnapshot = {
           monthlyBasicSalary: summaryEntry.personnelType?.basicSalary,
           periodSalary: summaryEntry.grossSalary,
           totalDeductions: summaryEntry.totalDeductions,
-          totalAdditions: summaryEntry.totalAdditions || 0, // Overload pay
+          totalAdditions: summaryEntry.totalAdditions || 0, // Overload pay total
           netPay: summaryEntry.netSalary,
           totalWorkHours: summaryEntry.totalWorkHours,
           attendanceDeductions: summaryEntry.attendanceDeductions,
@@ -1178,6 +1159,8 @@ export async function releasePayroll(entryIds: string[]): Promise<{
           loanPayments: summaryEntry.loanPayments,
           attendanceRecords: summaryEntry.attendanceRecords,
           deductionDetails: summaryEntry.deductionDetails,
+          loanDetails: summaryEntry.loanDetails || [], // Individual loan breakdown
+          overloadPayDetails: summaryEntry.overloadPayDetails || [], // Individual additional pay breakdown
           personnelType: summaryEntry.personnelType?.name
         }
         

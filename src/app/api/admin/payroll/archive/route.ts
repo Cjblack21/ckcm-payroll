@@ -143,8 +143,24 @@ export async function GET(request: NextRequest) {
       acc[periodKey].totalLoanPayments += loanPayments
       acc[periodKey].totalNetPay += netPay
       
-      // Add employee to payrolls array
-      acc[periodKey].payrolls.push(payroll)
+      // Add employee to payrolls array with parsed snapshot
+      const payrollWithSnapshot = {
+        ...payroll,
+        snapshot: snapshot // Add parsed snapshot to the payroll object
+      }
+      
+      // Log first entry to verify snapshot is included
+      if (acc[periodKey].payrolls.length === 0) {
+        console.log('📦 First payroll entry with snapshot:', {
+          users_id: payroll.users_id,
+          hasSnapshot: !!snapshot,
+          snapshotKeys: snapshot ? Object.keys(snapshot) : [],
+          periodSalary: snapshot?.periodSalary,
+          netPay: snapshot?.netPay
+        })
+      }
+      
+      acc[periodKey].payrolls.push(payrollWithSnapshot)
       
       return acc
     }, {} as any)

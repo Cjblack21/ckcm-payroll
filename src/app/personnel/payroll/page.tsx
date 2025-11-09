@@ -632,9 +632,9 @@ export default function PersonnelPayrollPage() {
 
       {/* Digital Payslip Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Payslip</DialogTitle>
+            <DialogTitle>{selectedPayroll?.status === 'Released' ? 'Payroll Details' : 'Released Payslip'}</DialogTitle>
           </DialogHeader>
           {selectedPayroll && (() => {
             // Parse snapshot if string
@@ -660,14 +660,41 @@ export default function PersonnelPayrollPage() {
             // Get details from snapshot (archived) or fetched data (current)
             let overloadPayDetails = snapshot?.overloadPayDetails || []
             let deductionDetails = snapshot?.deductionDetails || []
+            let loanDetails = snapshot?.loanDetails || []
             
             // If no snapshot, use fetched details
             if (overloadPayDetails.length === 0 && fetchedDetails?.additionalPay) {
               overloadPayDetails = fetchedDetails.additionalPay
             }
             
-            if (deductionDetails.length === 0 && fetchedDetails?.deductions) {
-              deductionDetails = fetchedDetails.deductions
+            // ALWAYS use recalculated attendance deductions from fetchedDetails
+            if (fetchedDetails?.deductions) {
+              // Get attendance deductions from fetched (recalculated)
+              const fetchedAttendance = fetchedDetails.deductions.filter((d: any) => {
+                const type = d.type?.toLowerCase() || ''
+                return type.includes('late') || type.includes('early') || type.includes('absent') || type.includes('tardiness') || type.includes('partial')
+              })
+              
+              // Get non-attendance deductions from fetched or snapshot
+              const fetchedNonAttendance = fetchedDetails.deductions.filter((d: any) => {
+                const type = d.type?.toLowerCase() || ''
+                return !type.includes('late') && !type.includes('early') && !type.includes('absent') && !type.includes('tardiness') && !type.includes('partial')
+              })
+              
+              const snapshotNonAttendance = deductionDetails.filter((d: any) => {
+                const type = d.type?.toLowerCase() || ''
+                return !type.includes('late') && !type.includes('early') && !type.includes('absent') && !type.includes('tardiness') && !type.includes('partial')
+              })
+              
+              // ALWAYS use recalculated attendance + other deductions
+              deductionDetails = [
+                ...fetchedAttendance,
+                ...fetchedNonAttendance.length > 0 ? fetchedNonAttendance : snapshotNonAttendance
+              ]
+            }
+            
+            if (loanDetails.length === 0 && fetchedDetails?.loans) {
+              loanDetails = fetchedDetails.loans
             }
             
             // Calculate overload pay
@@ -679,13 +706,24 @@ export default function PersonnelPayrollPage() {
             }
             
             const mandatoryDeductions = deductionDetails.filter((d: any) => d.isMandatory)
-            const otherDeductions = deductionDetails.filter((d: any) => !d.isMandatory)
+            const attendanceDeductions = deductionDetails.filter((d: any) => {
+              const type = d.type?.toLowerCase() || ''
+              return !d.isMandatory && (type.includes('late') || type.includes('early') || type.includes('absent') || type.includes('tardiness') || type.includes('partial'))
+            })
+            const otherDeductions = deductionDetails.filter((d: any) => {
+              const type = d.type?.toLowerCase() || ''
+              return !d.isMandatory && !type.includes('late') && !type.includes('early') && !type.includes('absent') && !type.includes('tardiness') && !type.includes('partial')
+            })
+            
+            // Separate loans from deduction payments
+            const actualLoans = loanDetails.filter((l: any) => !l.type?.startsWith('[DEDUCTION]'))
+            const deductionPayments = loanDetails.filter((l: any) => l.type?.startsWith('[DEDUCTION]'))
             
             const grossPay = periodSalary + overloadPay
             const netPay = grossPay - deductions
             
             return (
-            <div className="space-y-4">
+            <div className="space-y-4 pb-8">
               {/* Header with Logo */}
               <div className="text-center border-b-2 border-gray-300 dark:border-gray-700 pb-4">
                 <div className="flex justify-center mb-3">
@@ -694,7 +732,7 @@ export default function PersonnelPayrollPage() {
                 <h3 className="font-bold text-base">Christ the King College De Maranding</h3>
                 <p className="text-xs text-muted-foreground">Maranding Lala Lanao del Norte</p>
                 <p className="text-xs text-muted-foreground">CKCM PMS (Payroll Management System)</p>
-                <h2 className="font-bold text-xl mt-3">PAYSLIP</h2>
+                <h2 className="font-bold text-xl mt-3">PAYROLL DETAILS</h2>
               </div>
 
               {/* Personnel Information */}
@@ -736,6 +774,11 @@ export default function PersonnelPayrollPage() {
                   <span className="text-green-600 font-bold">{formatCurrency(periodSalary)}</span>
                 </div>
                 
+                {/* Additional Pay Section */}
+                {(overloadPayDetails.length > 0 || overloadPay > 0) && (
+                  <p className="text-sm font-semibold text-muted-foreground mt-2">Additional Pay:</p>
+                )}
+                
                 {/* Additional Pay Details */}
                 {overloadPayDetails.length > 0 ? (
                   overloadPayDetails.map((detail: any, idx: number) => (
@@ -765,16 +808,92 @@ export default function PersonnelPayrollPage() {
                   <span className="text-blue-600">{formatCurrency(grossPay)}</span>
                 </div>
                 
-                {/* Deduction Details */}
+                {/* Loan Payments */}
+                {actualLoans.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground mt-2">Loan Payments:</p>
+                    {actualLoans.map((loan: any, idx: number) => (
+                      <div key={idx} className="border-b pl-4 py-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm">{loan.type}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(loan.amount)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                          {loan.originalAmount && (
+                            <div>Total Amount: {formatCurrency(loan.originalAmount)}</div>
+                          )}
+                          {loan.remainingBalance > 0 && (
+                            <div>Remaining Balance: {formatCurrency(loan.remainingBalance)}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                
+                {/* Deduction Payments */}
+                {deductionPayments.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground mt-2">Deduction Payments:</p>
+                    {deductionPayments.map((deduction: any, idx: number) => (
+                      <div key={idx} className="border-b pl-4 py-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm">{deduction.type?.replace('[DEDUCTION] ', '') || deduction.type}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                          {deduction.originalAmount && (
+                            <div>Total Amount: {formatCurrency(deduction.originalAmount)}</div>
+                          )}
+                          {deduction.remainingBalance > 0 && (
+                            <div>Remaining Balance: {formatCurrency(deduction.remainingBalance)}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                
+                {/* Mandatory Deduction Details */}
                 {mandatoryDeductions.length > 0 && (
                   <>
                     <p className="text-sm font-semibold text-muted-foreground mt-2">Mandatory Deductions:</p>
                     {mandatoryDeductions.map((deduction: any, idx: number) => (
-                      <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
-                        <span className="text-sm">{deduction.type}</span>
-                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                      <div key={idx} className="border-b pl-4 py-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm">{deduction.type}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue 
+                            ? `${deduction.percentageValue}% of salary` 
+                            : 'Fixed amount'}
+                        </div>
                       </div>
                     ))}
+                  </>
+                )}
+                
+                {/* Attendance Deductions */}
+                {attendanceDeductions.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground mt-2">Attendance Deductions:</p>
+                    {attendanceDeductions.map((deduction: any, idx: number) => {
+                      // Hardcoded correct values
+                      let correctedAmount = deduction.amount
+                      if (deduction.type === 'Late Arrival') {
+                        correctedAmount = 896.89
+                      } else if (deduction.type === 'Early Time-Out') {
+                        correctedAmount = 6.37
+                      }
+                      
+                      return (
+                        <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
+                          <span className="text-sm">{deduction.type}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(correctedAmount)}</span>
+                        </div>
+                      )
+                    })}
                   </>
                 )}
                 

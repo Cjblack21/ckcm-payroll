@@ -63,12 +63,22 @@ export async function POST(request: NextRequest) {
     if (body.periodStart && body.periodEnd) {
       periodStart = new Date(body.periodStart)
       periodEnd = new Date(body.periodEnd)
-      console.log('📅 Using provided period:', periodStart.toISOString(), 'to', periodEnd.toISOString())
+      console.log('📅 Using provided period:', {
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+        periodStartTime: periodStart.getTime(),
+        periodEndTime: periodEnd.getTime()
+      })
     } else {
       const currentPeriod = getCurrentBiweeklyPeriod()
       periodStart = currentPeriod.periodStart
       periodEnd = currentPeriod.periodEnd
-      console.log('📅 Using current period:', periodStart.toISOString(), 'to', periodEnd.toISOString())
+      console.log('📅 Using current period:', {
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+        periodStartTime: periodStart.getTime(),
+        periodEndTime: periodEnd.getTime()
+      })
     }
 
     // USE STORED PAYROLL DATA APPROACH: Get existing payroll entries with correct breakdown
@@ -97,11 +107,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Get stored payroll entries for the period (same as archive route)
-    // Use date range to handle timezone differences
-    const payrollEntries = await prisma.payrollEntry.findMany({
+    // First, let's see what's actually in the database
+    const allPayrollEntries = await prisma.payrollEntry.findMany({
+      select: {
+        periodStart: true,
+        periodEnd: true,
+        status: true
+      },
+      take: 10,
+      orderBy: {
+        periodStart: 'desc'
+      }
+    })
+    console.log('🔍 Recent payroll entries in database:', allPayrollEntries.map(e => ({
+      periodStart: e.periodStart.toISOString(),
+      periodEnd: e.periodEnd.toISOString(),
+      periodStartTime: e.periodStart.getTime(),
+      periodEndTime: e.periodEnd.getTime(),
+      status: e.status
+    })))
+    
+    // First try exact date match
+    let payrollEntries = await prisma.payrollEntry.findMany({
       where: { 
-        periodStart: { gte: new Date(periodStart.getTime() - 86400000), lte: new Date(periodStart.getTime() + 86400000) },
-        periodEnd: { gte: new Date(periodEnd.getTime() - 86400000), lte: new Date(periodEnd.getTime() + 86400000) }
+        periodStart: periodStart,
+        periodEnd: periodEnd
       },
       include: {
         user: { 
@@ -118,7 +148,34 @@ export async function POST(request: NextRequest) {
         }
       }
     })
-    console.log('👥 Found stored payroll entries:', payrollEntries.length)
+    
+    console.log('👥 Found stored payroll entries (exact match):', payrollEntries.length)
+    
+    // If no exact match, try with date range tolerance for timezone differences
+    if (payrollEntries.length === 0) {
+      console.log('⚠️ No exact match found, trying with date range tolerance...')
+      payrollEntries = await prisma.payrollEntry.findMany({
+        where: { 
+          periodStart: { gte: new Date(periodStart.getTime() - 86400000), lte: new Date(periodStart.getTime() + 86400000) },
+          periodEnd: { gte: new Date(periodEnd.getTime() - 86400000), lte: new Date(periodEnd.getTime() + 86400000) }
+        },
+        include: {
+          user: { 
+            select: { 
+              users_id: true, 
+              name: true, 
+              email: true,
+              personnelType: {
+                select: {
+                  basicSalary: true
+                }
+              }
+            } 
+          }
+        }
+      })
+      console.log('👥 Found stored payroll entries (with tolerance):', payrollEntries.length)
+    }
 
     // Use stored payroll data directly - no need for fresh calculations
     if (payrollEntries.length === 0) {
@@ -230,17 +287,39 @@ export async function POST(request: NextRequest) {
           const timeIn = new Date(record.timeIn)
           const expected = new Date(record.date)
           const [h, m] = timeInEnd.split(':').map(Number)
-          expected.setHours(h, m, 0, 0)
+          expected.setHours(h, m + 1, 0, 0) // Add 1 minute grace period
           const perSecond = dailySalary / 8 / 60 / 60
           const secondsLate = Math.max(0, (timeIn.getTime() - expected.getTime()) / 1000)
-          const amount = Math.min(secondsLate * perSecond, dailySalary * 0.5)
-          if (amount > 0) {
+          const lateAmount = secondsLate * perSecond // Remove 50% cap
+          
+          // Check for early timeout
+          let earlyAmount = 0
+          if (record.timeOut && attendanceSettings?.timeOutStart) {
+            const timeOut = new Date(record.timeOut)
+            const expectedTimeOut = new Date(record.date)
+            const [outH, outM] = attendanceSettings.timeOutStart.split(':').map(Number)
+            expectedTimeOut.setHours(outH, outM, 0, 0)
+            const secondsEarly = Math.max(0, (expectedTimeOut.getTime() - timeOut.getTime()) / 1000)
+            earlyAmount = secondsEarly * perSecond
+          }
+          
+          if (lateAmount > 0) {
             attendanceDeductionDetails.push({
               date: record.date.toISOString().split('T')[0],
-              amount: amount,
+              amount: lateAmount,
               description: `Late arrival - ${Math.round(secondsLate / 60)} minutes late`
             })
-            totalAttendanceDeductions += amount
+            totalAttendanceDeductions += lateAmount
+          }
+          
+          if (earlyAmount > 0 && record.timeOut) {
+            const minutesEarly = Math.round(earlyAmount / perSecond / 60)
+            attendanceDeductionDetails.push({
+              date: record.date.toISOString().split('T')[0],
+              amount: earlyAmount,
+              description: `Early departure - ${minutesEarly} minutes early`
+            })
+            totalAttendanceDeductions += earlyAmount
           }
         } else if (record.status === 'PARTIAL') {
           let hoursWorked = 0
@@ -417,12 +496,11 @@ export async function POST(request: NextRequest) {
             ` : ''}
             
             ${(() => {
-              const actualLoans = breakdown.loanDetails?.filter((loan: any) => !loan.type?.startsWith('[DEDUCTION]')) || []
-              const deductionPayments = breakdown.loanDetails?.filter((loan: any) => loan.type?.startsWith('[DEDUCTION]')) || []
+              // Show actual loans (not [DEDUCTION] items)
+              const actualLoans = breakdown.loanDetails || []
               
               let html = ''
               
-              // Show actual loans
               if (actualLoans.length > 0) {
                 html += `
                   <div class="deduction-section">
@@ -431,21 +509,6 @@ export async function POST(request: NextRequest) {
                       <div class="detail-row deduction-detail">
                         <span>${loan.description}</span>
                         <span class="deduction">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                      </div>
-                    `).join('')}
-                  </div>
-                `
-              }
-              
-              // Show deduction payments separately
-              if (deductionPayments.length > 0) {
-                html += `
-                  <div class="deduction-section">
-                    <div class="deduction-title">Deduction Payments:</div>
-                    ${deductionPayments.map((ded: any) => `
-                      <div class="detail-row deduction-detail">
-                        <span>${ded.description}</span>
-                        <span class="deduction">-₱${ded.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                     `).join('')}
                   </div>
@@ -547,7 +610,8 @@ export async function POST(request: NextRequest) {
           }
           .payslip-card {
             width: 3.6in;
-            height: 3.8in;
+            min-height: 3.8in;
+            height: auto;
             border: 1px solid #000;
             padding: 6px;
             font-size: 12px;
@@ -556,7 +620,7 @@ export async function POST(request: NextRequest) {
             flex-direction: column;
             background: white;
             box-sizing: border-box;
-            overflow: hidden;
+            overflow: visible;
             position: absolute;
           }
           .payslip-card:nth-child(1) { top: 0.1in; left: 0.1in; }

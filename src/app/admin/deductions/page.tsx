@@ -1479,7 +1479,7 @@ export default function DeductionsPage() {
                   </TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Department</TableHead>
-                  <TableHead>Deduction Type</TableHead>
+                  <TableHead>Deduction Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Salary</TableHead>
                   <TableHead>Amount</TableHead>

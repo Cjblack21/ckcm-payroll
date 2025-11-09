@@ -860,9 +860,10 @@ export default function LoansPage() {
                 <TableHead className="font-semibold">Personnel</TableHead>
                 <TableHead className="font-semibold">Email</TableHead>
                 <TableHead className="font-semibold">Department</TableHead>
+                <TableHead className="font-semibold">Purpose</TableHead>
                 <TableHead className="font-semibold">Type</TableHead>
                 <TableHead className="font-semibold">Amount</TableHead>
-                <TableHead className="font-semibold">Balance</TableHead>
+                <TableHead className="font-semibold">Remaining Balance</TableHead>
                 <TableHead className="font-semibold">Per Payroll Payment</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="font-semibold">Date Applied</TableHead>
@@ -895,6 +896,11 @@ export default function LoansPage() {
                     <TableCell>
                       <div className="max-w-[220px] truncate text-muted-foreground text-xs">
                         {i.department || '-'}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="max-w-[200px] truncate">
+                        {i.purpose?.replace('[DEDUCTION] ', '') || '-'}
                       </div>
                     </TableCell>
                     <TableCell>
