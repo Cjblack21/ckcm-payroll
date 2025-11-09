@@ -174,8 +174,8 @@ function LiveWorkHours({ userId, totalWorkHours, now }: { userId: string; totalW
           
           console.log(`📊 LiveWorkHours for user ${userId}:`, todayRecord)
           setAttendanceData({
-            timeIn: todayRecord?.timeIn || null,
-            timeOut: todayRecord?.timeOut || null,
+            timeIn: todayRecord?.timeIn ? String(todayRecord.timeIn) : null,
+            timeOut: todayRecord?.timeOut ? String(todayRecord.timeOut) : null,
             status: todayRecord?.status || null
           })
         }
