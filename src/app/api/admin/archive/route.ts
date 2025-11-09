@@ -75,14 +75,30 @@ export async function GET() {
         }
       }
       
+      // Parse breakdown snapshot to get deduction details
+      let attendanceDeductions = 0
+      let loanPayments = 0
+      let otherDeductions = 0
+      
+      if (payroll.breakdownSnapshot) {
+        try {
+          const breakdown = JSON.parse(payroll.breakdownSnapshot)
+          attendanceDeductions = Number(breakdown.attendanceDeductions || 0)
+          loanPayments = Number(breakdown.loanDeductions || 0)
+          otherDeductions = Number(breakdown.otherDeductions || 0)
+        } catch (e) {
+          console.error('Error parsing breakdown snapshot:', e)
+        }
+      }
+      
       // Accumulate totals
       acc[periodKey].totalEmployees++
       acc[periodKey].totalExpenses += Number(payroll.basicSalary)
       acc[periodKey].totalGrossSalary += Number(payroll.basicSalary)
       acc[periodKey].totalDeductions += Number(payroll.deductions)
-      acc[periodKey].totalAttendanceDeductions += Number(payroll.attendanceDeductions || 0)
-      acc[periodKey].totalDatabaseDeductions += Number(payroll.databaseDeductions || 0)
-      acc[periodKey].totalLoanPayments += Number(payroll.loanPayments || 0)
+      acc[periodKey].totalAttendanceDeductions += attendanceDeductions
+      acc[periodKey].totalDatabaseDeductions += otherDeductions
+      acc[periodKey].totalLoanPayments += loanPayments
       acc[periodKey].totalNetPay += Number(payroll.netPay)
       
       // Add employee to payrolls array
