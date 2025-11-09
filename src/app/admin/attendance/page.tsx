@@ -975,7 +975,7 @@ export default function AttendancePage() {
                                           // Calculate live work hours
                                           const isCurrentlyWorking = record.timeIn && !record.timeOut
                                           const liveWorkHours = isCurrentlyWorking 
-                                            ? (currentTime.getTime() - new Date(record.timeIn).getTime()) / (1000 * 60 * 60)
+                                            ? (currentTime.getTime() - new Date(record.timeIn!).getTime()) / (1000 * 60 * 60)
                                             : record.workHours
                                           
                                           return (
