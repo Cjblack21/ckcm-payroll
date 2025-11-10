@@ -244,10 +244,34 @@ export function parseDateInputToPhilippines(dateInput: string): Date {
 
 /**
  * Format date for display in Philippines timezone
+ * Uses date-fns-tz to ensure correct date display without timezone conversion issues
  */
-export function formatDateForDisplay(date: Date, options?: Intl.DateTimeFormatOptions): string {
-  return date.toLocaleDateString('en-GB', { 
-    timeZone: PHILIPPINES_TIMEZONE,
-    ...options
-  })
+export function formatDateForDisplay(date: Date | string, options?: Intl.DateTimeFormatOptions): string {
+  // If it's a string in ISO format, extract the date part directly
+  if (typeof date === 'string' && date.includes('T')) {
+    // For ISO strings like "2025-11-10T00:00:00.000Z" or "2025-11-09T16:00:00.000Z"
+    // We need to convert to Philippines timezone first
+    const dateObj = new Date(date)
+    const phDate = toZonedTime(dateObj, PHILIPPINES_TIMEZONE)
+    
+    const year = phDate.getFullYear()
+    const month = phDate.getMonth() + 1
+    const day = phDate.getDate()
+    
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+  }
+  
+  // Convert to Date object if it's a string
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  
+  // Extract date components in Philippines timezone
+  const phDate = toZonedTime(dateObj, PHILIPPINES_TIMEZONE)
+  
+  // Get the year, month, and day in Philippines timezone
+  const year = phDate.getFullYear()
+  const month = phDate.getMonth() + 1 // getMonth() returns 0-11
+  const day = phDate.getDate()
+  
+  // Return in dd/mm/yyyy format
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
 }

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Calendar, FileText, Archive, Clock, ChevronDown, ChevronUp } from 'lucide-react'
+import { Calendar, FileText, Clock, ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
 import PayrollBreakdownDialog from '@/components/payroll/PayrollBreakdownDialog'
 
@@ -395,10 +395,27 @@ export default function PersonnelPayrollPage() {
         const periodSalary = monthlyBasic / 2
         const dbNetPay = Number(latestPayroll.netPay || 0)
         const deductions = Number(latestPayroll.deductions || 0)
-        let overloadPay = Number(snapshot?.totalAdditions || 0)
-        if (overloadPay === 0 && dbNetPay > periodSalary) {
-          overloadPay = dbNetPay - periodSalary + deductions
+        
+        // Calculate additional pay from snapshot or derive from net pay
+        // Always calculate from net pay formula for accuracy
+        // Formula: netPay = periodSalary + overloadPay - deductions
+        // Therefore: overloadPay = netPay - periodSalary + deductions
+        const calculatedOverload = dbNetPay - periodSalary + deductions
+        let overloadPay = calculatedOverload > 0 ? calculatedOverload : 0
+        
+        // Use snapshot value if it exists and is greater than calculated
+        if (snapshot?.totalAdditions && Number(snapshot.totalAdditions) > overloadPay) {
+          overloadPay = Number(snapshot.totalAdditions)
         }
+        
+        console.log('💰 Additional Pay Calculation:', {
+          snapshot: snapshot?.totalAdditions,
+          calculated: dbNetPay - periodSalary + deductions,
+          final: overloadPay,
+          netPay: dbNetPay,
+          periodSalary,
+          deductions
+        })
         
         return (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">

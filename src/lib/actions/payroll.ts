@@ -1343,7 +1343,24 @@ export async function releasePayrollWithAudit(nextPeriodStart?: string, nextPeri
 
     // Atomically: release current period entries and persist next period in AttendanceSettings
     const updateResult = await prisma.$transaction(async (tx) => {
-      // Release all pending entries for current period
+      // FIRST: Auto-archive all previous RELEASED payrolls (before releasing new ones)
+      const archivedResult = await tx.payrollEntry.updateMany({
+        where: {
+          status: 'RELEASED',
+          // Archive payrolls from periods before the current one
+          periodEnd: { lt: startOfDayPH }
+        },
+        data: {
+          status: 'ARCHIVED',
+          archivedAt: new Date()
+        }
+      })
+      
+      if (archivedResult.count > 0) {
+        console.log(`📦 Auto-archived ${archivedResult.count} previous RELEASED payroll entries`)
+      }
+
+      // THEN: Release all pending entries for current period
       const res = await tx.payrollEntry.updateMany({
         where: {
           periodStart: { gte: startOfDayPH },

@@ -195,11 +195,13 @@ export async function GET(request: NextRequest) {
     const effectiveEnd = new Date(effectiveEndRaw)
     effectiveEnd.setHours(23,59,59,999)
 
-    // Get archived payroll entries (older than effective period)
+    // Get archived payroll entries (RELEASED or ARCHIVED status, excluding current payroll)
     const archivedEntries = await prisma.payrollEntry.findMany({
       where: {
         users_id: userId,
-        periodEnd: { lt: effectiveStart }
+        status: { in: ['RELEASED', 'ARCHIVED'] },
+        // Exclude the current payroll if it exists
+        ...(currentPayroll ? { NOT: { payroll_entries_id: currentPayroll.payroll_entries_id } } : {})
       },
       include: {
         user: {

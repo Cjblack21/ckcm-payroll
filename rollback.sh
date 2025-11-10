@@ -1,28 +1,27 @@
 #!/bin/bash
 
 # ============================================
-# PMS Deployment Script - Error-Free Version
+# PMS Rollback Script
 # Server: 72.60.233.210
 # Path: /var/www/pms
 # ============================================
 
-set -e  # Exit on any error
+set -e
 
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${BLUE}🚀 Starting deployment to Hostinger VPS...${NC}"
+echo -e "${YELLOW}⚠️  Starting rollback to previous version...${NC}"
 echo "=================================================="
 
-# SSH into server and deploy with error handling
+# SSH into server and rollback
 ssh root@72.60.233.210 << 'ENDSSH'
-set -e  # Exit on error
+set -e
 
-# Color codes for remote
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -30,14 +29,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}📂 Navigating to project directory...${NC}"
-cd /var/www/pms || { echo -e "${RED}❌ Failed to navigate to /var/www/pms${NC}"; exit 1; }
+cd /var/www/pms || { echo -e "${RED}❌ Failed to navigate${NC}"; exit 1; }
 
-echo -e "${BLUE}📦 Pulling latest code from Git...${NC}"
-git pull origin main || { echo -e "${RED}❌ Git pull failed${NC}"; exit 1; }
-
-echo -e "${BLUE}🧹 Cleaning old build and cache...${NC}"
-rm -rf .next
-rm -rf node_modules/.cache
+echo -e "${YELLOW}⏪ Rolling back to previous commit...${NC}"
+git reset --hard HEAD~1 || { echo -e "${RED}❌ Rollback failed${NC}"; exit 1; }
 
 echo -e "${BLUE}📚 Installing dependencies...${NC}"
 npm install --legacy-peer-deps || { echo -e "${RED}❌ npm install failed${NC}"; exit 1; }
@@ -45,23 +40,13 @@ npm install --legacy-peer-deps || { echo -e "${RED}❌ npm install failed${NC}";
 echo -e "${BLUE}🗄️ Generating Prisma Client...${NC}"
 npx prisma generate || { echo -e "${RED}❌ Prisma generate failed${NC}"; exit 1; }
 
-echo -e "${BLUE}🗄️ Running database migrations...${NC}"
-npx prisma migrate deploy || { echo -e "${YELLOW}⚠️ Migration warning - continuing...${NC}"; }
-
-echo -e "${BLUE}🏗️ Building Next.js application...${NC}"
+echo -e "${BLUE}🏗️ Building application...${NC}"
 NODE_ENV=production npm run build || { echo -e "${RED}❌ Build failed${NC}"; exit 1; }
 
 echo -e "${BLUE}♻️ Restarting application...${NC}"
-if pm2 list | grep -q "pms"; then
-    echo -e "${GREEN}Restarting existing PM2 process...${NC}"
-    pm2 restart pms
-else
-    echo -e "${GREEN}Starting new PM2 process...${NC}"
-    pm2 start npm --name "pms" -- start
-    pm2 save
-fi
+pm2 restart pms || { echo -e "${RED}❌ Restart failed${NC}"; exit 1; }
 
-echo -e "${GREEN}✅ Deployment complete!${NC}"
+echo -e "${GREEN}✅ Rollback complete!${NC}"
 echo ""
 echo -e "${BLUE}📊 PM2 Status:${NC}"
 pm2 status
@@ -75,13 +60,13 @@ ENDSSH
 if [ $? -eq 0 ]; then
     echo ""
     echo -e "${GREEN}=================================================="
-    echo -e "🎉 Deployment finished successfully!"
-    echo -e "🌐 Your app should be live at your domain"
+    echo -e "✅ Rollback completed successfully!"
+    echo -e "🔙 Application reverted to previous version"
     echo -e "==================================================${NC}"
 else
     echo ""
     echo -e "${RED}=================================================="
-    echo -e "❌ Deployment failed! Check the errors above."
+    echo -e "❌ Rollback failed! Manual intervention required."
     echo -e "==================================================${NC}"
     exit 1
 fi

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Calendar, Clock, Banknote, FileText, Archive, Printer, Download, Settings, Save, Eye, CheckCircle2, Trash2, CheckSquare, Square, MoreVertical, Search, X, AlertCircle } from 'lucide-react'
+import { Calendar, Clock, Banknote, FileText, Archive, Printer, Download, Settings, Save, Eye, CheckCircle2, Trash2, CheckSquare, Square, MoreVertical, Search, X, AlertCircle, Users, TrendingUp } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { getPayrollSummary, releasePayrollWithAudit, generatePayslips } from '@/lib/actions/payroll'
 import { getCurrentDayAttendance } from '@/lib/actions/attendance'
@@ -318,6 +318,9 @@ export default function PayrollPage() {
   const [selectedPersonnelForPeriods, setSelectedPersonnelForPeriods] = useState<any>(null)
   const [showDeleteArchiveModal, setShowDeleteArchiveModal] = useState(false)
   const [archiveSearchTerm, setArchiveSearchTerm] = useState('')
+  const [personnelSearchTerm, setPersonnelSearchTerm] = useState('')
+  const [periodSearchTerm, setPeriodSearchTerm] = useState('')
+  const [archivedBreakdownSearchTerm, setArchivedBreakdownSearchTerm] = useState('')
   const [newArchivedPayrollId, setNewArchivedPayrollId] = useState<string | null>(null)
   const [showArchiveNotification, setShowArchiveNotification] = useState(false)
   const [hasViewedNewestPayroll, setHasViewedNewestPayroll] = useState(false)
@@ -535,21 +538,29 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
         // Use grossSalary (semi-monthly) as the base, not the monthly basicSalary
         const monthlyBasicSalary = Number(entry?.personnelType?.basicSalary ?? 0) // Monthly reference
         const grossSalary = Number(entry?.grossSalary ?? 0) // Semi-monthly (already divided by 2)
+        const overloadPayAmount = overloadPaysByUser.get(entry.users_id) || Number(entry?.totalAdditions ?? 0)
         const attendanceDeductions = Number(entry?.attendanceDeductions ?? 0)
         const loanDeductions = Number(entry?.loanPayments ?? 0)
         const otherDeductions = Number(entry?.databaseDeductions ?? 0)
-        const computedNet = grossSalary - (attendanceDeductions + loanDeductions + otherDeductions)
-        const netFromServer = Number(entry?.netSalary ?? entry?.netPay ?? NaN)
-        const finalNet = Number.isFinite(netFromServer) ? netFromServer : computedNet
+        
+        // Calculate actual net pay: gross + overload - all deductions
+        const actualGrossPay = grossSalary + overloadPayAmount
+        const totalDeductions = attendanceDeductions + loanDeductions + otherDeductions
+        const computedNet = actualGrossPay - totalDeductions
+        
+        // Always use computedNet to match the dialog calculation
+        const finalNet = computedNet
         
         console.log(`💰 Net Pay Calculation - ${entry.name}:`, {
           monthlyBasicSalary,
           grossSalary,
+          overloadPayAmount,
+          actualGrossPay,
           attendanceDeductions,
           loanDeductions,
           otherDeductions,
+          totalDeductions,
           computedNet,
-          netFromServer,
           finalNet,
           rawEntry: entry
         })
@@ -565,7 +576,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
           personnelTypeCategory: userData?.type || entry.personnelType?.type || null,
           department: userData?.department || entry.personnelType?.department || null,
           totalWorkHours: Number(entry.totalWorkHours ?? 0),
-          finalNetPay: finalNet,
+          finalNetPay: finalNet, // Actual net pay including overload and all deductions
           status: entry.status || 'Pending',
           breakdown: {
             basicSalary: monthlyBasicSalary / 2, // Semi-monthly base salary (₱10,000) - MATCHES PAYSLIP
@@ -619,7 +630,8 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
       setCurrentPeriod({
         periodStart: result.summary?.periodStart || result.summary?.settings?.periodStart || '',
         periodEnd: result.summary?.periodEnd || result.summary?.settings?.periodEnd || '',
-        type: 'Semi-Monthly'
+        type: 'Semi-Monthly',
+        status: result.summary?.status || (entries.length > 0 ? entries[0].status : 'Pending')
       })
       // Set payroll period settings
       setPayrollPeriodStart(result.summary?.settings?.periodStart || '')
@@ -1301,9 +1313,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
   const formatCurrency = (amount: number) => {
     // Handle NaN, null, undefined
     const safeAmount = Number.isFinite(amount) ? amount : 0
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
+    return '₱' + new Intl.NumberFormat('en-PH', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(safeAmount)
@@ -1700,6 +1710,43 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                 <p className="text-xs text-muted-foreground">{currentPeriod.type} period</p>
               </div>
 
+              {/* Payroll Summary Counts */}
+              {payrollEntries.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="p-1.5 bg-blue-100 dark:bg-blue-950/30 rounded">
+                      <svg className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium">Payroll Items</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Additions</p>
+                      <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                        {payrollEntries.reduce((sum, entry) => {
+                          const hasOverload = (entry.breakdown?.overloadPayDetails?.length ?? 0) > 0
+                          const hasOther = (entry.breakdown?.otherAdditions?.length ?? 0) > 0
+                          return sum + (hasOverload ? 1 : 0) + (hasOther ? 1 : 0)
+                        }, 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Deductions</p>
+                      <p className="text-lg font-bold text-red-600 dark:text-red-400">
+                        {payrollEntries.reduce((sum, entry) => {
+                          const attendance = (entry.breakdown?.attendanceDetails?.length ?? 0)
+                          const loans = (entry.breakdown?.loanDetails?.length ?? 0)
+                          const mandatory = (entry.breakdown?.deductionDetails?.filter(d => d.isMandatory)?.length ?? 0)
+                          const other = (entry.breakdown?.deductionDetails?.filter(d => !d.isMandatory)?.length ?? 0)
+                          return sum + attendance + loans + mandatory + other
+                        }, 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Release Status */}
               <div className="space-y-2">
@@ -1829,9 +1876,9 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Personnel</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Department</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Position</TableHead>
-                          <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Personnel Type</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Work Hours</TableHead>
-                          <TableHead className="font-semibold text-xs uppercase tracking-wider h-12">Status</TableHead>
+                          <TableHead className="font-semibold text-xs uppercase tracking-wider h-12 text-right pr-8">Net Pay</TableHead>
+                          <TableHead className="font-semibold text-xs uppercase tracking-wider h-12 pl-8">Status</TableHead>
                           <TableHead className="font-semibold text-xs uppercase tracking-wider h-12 text-center px-6">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1932,28 +1979,18 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                             </Badge>
                           </TableCell>
                           <TableCell className="py-4">
-                            {entry.personnelTypeCategory ? (
-                              <Badge 
-                                variant={entry.personnelTypeCategory === 'TEACHING' ? 'default' : 'secondary'}
-                                className={entry.personnelTypeCategory === 'TEACHING' 
-                                  ? 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 font-medium text-xs' 
-                                  : 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800 font-medium text-xs'
-                                }
-                              >
-                                {entry.personnelTypeCategory === 'TEACHING' ? 'Teaching' : 'Non-Teaching'}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-4">
                             <LiveWorkHours
                               userId={entry.users_id}
                               totalWorkHours={entry.totalWorkHours}
                               now={now}
                             />
                           </TableCell>
-                          <TableCell className="py-4">
+                          <TableCell className="py-4 text-right pr-8">
+                            <span className="font-bold text-base text-green-600">
+                              ₱{entry.finalNetPay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 pl-8">
                             <div className="flex flex-col gap-1.5">
                               {getStatusBadge(entry.status)}
                               {entry.status === 'Released' && (
@@ -2030,31 +2067,81 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                     <Archive className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <CardTitle className="text-2xl font-bold text-foreground flex items-center gap-3">
+                    <CardTitle className="text-2xl font-bold text-foreground">
                       Archived Payrolls
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={archivedPayrolls.length === 0}
-                            className="gap-2"
-                          >
-                            <FileText className="h-4 w-4" />
-                            View Payroll
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="!max-w-none w-[98vw] h-[95vh] !max-h-none overflow-hidden flex flex-col" style={{ maxWidth: '98vw', width: '98vw', height: '95vh', maxHeight: '95vh' }}>
-                          <DialogHeader>
-                            <DialogTitle>View Payroll for Personnel</DialogTitle>
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300">
+                        {archivedPayrolls.length} Records
+                      </span>
+                      <span className="text-muted-foreground">•</span>
+                      <span>Historical payroll data</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="default"
+                        size="default"
+                        disabled={archivedPayrolls.length === 0}
+                        className="gap-2 px-4 py-2"
+                      >
+                        <FileText className="h-4 w-4" />
+                        View Payroll for Personnel
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="!max-w-none w-[98vw] h-[95vh] !max-h-none overflow-hidden flex flex-col" style={{ maxWidth: '98vw', width: '98vw', height: '95vh', maxHeight: '95vh' }}>
+                          <DialogHeader className="border-b pb-4">
+                            <DialogTitle className="text-xl font-semibold">View Payroll for Personnel</DialogTitle>
                             <DialogDescription>
                               Select a personnel, then choose a payroll period to view their payroll details
                             </DialogDescription>
                           </DialogHeader>
-                          <div className="grid grid-cols-2 gap-6 flex-1 overflow-hidden">
+                          <div className="grid grid-cols-2 gap-6 flex-1 overflow-hidden p-4">
                             {/* Left: Personnel List */}
-                            <div className="border-r pr-6">
-                              <h3 className="font-semibold mb-4 text-base text-muted-foreground">Select Personnel</h3>
+                            <div className="border-r pr-4">
+                              <div className="flex items-center gap-2 mb-4">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                <h3 className="font-semibold text-sm text-muted-foreground uppercase">Select Personnel</h3>
+                              </div>
+                              
+                              {/* Search Bar */}
+                              <div className="relative mb-4">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                  placeholder="Search personnel..."
+                                  className="pl-9 h-9"
+                                  value={personnelSearchTerm}
+                                  onChange={(e) => setPersonnelSearchTerm(e.target.value)}
+                                />
+                              </div>
+                              
+                              {/* Grand Total Card */}
+                              {(() => {
+                                const grandTotal = archivedPayrolls.reduce((total, payroll) => {
+                                  const periodTotal = payroll.payrolls?.reduce((sum: number, person: any) => 
+                                    sum + Number(person.netPay || 0), 0
+                                  ) || 0
+                                  return total + periodTotal
+                                }, 0)
+                                
+                                return (
+                                  <div className="mb-4 p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-md">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase">Grand Total</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">{archivedPayrolls.length} periods</p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatCurrency(grandTotal)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                              
                               <div className="space-y-2 max-h-[75vh] overflow-y-auto">
                                 {(() => {
                                   // Get unique personnel from all archived payrolls
@@ -2066,50 +2153,139 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                                       }
                                     })
                                   })
-                                  const uniquePersonnel = Array.from(personnelMap.values())
+                                  let uniquePersonnel = Array.from(personnelMap.values())
                                   
-                                  return uniquePersonnel.map((person: any) => (
-                                    <Button
-                                      key={person.users_id}
-                                      variant={selectedPersonnelForPeriods?.users_id === person.users_id ? "default" : "outline"}
-                                      className="justify-start h-auto py-4 px-4 hover:bg-primary/5 w-full"
-                                      onClick={() => {
-                                        setSelectedPersonnelForPeriods(person)
-                                        // Get all periods for this personnel
-                                        const personnelPeriods = archivedPayrolls.filter(payroll => 
-                                          payroll.payrolls?.some((p: any) => p.users_id === person.users_id)
-                                        )
-                                        setArchivedPersonnelList(personnelPeriods)
-                                      }}
-                                    >
-                                      <div className="flex items-center gap-4 w-full">
-                                        <div className="flex-1 text-left">
-                                          <p className="font-semibold text-base">{person.user?.name || 'N/A'}</p>
-                                          <p className="text-sm text-muted-foreground">{person.user?.personnelType?.name || 'N/A'} • {person.user?.personnelType?.department || 'N/A'}</p>
+                                  // Filter by search term
+                                  if (personnelSearchTerm) {
+                                    const searchLower = personnelSearchTerm.toLowerCase()
+                                    uniquePersonnel = uniquePersonnel.filter((person: any) => 
+                                      person.user?.name?.toLowerCase().includes(searchLower) ||
+                                      person.user?.personnelType?.department?.toLowerCase().includes(searchLower)
+                                    )
+                                  }
+                                  
+                                  return uniquePersonnel.map((person: any) => {
+                                    const isSelected = selectedPersonnelForPeriods?.users_id === person.users_id
+                                    
+                                    // Calculate total net pay for this personnel across all periods
+                                    const totalNetPay = archivedPayrolls.reduce((total, payroll) => {
+                                      const personnelInPeriod = payroll.payrolls?.find((p: any) => p.users_id === person.users_id)
+                                      return total + (personnelInPeriod ? Number(personnelInPeriod.netPay || 0) : 0)
+                                    }, 0)
+                                    
+                                    return (
+                                      <div
+                                        key={person.users_id}
+                                        onClick={() => {
+                                          setSelectedPersonnelForPeriods(person)
+                                          // Get all periods for this personnel
+                                          const personnelPeriods = archivedPayrolls.filter(payroll => 
+                                            payroll.payrolls?.some((p: any) => p.users_id === person.users_id)
+                                          )
+                                          setArchivedPersonnelList(personnelPeriods)
+                                        }}
+                                        className={`
+                                          p-3 rounded-md border cursor-pointer transition-all
+                                          ${isSelected 
+                                            ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-500' 
+                                            : 'bg-background border-border hover:border-blue-300'
+                                          }
+                                        `}
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="flex-1">
+                                            <p className="font-semibold text-sm">{person.user?.name || 'N/A'}</p>
+                                            <p className="text-xs text-muted-foreground">{person.user?.personnelType?.department || 'N/A'}</p>
+                                          </div>
+                                          <div className="text-right">
+                                            <p className="text-sm font-bold text-green-600 dark:text-green-400">
+                                              {formatCurrency(totalNetPay)}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">Total Net Pay</p>
+                                          </div>
                                         </div>
                                       </div>
-                                    </Button>
-                                  ))
+                                    )
+                                  })
                                 })()}
                               </div>
                             </div>
                             
                             {/* Right: Period List for selected personnel */}
-                            <div className="pl-6">
-                              <h3 className="font-semibold mb-4 text-base text-muted-foreground">
-                                {selectedPersonnelForPeriods ? 'Select Payroll Period' : 'Select a personnel first'}
-                              </h3>
-                              <div className="space-y-2 max-h-[75vh] overflow-y-auto">
-                                {selectedPersonnelForPeriods && archivedPersonnelList.length > 0 ? (
-                                  archivedPersonnelList.map((payroll: any) => {
-                                    // Find this personnel's data in this period
-                                    const personnelData = payroll.payrolls?.find((p: any) => p.users_id === selectedPersonnelForPeriods.users_id)
+                            <div className="pl-4">
+                              <div className="flex items-center gap-2 mb-4">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                <h3 className="font-semibold text-sm text-muted-foreground uppercase">
+                                  {selectedPersonnelForPeriods ? 'Select Payroll Period' : 'Select Personnel First'}
+                                </h3>
+                              </div>
+                              
+                              {selectedPersonnelForPeriods && (
+                                <>
+                                  {/* Total Net Pay Card for Selected Personnel */}
+                                  {(() => {
+                                    const totalNetPay = archivedPayrolls.reduce((total, payroll) => {
+                                      const personnelInPeriod = payroll.payrolls?.find((p: any) => p.users_id === selectedPersonnelForPeriods.users_id)
+                                      return total + (personnelInPeriod ? Number(personnelInPeriod.netPay || 0) : 0)
+                                    }, 0)
+                                    
+                                    const periodCount = archivedPersonnelList.length
                                     
                                     return (
-                                      <Button
+                                      <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase">
+                                              {selectedPersonnelForPeriods.user?.name || 'Personnel'} - Total Net Pay
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{periodCount} period{periodCount !== 1 ? 's' : ''}</p>
+                                          </div>
+                                          <div className="text-right">
+                                            <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatCurrency(totalNetPay)}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
+                                  
+                                  <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                      placeholder="Search periods..."
+                                      className="pl-9 h-9"
+                                      value={periodSearchTerm}
+                                      onChange={(e) => setPeriodSearchTerm(e.target.value)}
+                                    />
+                                  </div>
+                                </>
+                              )}
+                              
+                              <div className="space-y-2 max-h-[75vh] overflow-y-auto">
+                                {selectedPersonnelForPeriods && archivedPersonnelList.length > 0 ? (
+                                  (() => {
+                                    let filteredPayrolls = archivedPersonnelList
+                                    
+                                    // Filter by search term
+                                    if (periodSearchTerm) {
+                                      const searchLower = periodSearchTerm.toLowerCase()
+                                      filteredPayrolls = filteredPayrolls.filter((payroll: any) => {
+                                        const periodStart = formatDateForDisplay(new Date(payroll.periodStart)).toLowerCase()
+                                        const periodEnd = formatDateForDisplay(new Date(payroll.periodEnd)).toLowerCase()
+                                        const releasedAt = formatDateForDisplay(new Date(payroll.releasedAt)).toLowerCase()
+                                        return periodStart.includes(searchLower) || 
+                                               periodEnd.includes(searchLower) || 
+                                               releasedAt.includes(searchLower)
+                                      })
+                                    }
+                                    
+                                    return filteredPayrolls.map((payroll: any) => {
+                                      // Find this personnel's data in this period
+                                      const personnelData = payroll.payrolls?.find((p: any) => p.users_id === selectedPersonnelForPeriods.users_id)
+                                      const netPay = Number(personnelData?.netPay || 0)
+                                    
+                                    return (
+                                      <div
                                         key={payroll.id}
-                                        variant="outline"
-                                        className="justify-start h-auto py-3 px-3 w-full hover:bg-primary/5"
                                         onClick={() => {
                                           setSelectedArchivedPeriod(payroll)
                                           setSelectedArchivedEntry(personnelData)
@@ -2118,61 +2294,51 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                                           setNewArchivedPayrollId(null)
                                           localStorage.removeItem('hasNewArchivedPayroll')
                                         }}
+                                        className="p-3 bg-background border border-border rounded-md cursor-pointer hover:border-primary hover:bg-accent transition-all"
                                       >
-                                        <div className="flex items-center justify-between w-full">
-                                          <div className="flex flex-col items-start gap-1">
-                                            <div className="flex items-center gap-2">
-                                              <Calendar className="h-4 w-4" />
-                                              <span className="font-semibold text-sm">
-                                                {formatDateForDisplay(new Date(payroll.periodStart))} - {formatDateForDisplay(new Date(payroll.periodEnd))}
-                                              </span>
-                                            </div>
-                                            <span className="text-xs text-muted-foreground">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="flex-1">
+                                            <p className="font-semibold text-sm">
+                                              {formatDateForDisplay(new Date(payroll.periodStart))} - {formatDateForDisplay(new Date(payroll.periodEnd))}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
                                               Released {formatDateForDisplay(new Date(payroll.releasedAt))}
-                                            </span>
+                                            </p>
                                           </div>
-                                          {personnelData && (
-                                            <div className="text-right">
-                                              <p className="font-bold text-green-600 text-sm">{formatCurrency(Number(personnelData.netPay))}</p>
-                                              <p className="text-xs text-muted-foreground">Net Pay</p>
-                                            </div>
-                                          )}
+                                          <div className="text-right">
+                                            <p className="text-sm font-bold text-green-600 dark:text-green-400">
+                                              {formatCurrency(netPay)}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">Net Pay</p>
+                                          </div>
                                         </div>
-                                      </Button>
+                                      </div>
                                     )
-                                  })
+                                    })
+                                  })()
                                 ) : selectedPersonnelForPeriods ? (
-                                  <p className="text-center text-muted-foreground py-8">No payroll periods found for this personnel</p>
+                                  <p className="text-center text-muted-foreground py-8 text-sm">No payroll periods found for this personnel</p>
                                 ) : (
-                                  <p className="text-center text-muted-foreground py-8">Select a personnel to view their payroll periods</p>
+                                  <p className="text-center text-muted-foreground py-8 text-sm">Select a personnel to view their payroll periods</p>
                                 )}
                               </div>
                             </div>
                           </div>
                         </DialogContent>
                       </Dialog>
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300">
-                        {archivedPayrolls.length} Records
-                      </span>
-                      <span className="text-muted-foreground">•</span>
-                      <span>Historical payroll data</span>
-                    </p>
-                  </div>
+                  {selectedArchives.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={promptBulkDeleteArchives}
+                      disabled={loading}
+                      className="shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedArchives.length})
+                    </Button>
+                  )}
                 </div>
-                {selectedArchives.length > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={promptBulkDeleteArchives}
-                    disabled={loading}
-                    className="shadow-lg hover:shadow-xl transition-all"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Selected ({selectedArchives.length})
-                  </Button>
-                )}
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -2196,7 +2362,8 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                       </TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider">Period</TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider">Personnel</TableHead>
-                      <TableHead className="font-semibold text-xs uppercase tracking-wider">Released</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider text-right pr-8">Net Pay</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider pl-8">Released</TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider">View</TableHead>
                       <TableHead className="font-semibold text-xs uppercase tracking-wider text-center w-[80px]">Actions</TableHead>
                     </TableRow>
@@ -2204,7 +2371,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                   <TableBody>
                     {archivedPayrolls.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-20">
+                        <TableCell colSpan={7} className="text-center py-20">
                           <div className="flex flex-col items-center gap-4">
                             <div className="p-6 bg-gradient-to-br from-slate-100 to-gray-100 dark:from-slate-900/20 dark:to-gray-900/20 rounded-2xl">
                               <Archive className="h-16 w-16 text-slate-600 dark:text-slate-400" />
@@ -2275,7 +2442,12 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                               {payroll.totalEmployees} Personnel
                             </Badge>
                           </TableCell>
-                          <TableCell className="py-5">
+                          <TableCell className="py-5 text-right pr-8">
+                            <span className="text-lg font-bold text-green-600 dark:text-green-500">
+                              {formatCurrency(payroll.payrolls?.reduce((sum: number, person: any) => sum + Number(person.netPay || 0), 0) || 0)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-5 pl-8">
                             <div className="flex flex-col gap-1">
                               <span className="text-sm font-medium text-foreground">{formatDateForDisplay(new Date(payroll.releasedAt))}</span>
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -2286,8 +2458,8 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                           </TableCell>
                           <TableCell className="py-5">
                             <Button
-                              variant="outline"
-                              size="sm"
+                              variant="default"
+                              size="default"
                               onClick={() => {
                                 setSelectedArchivedPeriod(payroll)
                                 setArchivedPersonnelList(payroll.payrolls || [])
@@ -2301,7 +2473,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                                   localStorage.removeItem('hasNewArchivedPayroll')
                                 }
                               }}
-                              className="gap-2"
+                              className="gap-2 px-4 py-2"
                             >
                               <FileText className="h-4 w-4" />
                               View Payroll
@@ -3148,37 +3320,58 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
           setArchivedPersonnelList([])
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="overflow-y-auto" style={{ maxWidth: '80vw', width: '80vw', maxHeight: '85vh' }}>
           <DialogHeader>
-            <DialogTitle>Archived Payroll Breakdown</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-2xl font-bold">Archived Payroll Breakdown</DialogTitle>
+            <DialogDescription className="text-base">
               {selectedArchivedPeriod && (
                 <>Period: {formatDateForDisplay(new Date(selectedArchivedPeriod.periodStart))} - {formatDateForDisplay(new Date(selectedArchivedPeriod.periodEnd))}</>
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, personnel type, or department..."
+                className="pl-9"
+                value={archivedBreakdownSearchTerm}
+                onChange={(e) => setArchivedBreakdownSearchTerm(e.target.value)}
+              />
+            </div>
+            
             {archivedPersonnelList.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No personnel found for this period</p>
             ) : (
+              (() => {
+                // Filter personnel by search term
+                const filteredPersonnel = archivedPersonnelList.filter((person) => {
+                  if (!archivedBreakdownSearchTerm) return true
+                  const searchLower = archivedBreakdownSearchTerm.toLowerCase()
+                  const name = person.user?.name?.toLowerCase() || ''
+                  const personnelType = person.user?.personnelType?.name?.toLowerCase() || ''
+                  const department = person.user?.personnelType?.department?.toLowerCase() || ''
+                  return name.includes(searchLower) || personnelType.includes(searchLower) || department.includes(searchLower)
+                })
+                
+                return (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Personnel Type</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead className="text-right">Net Pay</TableHead>
                     <TableHead className="text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {archivedPersonnelList.map((person) => (
+                  {filteredPersonnel.map((person) => (
                     <TableRow key={person.payroll_entries_id}>
                       <TableCell className="font-medium">{person.user?.name || 'N/A'}</TableCell>
-                      <TableCell>{person.user?.personnelType?.name || 'N/A'}</TableCell>
                       <TableCell>{person.user?.personnelType?.department || 'N/A'}</TableCell>
-                      <TableCell className="text-right font-semibold text-green-600">
-                        {formatCurrency(Number(person.netPay))}
+                      <TableCell className="text-right font-semibold text-green-600 dark:text-green-400">
+                        {formatCurrency(Number(person.netPay || 0))}
                       </TableCell>
                       <TableCell className="text-center">
                         <Button
@@ -3194,6 +3387,8 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                   ))}
                 </TableBody>
               </Table>
+                )
+              })()
             )}
           </div>
         </DialogContent>

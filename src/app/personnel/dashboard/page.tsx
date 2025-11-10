@@ -7,12 +7,10 @@ import {
   Clock, 
   Calendar, 
   User, 
-  Banknote, 
   TrendingUp,
   CheckCircle,
   XCircle,
   AlertCircle,
-  CreditCard,
   Home
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -318,108 +316,42 @@ export default function PersonnelDashboard() {
         </Card>
       </div>
 
-      {/* Next Payout Card */}
+      {/* Active Loans */}
       <Card 
         className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
-        onClick={() => router.push('/personnel/payslips')}
+        onClick={() => router.push('/personnel/loans')}
       >
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Banknote className="h-5 w-5" />
-            Next Payout
+            <TrendingUp className="h-5 w-5" />
+            Active Loans
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Amount</div>
-              <div className="text-2xl font-bold">₱{data.nextPayout.amount.toLocaleString()}</div>
+          {(data.loans?.length ?? 0) > 0 ? (
+            <div className="space-y-2">
+              {data.loans!.map((loan, index) => (
+                <div key={index} className="flex justify-between items-center">
+                  <div>
+                    <div className="font-medium">{loan.purpose}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {loan.termMonths} months remaining
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold">₱{loan.perPayrollPayment.toLocaleString()}/payroll</div>
+                    <div className="text-sm text-muted-foreground">
+                      Balance: ₱{loan.balance.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Period</div>
-              <div className="text-lg font-semibold">{data.nextPayout.period}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Release Date</div>
-              <div className="text-lg font-semibold">
-                {new Date(data.nextPayout.date).toLocaleDateString()}
-              </div>
-            </div>
-          </div>
+          ) : (
+            <div className="text-muted-foreground">No active loans</div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Deductions and Loans */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Current Deductions */}
-        <Card 
-          className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
-          onClick={() => router.push('/personnel/deductions')}
-        >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Current Deductions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(data.deductions?.length ?? 0) > 0 ? (
-              <div className="space-y-2">
-                {data.deductions!.map((deduction, index) => (
-                  <div key={index} className="flex justify-between items-center">
-                    <div>
-                      <div className="font-medium">{deduction.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {new Date(deduction.appliedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="font-semibold">₱{deduction.amount.toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-muted-foreground">No deductions for current period</div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Active Loans */}
-        <Card 
-          className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
-          onClick={() => router.push('/personnel/loans')}
-        >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Active Loans
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(data.loans?.length ?? 0) > 0 ? (
-              <div className="space-y-2">
-                {data.loans!.map((loan, index) => (
-                  <div key={index} className="flex justify-between items-center">
-                    <div>
-                      <div className="font-medium">{loan.purpose}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {loan.termMonths} months remaining
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-semibold">₱{loan.perPayrollPayment.toLocaleString()}/payroll</div>
-                      <div className="text-sm text-muted-foreground">
-                        Balance: ₱{loan.balance.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-muted-foreground">No active loans</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }

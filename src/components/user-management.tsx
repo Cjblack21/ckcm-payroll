@@ -765,7 +765,6 @@ export function UserManagement() {
                   <TableHead>Email</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Position</TableHead>
-                  <TableHead>Personnel Type</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -808,21 +807,6 @@ export function UserManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {person.personnelType?.type ? (
-                        <Badge 
-                          variant={person.personnelType.type === 'TEACHING' ? 'default' : 'secondary'}
-                          className={person.personnelType.type === 'TEACHING' 
-                            ? 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' 
-                            : 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800'
-                          }
-                        >
-                          {person.personnelType.type === 'TEACHING' ? 'Teaching' : 'Non-Teaching'}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       <Badge variant={person.role === 'ADMIN' ? 'default' : 'secondary'}>
                         {person.role}
                       </Badge>
@@ -843,7 +827,7 @@ export function UserManagement() {
                               <TooltipContent>
                                 <div className="text-xs">
                                   <p className="font-semibold">{person.currentLeave.type}</p>
-                                  <p>{new Date(person.currentLeave.startDate).toLocaleDateString()} - {new Date(person.currentLeave.endDate).toLocaleDateString()}</p>
+                                  <p>{new Date(person.currentLeave.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(person.currentLeave.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                                   <p className="text-muted-foreground">{person.currentLeave.isPaid ? 'Paid' : 'Unpaid'}</p>
                                 </div>
                               </TooltipContent>
@@ -853,7 +837,7 @@ export function UserManagement() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {new Date(person.createdAt).toLocaleDateString()}
+                      {new Date(person.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -1039,11 +1023,11 @@ export function UserManagement() {
               </div>
               <div className="grid gap-2">
                 <Label>Created</Label>
-                <div>{new Date(selectedPersonnel.createdAt).toLocaleString()}</div>
+                <div>{new Date(selectedPersonnel.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
               </div>
               <div className="grid gap-2">
                 <Label>Last Updated</Label>
-                <div>{new Date(selectedPersonnel.updatedAt).toLocaleString()}</div>
+                <div>{new Date(selectedPersonnel.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
               </div>
             </div>
           )}

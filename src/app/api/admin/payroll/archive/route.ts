@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPhilippinesDateString } from '@/lib/timezone'
 
 export async function POST(request: NextRequest) {
   try {
@@ -99,8 +100,8 @@ export async function GET(request: NextRequest) {
       if (!acc[periodKey]) {
         acc[periodKey] = {
           id: periodKey,
-          periodStart: payroll.periodStart.toISOString().split('T')[0],
-          periodEnd: payroll.periodEnd.toISOString().split('T')[0],
+          periodStart: toPhilippinesDateString(payroll.periodStart),
+          periodEnd: toPhilippinesDateString(payroll.periodEnd),
           totalEmployees: 0,
           totalExpenses: 0,
           totalDeductions: 0,

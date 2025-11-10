@@ -134,6 +134,8 @@ export default function DeductionsPage() {
   const [overloadEmployeeSearch, setOverloadEmployeeSearch] = useState("")
   const [showOverloadConfirmModal, setShowOverloadConfirmModal] = useState(false)
   const [duplicatePersonnel, setDuplicatePersonnel] = useState<string[]>([])
+  const [showDuplicateErrorModal, setShowDuplicateErrorModal] = useState(false)
+  const [duplicateErrorMessage, setDuplicateErrorMessage] = useState("")
 
   // Deduction mode - always mandatory now
   const [deductionMode, setDeductionMode] = useState<'mandatory' | 'other'>('mandatory')
@@ -239,6 +241,33 @@ export default function DeductionsPage() {
         toast.error("Please select personnel or enable 'Apply to All Personnel'")
         return
       }
+
+      // --- Check for duplicate mandatory deductions ---
+      const targetPersonnelIds = syncSelectAllPersonnel ? personnel.map(p => p.users_id) : syncSelectedPersonnel
+      const duplicatesFound: { personnelName: string, deductionName: string }[] = []
+
+      for (const typeId of selectedMandatoryTypes) {
+        const deductionTypeName = types.find(t => t.deduction_types_id === typeId)?.name || 'Unknown Deduction'
+        for (const userId of targetPersonnelIds) {
+          const alreadyHasDeduction = deductions.some(d => 
+            d.user.users_id === userId && 
+            d.deductionType.deduction_types_id === typeId &&
+            d.deductionType.isMandatory
+          )
+
+          if (alreadyHasDeduction) {
+            const personnelName = personnel.find(p => p.users_id === userId)?.name || 'Unknown Personnel'
+            duplicatesFound.push({ personnelName, deductionName: deductionTypeName })
+          }
+        }
+      }
+
+      if (duplicatesFound.length > 0) {
+        setDuplicateErrorMessage(`Cannot apply deductions. The following personnel already have one or more of the selected deductions: ${duplicatesFound.map(d => `${d.personnelName} (${d.deductionName})`).join(', ')}.`)
+        setShowDuplicateErrorModal(true)
+        return
+      }
+      // --- End duplicate check ---
 
       toast.loading("Applying mandatory deductions...", { id: "sync-mandatory" })
       
@@ -989,6 +1018,36 @@ export default function DeductionsPage() {
         toast.error("Please select at least one deduction type")
         return
       }
+      
+      // --- Check for duplicate mandatory deductions ---
+      const duplicatesFound: { personnelName: string, deductionName: string }[] = []
+      
+      for (const entry of allEntries) {
+        const deductionType = types.find(t => t.deduction_types_id === entry.deduction_types_id)
+        if (deductionType?.isMandatory) {
+          const targetIds = entry.selectAll ? personnel.map(p => p.users_id) : entry.employees
+          
+          for (const userId of targetIds) {
+            const alreadyHasDeduction = deductions.some(d => 
+              d.user.users_id === userId && 
+              d.deductionType.deduction_types_id === entry.deduction_types_id &&
+              d.deductionType.isMandatory
+            )
+            
+            if (alreadyHasDeduction) {
+              const personnelName = personnel.find(p => p.users_id === userId)?.name || 'Unknown Personnel'
+              duplicatesFound.push({ personnelName, deductionName: deductionType.name })
+            }
+          }
+        }
+      }
+      
+      if (duplicatesFound.length > 0) {
+        setDuplicateErrorMessage(`Cannot apply deductions. The following personnel already have one or more of the selected deductions: ${duplicatesFound.map(d => `${d.personnelName} (${d.deductionName})`).join(', ')}.`)
+        setShowDuplicateErrorModal(true)
+        return
+      }
+      // --- End duplicate check ---
       
       // Create payload
       const payload = allEntries.length === 1 
@@ -2090,6 +2149,21 @@ export default function DeductionsPage() {
               <CheckCheck className="h-4 w-4 mr-2" />
               Apply Deductions
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Mandatory Deduction Error Modal */}
+      <Dialog open={showDuplicateErrorModal} onOpenChange={setShowDuplicateErrorModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cannot Apply Duplicate Mandatory Deduction</DialogTitle>
+            <DialogDescription className="text-base">
+              {duplicateErrorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowDuplicateErrorModal(false)}>OK</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
