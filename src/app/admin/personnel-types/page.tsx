@@ -288,19 +288,17 @@ export default function PersonnelTypesPage() {
               {/* Input Section */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="department" className="text-base font-semibold">School Department</Label>
+                  <Label htmlFor="department" className="text-base font-semibold">Department</Label>
                   <Select value={department} onValueChange={setDepartment}>
                     <SelectTrigger className="w-full h-11 text-base">
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="INDEPENDENT">Independent / Unassigned</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN COMPUTER SCIENCE">Bachelor of Science in Computer Science</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN CRIMINOLOGY">Bachelor of Science in Criminology</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN EDUCATION">Bachelor of Science in Education</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN BUSINESS ADMINISTRATION">Bachelor of Science in Business Administration</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN SOCIAL WORK">Bachelor of Science in Social Work</SelectItem>
-                      <SelectItem value="BACHELOR OF ARTS IN SOCIAL LANGUAGE STUDIES">Bachelor of Arts in Social Language Studies</SelectItem>
+                      <SelectItem value="College Department">College Department</SelectItem>
+                      <SelectItem value="Highschool Department">Highschool Department</SelectItem>
+                      <SelectItem value="Elementary Department">Elementary Department</SelectItem>
+                      <SelectItem value="SUP">SUP</SelectItem>
+                      <SelectItem value="BED">BED</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -314,19 +312,6 @@ export default function PersonnelTypesPage() {
                     placeholder="e.g. Senior Developer, Manager, Accountant" 
                     className="w-full h-11 text-base"
                   />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="personnel-type" className="text-base font-semibold">Personnel Type</Label>
-                  <Select value={personnelType} onValueChange={setPersonnelType}>
-                    <SelectTrigger className="w-full h-11 text-base">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TEACHING">Teaching Personnel</SelectItem>
-                      <SelectItem value="NON_TEACHING">Non-Teaching Personnel</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
                 
                 <div className="space-y-2">
@@ -451,9 +436,8 @@ export default function PersonnelTypesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>School Department</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead>Position</TableHead>
-                  <TableHead>Type</TableHead>
                   <TableHead>Net Pay</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -465,11 +449,6 @@ export default function PersonnelTypesPage() {
                   <TableRow key={t.personnel_types_id}>
                     <TableCell className="text-muted-foreground">{t.department || '-'}</TableCell>
                     <TableCell className="font-medium">{t.name}</TableCell>
-                    <TableCell>
-                      <Badge variant={t.type === 'TEACHING' ? 'default' : 'secondary'} className="text-xs">
-                        {t.type === 'TEACHING' ? 'Teaching' : 'Non-Teaching'}
-                      </Badge>
-                    </TableCell>
                     <TableCell>₱{Number(t.basicSalary).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge variant={t.isActive ? 'default' : 'secondary'}>
@@ -536,19 +515,17 @@ export default function PersonnelTypesPage() {
               {/* Input Section */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-department" className="text-base font-semibold">School Department</Label>
+                  <Label htmlFor="edit-department" className="text-base font-semibold">Department</Label>
                   <Select value={department} onValueChange={setDepartment}>
                     <SelectTrigger className="w-full h-11 text-base">
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="INDEPENDENT">Independent / Unassigned</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN COMPUTER SCIENCE">Bachelor of Science in Computer Science</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN CRIMINOLOGY">Bachelor of Science in Criminology</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN EDUCATION">Bachelor of Science in Education</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN BUSINESS ADMINISTRATION">Bachelor of Science in Business Administration</SelectItem>
-                      <SelectItem value="BACHELOR OF SCIENCE IN SOCIAL WORK">Bachelor of Science in Social Work</SelectItem>
-                      <SelectItem value="BACHELOR OF ARTS IN SOCIAL LANGUAGE STUDIES">Bachelor of Arts in Social Language Studies</SelectItem>
+                      <SelectItem value="College Department">College Department</SelectItem>
+                      <SelectItem value="Highschool Department">Highschool Department</SelectItem>
+                      <SelectItem value="Elementary Department">Elementary Department</SelectItem>
+                      <SelectItem value="SUP">SUP</SelectItem>
+                      <SelectItem value="BED">BED</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -562,19 +539,6 @@ export default function PersonnelTypesPage() {
                     placeholder="e.g. Senior Developer, Manager, Accountant" 
                     className="w-full h-11 text-base"
                   />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-personnel-type" className="text-base font-semibold">Personnel Type</Label>
-                  <Select value={personnelType} onValueChange={setPersonnelType}>
-                    <SelectTrigger className="w-full h-11 text-base">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TEACHING">Teaching Personnel</SelectItem>
-                      <SelectItem value="NON_TEACHING">Non-Teaching Personnel</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
                 
                 <div className="space-y-2">
@@ -726,11 +690,8 @@ export default function PersonnelTypesPage() {
                     <div>
                       <h3 className="text-lg font-semibold">{selectedType.name}</h3>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant={selectedType.type === 'TEACHING' ? 'default' : 'secondary'} className="text-xs">
-                          {selectedType.type === 'TEACHING' ? 'Teaching' : 'Non-Teaching'}
-                        </Badge>
                         {selectedType.department && (
-                          <span className="text-sm text-muted-foreground">• {selectedType.department}</span>
+                          <span className="text-sm text-muted-foreground">{selectedType.department}</span>
                         )}
                       </div>
                     </div>
