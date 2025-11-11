@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
           periodEnd: payroll.periodEnd.toISOString(),
           archivedAt: payroll.archivedAt?.toISOString() || new Date().toISOString(),
           releasedAt: payroll.releasedAt?.toISOString() || new Date().toISOString(),
-          releasedBy: payroll.releasedBy || 'System',
+          releasedBy: (payroll as any).releasedBy || 'System',
           totalEmployees: 0,
           totalGrossSalary: 0,
           totalDeductions: 0,
@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
       // Calculate breakdown
       const grossSalary = Number(payroll.basicSalary) || 0
       const deductions = Number(payroll.deductions) || 0
-      const attendanceDeductions = Number(payroll.attendanceDeductions) || 0
-      const databaseDeductions = Number(payroll.databaseDeductions) || 0
-      const loanPayments = Number(payroll.loanPayments) || 0
+      const attendanceDeductions = Number((payroll as any).attendanceDeductions) || 0
+      const databaseDeductions = Number((payroll as any).databaseDeductions) || 0
+      const loanPayments = Number((payroll as any).loanPayments) || 0
       const netPay = Number(payroll.netPay) || 0
       
       acc[periodKey].totalEmployees += 1

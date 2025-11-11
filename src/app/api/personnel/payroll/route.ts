@@ -257,7 +257,8 @@ export async function GET(request: NextRequest) {
         deductionType: {
           select: {
             name: true,
-            amount: true
+            amount: true,
+            description: true
           }
         }
       }

@@ -616,8 +616,8 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
               })) || []
               
               console.log(`🎯 BREAKDOWN DATA for ${entry.name} - RAW deductionDetails:`, entry.deductionDetails)
-              console.log(`🎯 BREAKDOWN DATA for ${entry.name} - FILTERED otherDeductionDetails:`, filtered.map(d => `${d.type}: ₱${d.amount} (Mandatory: ${d.isMandatory})`))
-              console.log(`🎯 MANDATORY count: ${filtered.filter(d => d.isMandatory).length}, OTHER count: ${filtered.filter(d => !d.isMandatory).length}`)
+              console.log(`🎯 BREAKDOWN DATA for ${entry.name} - FILTERED otherDeductionDetails:`, filtered.map((d: { type: string, amount: number, description: string, isMandatory: boolean }) => `${d.type}: ₱${d.amount} (Mandatory: ${d.isMandatory})`))
+              console.log(`🎯 MANDATORY count: ${filtered.filter((d: { type: string, amount: number, description: string, isMandatory: boolean }) => d.isMandatory).length}, OTHER count: ${filtered.filter((d: { type: string, amount: number, description: string, isMandatory: boolean }) => !d.isMandatory).length}`)
               return filtered
             })()
           }
@@ -631,7 +631,7 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
         periodStart: result.summary?.periodStart || result.summary?.settings?.periodStart || '',
         periodEnd: result.summary?.periodEnd || result.summary?.settings?.periodEnd || '',
         type: 'Semi-Monthly',
-        status: result.summary?.status || (entries.length > 0 ? entries[0].status : 'Pending')
+        status: (result.summary as any)?.status || (entries.length > 0 ? entries[0].status : 'Pending')
       })
       // Set payroll period settings
       setPayrollPeriodStart(result.summary?.settings?.periodStart || '')
@@ -1725,21 +1725,20 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                     <div>
                       <p className="text-xs text-muted-foreground">Additions</p>
                       <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                        {payrollEntries.reduce((sum, entry) => {
+                        {payrollEntries.reduce((sum: number, entry: any) => {
                           const hasOverload = (entry.breakdown?.overloadPayDetails?.length ?? 0) > 0
-                          const hasOther = (entry.breakdown?.otherAdditions?.length ?? 0) > 0
-                          return sum + (hasOverload ? 1 : 0) + (hasOther ? 1 : 0)
+                          return sum + (hasOverload ? 1 : 0)
                         }, 0)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Deductions</p>
                       <p className="text-lg font-bold text-red-600 dark:text-red-400">
-                        {payrollEntries.reduce((sum, entry) => {
+                        {payrollEntries.reduce((sum: number, entry: any) => {
                           const attendance = (entry.breakdown?.attendanceDetails?.length ?? 0)
                           const loans = (entry.breakdown?.loanDetails?.length ?? 0)
-                          const mandatory = (entry.breakdown?.deductionDetails?.filter(d => d.isMandatory)?.length ?? 0)
-                          const other = (entry.breakdown?.deductionDetails?.filter(d => !d.isMandatory)?.length ?? 0)
+                          const mandatory = (entry.breakdown?.otherDeductionDetails?.filter((d: any) => d.isMandatory)?.length ?? 0)
+                          const other = (entry.breakdown?.otherDeductionDetails?.filter((d: any) => !d.isMandatory)?.length ?? 0)
                           return sum + attendance + loans + mandatory + other
                         }, 0)}
                       </p>

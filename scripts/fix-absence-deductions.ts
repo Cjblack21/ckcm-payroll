@@ -30,11 +30,17 @@ async function fixAbsenceDeductions() {
     let fixedCount = 0
 
     for (const entry of payrollEntries) {
-      if (!entry.breakdown || !entry.user?.personnelType) {
+      if (!entry.breakdownSnapshot || !entry.user?.personnelType) {
         continue
       }
 
-      const breakdown = entry.breakdown as any
+      let breakdown: any
+      try {
+        breakdown = JSON.parse(entry.breakdownSnapshot)
+      } catch (e) {
+        continue
+      }
+      
       const attendanceDeductionDetails = breakdown.attendanceDeductionDetails || []
       
       // Check if there are any absence deductions
@@ -99,14 +105,14 @@ async function fixAbsenceDeductions() {
         const otherDeductions = breakdown.otherDeductionDetails?.reduce((sum: number, d: any) => sum + d.amount, 0) || 0
         const totalDeductions = newTotalAttendanceDeductions + loanDeductions + otherDeductions
 
-        const grossPay = entry.basicSalary + (entry.overtime || 0)
+        const grossPay = Number(entry.basicSalary) + Number(entry.overtime || 0)
         const newNetPay = Math.max(0, grossPay - totalDeductions)
 
         // Update the payroll entry
         await prisma.payrollEntry.update({
           where: { payroll_entries_id: entry.payroll_entries_id },
           data: {
-            breakdown: breakdown,
+            breakdownSnapshot: JSON.stringify(breakdown),
             deductions: totalDeductions,
             netPay: newNetPay
           }

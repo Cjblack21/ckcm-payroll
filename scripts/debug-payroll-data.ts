@@ -37,19 +37,23 @@ async function debugPayrollData() {
       console.log(`💸 Total Deductions: ₱${entry.deductions}`)
       console.log(`💵 Net Pay: ₱${entry.netPay}`)
       
-      if (entry.breakdown) {
-        const breakdown = entry.breakdown as any
-        console.log('\n📋 BREAKDOWN DATA:')
-        console.log(JSON.stringify(breakdown, null, 2))
-        
-        if (breakdown.attendanceDeductionDetails) {
-          console.log('\n🚨 ATTENDANCE DEDUCTION DETAILS:')
-          breakdown.attendanceDeductionDetails.forEach((detail: any, idx: number) => {
-            console.log(`  ${idx + 1}. ${detail.description}: ₱${detail.amount}`)
-            if (detail.description?.toLowerCase().includes('absence')) {
-              console.log(`     ⚠️  ABSENCE DEDUCTION FOUND: ₱${detail.amount}`)
-            }
-          })
+      if (entry.breakdownSnapshot) {
+        try {
+          const breakdown = JSON.parse(entry.breakdownSnapshot) as any
+          console.log('\n📋 BREAKDOWN DATA:')
+          console.log(JSON.stringify(breakdown, null, 2))
+          
+          if (breakdown.attendanceDeductionDetails) {
+            console.log('\n🚨 ATTENDANCE DEDUCTION DETAILS:')
+            breakdown.attendanceDeductionDetails.forEach((detail: any, idx: number) => {
+              console.log(`  ${idx + 1}. ${detail.description}: ₱${detail.amount}`)
+              if (detail.description?.toLowerCase().includes('absence')) {
+                console.log(`     ⚠️  ABSENCE DEDUCTION FOUND: ₱${detail.amount}`)
+              }
+            })
+          }
+        } catch (e) {
+          console.log('⚠️  Could not parse breakdown snapshot')
         }
       }
       console.log('\n')

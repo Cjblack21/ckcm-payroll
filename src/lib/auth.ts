@@ -24,6 +24,7 @@ export const authOptions: NextAuthOptions = {
           name: profile.name,
           email: profile.email,
           image: profile.picture, // Explicitly map the picture field
+          role: 'PERSONNEL' as const, // Default role for OAuth users
         }
       },
     }),

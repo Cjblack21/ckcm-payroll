@@ -152,13 +152,13 @@ export async function GET(request: NextRequest) {
     // Fetch live attendance records from the shared getLiveAttendanceRecords
     // Get attendance settings to determine period
     const attendanceSettings = await prisma.attendanceSettings.findFirst()
-    if (!attendanceSettings?.periodStartDate || !attendanceSettings?.periodEndDate) {
+    if (!attendanceSettings?.periodStart || !attendanceSettings?.periodEnd) {
       console.error('❌ Attendance settings not configured')
       return NextResponse.json({ error: 'Attendance settings not configured' }, { status: 500 })
     }
     
-    const periodStart = new Date(attendanceSettings.periodStartDate)
-    const periodEnd = new Date(attendanceSettings.periodEndDate)
+    const periodStart = new Date(attendanceSettings.periodStart)
+    const periodEnd = new Date(attendanceSettings.periodEnd)
     periodEnd.setHours(23, 59, 59, 999)
     
     // Only fetch attendance up to today, not future dates

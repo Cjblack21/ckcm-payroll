@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // Launch Puppeteer with better Windows compatibility
     console.log('🚀 Launching browser...')
     browser = await puppeteer.launch({
-      headless: 'new',
+      headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     browser = null
 
     // Return PDF as download
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(Buffer.from(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="payslips-${periodStart}-to-${periodEnd}.pdf"`,

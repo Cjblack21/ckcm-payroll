@@ -42,13 +42,13 @@ export async function GET() {
 
   // Use attendance settings period instead of biweekly calculation
   const attendanceSettingsForPeriod = await prisma.attendanceSettings.findFirst()
-  if (!attendanceSettingsForPeriod?.periodStartDate || !attendanceSettingsForPeriod?.periodEndDate) {
+  if (!attendanceSettingsForPeriod?.periodStart || !attendanceSettingsForPeriod?.periodEnd) {
     console.error('❌ Attendance settings not configured')
     return NextResponse.json({ error: 'Attendance settings not configured' }, { status: 500 })
   }
   
-  const periodStart = new Date(attendanceSettingsForPeriod.periodStartDate)
-  const periodEnd = new Date(attendanceSettingsForPeriod.periodEndDate)
+  const periodStart = new Date(attendanceSettingsForPeriod.periodStart)
+  const periodEnd = new Date(attendanceSettingsForPeriod.periodEnd)
   periodEnd.setHours(23, 59, 59, 999)
   
   console.log('✅ Using attendance settings period:', { periodStart, periodEnd })
@@ -62,6 +62,7 @@ export async function GET() {
       email: true,
       personnelType: {
         select: {
+          name: true,
           basicSalary: true,
           type: true,
           department: true

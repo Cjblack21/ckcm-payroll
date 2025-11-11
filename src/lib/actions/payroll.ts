@@ -495,6 +495,7 @@ export async function getPayrollSummary(): Promise<{
           totalWorkHours,
           grossSalary: (se.user?.personnelType?.basicSalary ? Number(se.user.personnelType.basicSalary) : Number(se.basicSalary)) * perPayrollFactor,
           totalDeductions: Number(se.deductions),
+          totalAdditions: Number(se.overtime) || 0,
           netSalary: Number(se.netPay),
           status: se.status === 'RELEASED' ? 'Released' : 'Pending',
           attendanceRecords,
@@ -872,11 +873,8 @@ export async function getPayrollSummary(): Promise<{
         users_id: user.users_id,
         name: user.name,
         email: user.email,
-        avatar: user.avatar,
         personnelType: {
           name: user.personnelType.name,
-          type: user.personnelType.type,
-          department: user.personnelType.department,
           basicSalary: monthlyBasicSalary // Store monthly salary in personnel type for reference
         },
         totalDays,
@@ -904,11 +902,6 @@ export async function getPayrollSummary(): Promise<{
           return mapped
         })(),
         loanPayments: totalLoanPayments,
-        loanDetails: loanDetails,
-        overloadPayDetails: userOverloadPays.map(op => ({
-          type: op.type || 'OVERTIME',
-          amount: Number(op.amount)
-        })),
         // Separate deduction breakdowns for frontend
         attendanceDeductions: totalAttendanceDeductions,
         databaseDeductions: totalDatabaseDeductions,
@@ -1159,8 +1152,6 @@ export async function releasePayroll(entryIds: string[]): Promise<{
           loanPayments: summaryEntry.loanPayments,
           attendanceRecords: summaryEntry.attendanceRecords,
           deductionDetails: summaryEntry.deductionDetails,
-          loanDetails: summaryEntry.loanDetails || [], // Individual loan breakdown
-          overloadPayDetails: summaryEntry.overloadPayDetails || [], // Individual additional pay breakdown
           personnelType: summaryEntry.personnelType?.name
         }
         

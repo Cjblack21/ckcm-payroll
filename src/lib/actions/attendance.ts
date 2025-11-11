@@ -469,8 +469,10 @@ export async function getCurrentDayAttendance(): Promise<{
           name: user.name,
           email: user.email,
           personnelType: user.personnelType ? {
-            ...user.personnelType,
-            basicSalary: Number(user.personnelType.basicSalary)
+            name: user.personnelType.name,
+            type: user.personnelType.type || undefined,
+            basicSalary: Number(user.personnelType.basicSalary),
+            department: user.personnelType.department || undefined
           } : undefined
         },
         workHours,
@@ -796,8 +798,10 @@ export async function getPersonnelAttendance(): Promise<{
         name: user.name,
         email: user.email,
         personnelType: user.personnelType ? {
-          ...user.personnelType,
-          basicSalary: Number(user.personnelType.basicSalary)
+          name: user.personnelType.name,
+          type: user.personnelType.type || undefined,
+          basicSalary: Number(user.personnelType.basicSalary),
+          department: user.personnelType.department || undefined
         } : undefined,
         totalDays,
         presentDays,

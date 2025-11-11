@@ -11,7 +11,15 @@ async function debugArchivedPayroll() {
     console.log('🔍 Inspecting archived payroll data...')
 
     // Get archived payroll records
-    const archivedPayrolls = await prisma.archivedPayroll.findMany({
+    const archivedPayrolls = await prisma.payrollEntry.findMany({
+      where: {
+        archivedAt: {
+          not: null
+        }
+      },
+      include: {
+        user: true
+      },
       orderBy: {
         releasedAt: 'desc'
       },
@@ -21,22 +29,30 @@ async function debugArchivedPayroll() {
     console.log(`\n📊 Found ${archivedPayrolls.length} archived payroll records\n`)
 
     for (const record of archivedPayrolls) {
-      const data = record.payrollData as any
-      
       console.log('═'.repeat(80))
-      console.log(`👤 User: ${data.userName || data.userEmail}`)
-      console.log(`📅 Period: ${data.periodStart} to ${data.periodEnd}`)
-      console.log(`💸 Total Deductions: ₱${data.deductions}`)
-      console.log(`💵 Net Pay: ₱${data.netPay}`)
+      console.log(`👤 User: ${record.user.name || record.user.email}`)
+      console.log(`📅 Period: ${record.periodStart.toISOString()} to ${record.periodEnd.toISOString()}`)
+      console.log(`💰 Basic Salary: ₱${record.basicSalary}`)
+      console.log(`⏰ Overtime: ₱${record.overtime}`)
+      console.log(`💸 Total Deductions: ₱${record.deductions}`)
+      console.log(`💵 Net Pay: ₱${record.netPay}`)
+      console.log(`📋 Status: ${record.status}`)
       
-      if (data.breakdown?.attendanceDeductionDetails) {
-        console.log('\n🚨 ATTENDANCE DEDUCTION DETAILS:')
-        data.breakdown.attendanceDeductionDetails.forEach((detail: any, idx: number) => {
-          console.log(`  ${idx + 1}. ${detail.description}: ₱${detail.amount}`)
-          if (detail.amount === 800 || detail.amount === '800') {
-            console.log(`     ⚠️  FOUND ₱800 DEDUCTION!`)
+      if (record.breakdownSnapshot) {
+        try {
+          const breakdown = JSON.parse(record.breakdownSnapshot)
+          if (breakdown?.attendanceDeductionDetails) {
+            console.log('\n🚨 ATTENDANCE DEDUCTION DETAILS:')
+            breakdown.attendanceDeductionDetails.forEach((detail: any, idx: number) => {
+              console.log(`  ${idx + 1}. ${detail.description}: ₱${detail.amount}`)
+              if (detail.amount === 800 || detail.amount === '800') {
+                console.log(`     ⚠️  FOUND ₱800 DEDUCTION!`)
+              }
+            })
           }
-        })
+        } catch (e) {
+          console.log('⚠️  Could not parse breakdown snapshot')
+        }
       }
       console.log('\n')
     }

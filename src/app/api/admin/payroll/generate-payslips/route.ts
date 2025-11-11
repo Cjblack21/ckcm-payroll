@@ -149,7 +149,7 @@ async function handlePayslipGeneration(periodStart: string | null, periodEnd: st
         }))
 
       // USE BREAKDOWN DATA ONLY - NO RECALCULATION
-      const storedBreakdown = entry.breakdown as any
+      const storedBreakdown = (entry as any).breakdown as any
       const attendanceDeductionDetails = storedBreakdown?.attendanceDeductionDetails || []
       const totalAttendanceDeductions = storedBreakdown?.totalAttendanceDeductions || 0
       

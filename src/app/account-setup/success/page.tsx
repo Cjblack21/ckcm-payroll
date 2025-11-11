@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2 } from 'lucide-react'
 import Image from 'next/image'
 
-export default function AccountSetupSuccessPage() {
+function SuccessContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const userName = searchParams.get('name') || 'User'
@@ -86,5 +86,17 @@ export default function AccountSetupSuccessPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function AccountSetupSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+        <div className="text-center">Loading...</div>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   )
 }

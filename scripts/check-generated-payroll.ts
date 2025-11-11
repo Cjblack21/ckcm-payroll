@@ -43,9 +43,10 @@ async function checkGeneratedPayroll() {
     
     for (const entry of payrollEntries) {
       console.log(`   - ${entry.user.name} (${entry.user.email})`)
-      console.log(`     Gross: ₱${entry.grossSalary}`)
-      console.log(`     Deductions: ₱${entry.totalDeductions}`)
-      console.log(`     Net: ₱${entry.netSalary}`)
+      console.log(`     Basic Salary: ₱${entry.basicSalary}`)
+      console.log(`     Overtime: ₱${entry.overtime}`)
+      console.log(`     Deductions: ₱${entry.deductions}`)
+      console.log(`     Net: ₱${entry.netPay}`)
       console.log(`     Status: ${entry.status}`)
       console.log('')
     }

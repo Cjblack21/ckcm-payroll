@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const netPay = snapshot?.netPay || Number(payrollEntry.netPay)
     
     // Get header settings
-    const headerSettings = await prisma.payslipHeaderSettings.findFirst()
+    const headerSettings = await prisma.headerSettings.findFirst()
     
     // Format payslip data in the same structure as admin
     const payslipData = [{
@@ -76,19 +76,19 @@ export async function POST(request: NextRequest) {
     // Generate PDF using the same component as admin
     const pdfStream = await renderToStream(
       <PayslipsDocument
-        employees={payslipData}
+        employees={payslipData as any}
         period={{ 
           periodStart: new Date(periodStart).toISOString(), 
           periodEnd: new Date(periodEnd).toISOString() 
         }}
-        headerSettings={headerSettings}
+        headerSettings={headerSettings as any}
       />
     )
 
     // Convert stream to buffer
     const chunks: Uint8Array[] = []
     for await (const chunk of pdfStream) {
-      chunks.push(chunk)
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
     }
     const pdfBuffer = Buffer.concat(chunks)
 

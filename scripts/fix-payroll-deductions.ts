@@ -72,7 +72,15 @@ async function fixPayrollDeductions() {
     }
     
     const oldDeductions = Number(entry.deductions)
-    const oldAttendanceDeductions = Number((entry.breakdown as any)?.attendanceDeductions || 0)
+    let oldAttendanceDeductions = 0
+    if (entry.breakdownSnapshot) {
+      try {
+        const breakdown = JSON.parse(entry.breakdownSnapshot)
+        oldAttendanceDeductions = Number(breakdown?.attendanceDeductions || 0)
+      } catch (e) {
+        // ignore
+      }
+    }
     const otherDeductions = oldDeductions - oldAttendanceDeductions
     
     const newTotalDeductions = totalAttendanceDeductions + otherDeductions
@@ -84,15 +92,22 @@ async function fixPayrollDeductions() {
     console.log(`   New Net Pay: ₱${newNetPay.toFixed(2)}\n`)
     
     // Update the payroll entry
+    let updatedBreakdown: any = {}
+    if (entry.breakdownSnapshot) {
+      try {
+        updatedBreakdown = JSON.parse(entry.breakdownSnapshot)
+      } catch (e) {
+        // ignore
+      }
+    }
+    updatedBreakdown.attendanceDeductions = totalAttendanceDeductions
+    
     await prisma.payrollEntry.update({
       where: { payroll_entries_id: entry.payroll_entries_id },
       data: {
         deductions: newTotalDeductions,
         netPay: newNetPay,
-        breakdown: {
-          ...(entry.breakdown as any),
-          attendanceDeductions: totalAttendanceDeductions
-        }
+        breakdownSnapshot: JSON.stringify(updatedBreakdown)
       }
     })
   }

@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
 
     // Debug logging
     console.log('📦 Archive API - Total periods:', archiveList.length)
-    console.log('📦 Archive API - First period payrolls count:', archiveList[0]?.payrolls?.length)
+    console.log('📦 Archive API - First period payrolls count:', (archiveList[0] as any)?.payrolls?.length)
     console.log('📦 Archive API - Sample data:', JSON.stringify(archiveList[0], null, 2))
 
     return NextResponse.json({ 

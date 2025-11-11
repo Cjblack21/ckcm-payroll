@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { z } from "zod"
 
 const updateSchema = z.object({
@@ -86,7 +87,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             newAmount = salary.mul(updated.percentageValue).div(100)
           } else {
             // No salary available, fallback to 0
-            newAmount = 0
+            newAmount = new Prisma.Decimal(0)
           }
         }
         return prisma.deduction.update({
