@@ -1710,43 +1710,6 @@ html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !impo
                 <p className="text-xs text-muted-foreground">{currentPeriod.type} period</p>
               </div>
 
-              {/* Payroll Summary Counts */}
-              {payrollEntries.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="p-1.5 bg-blue-100 dark:bg-blue-950/30 rounded">
-                      <svg className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-medium">Payroll Items</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Additions</p>
-                      <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                        {payrollEntries.reduce((sum: number, entry: any) => {
-                          const hasOverload = (entry.breakdown?.overloadPayDetails?.length ?? 0) > 0
-                          return sum + (hasOverload ? 1 : 0)
-                        }, 0)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Deductions</p>
-                      <p className="text-lg font-bold text-red-600 dark:text-red-400">
-                        {payrollEntries.reduce((sum: number, entry: any) => {
-                          const attendance = (entry.breakdown?.attendanceDetails?.length ?? 0)
-                          const loans = (entry.breakdown?.loanDetails?.length ?? 0)
-                          const mandatory = (entry.breakdown?.otherDeductionDetails?.filter((d: any) => d.isMandatory)?.length ?? 0)
-                          const other = (entry.breakdown?.otherDeductionDetails?.filter((d: any) => !d.isMandatory)?.length ?? 0)
-                          return sum + attendance + loans + mandatory + other
-                        }, 0)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Release Status */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground">
