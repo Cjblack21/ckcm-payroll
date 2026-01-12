@@ -623,20 +623,6 @@ export default function PayrollBreakdownDialog({
                       </Badge>
                     </>
                   )}
-                  {entry.personnelTypeCategory && (
-                    <>
-                      <span className="text-muted-foreground">•</span>
-                      <Badge 
-                        variant={entry.personnelTypeCategory === 'TEACHING' ? 'default' : 'secondary'}
-                        className={entry.personnelTypeCategory === 'TEACHING' 
-                          ? 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs' 
-                          : 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800 text-xs'
-                        }
-                      >
-                        {entry.personnelTypeCategory === 'TEACHING' ? 'Teaching' : 'Non-Teaching'}
-                      </Badge>
-                    </>
-                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">

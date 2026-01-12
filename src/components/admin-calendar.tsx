@@ -52,10 +52,10 @@ export function AdminCalendar() {
   ]
 
   // Get events for selected date
-  const selectedDateEvents = selectedDate 
-    ? calendarEvents.filter(event => 
-        format(event.date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
-      )
+  const selectedDateEvents = selectedDate
+    ? calendarEvents.filter(event =>
+      format(event.date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+    )
     : []
 
   const getEventTypeColor = (type: string) => {
@@ -77,29 +77,31 @@ export function AdminCalendar() {
           <CardTitle>Calendar</CardTitle>
           <CardDescription>View holidays and important dates</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={setSelectedDate}
-            className="rounded-md border"
-            modifiers={{
-              holiday: calendarData.holidays.map(h => h.date),
-              event: calendarData.events.map(e => e.date)
-            }}
-            modifiersStyles={{
-              holiday: { 
-                backgroundColor: '#fee2e2', 
-                color: '#dc2626',
-                fontWeight: 'bold'
-              },
-              event: { 
-                backgroundColor: '#dbeafe', 
-                color: '#2563eb',
-                fontWeight: 'bold'
-              }
-            }}
-          />
+        <CardContent className="flex justify-center">
+          <div className="scale-125 origin-center my-6">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              className="rounded-md border"
+              modifiers={{
+                holiday: calendarData.holidays.map(h => h.date),
+                event: calendarData.events.map(e => e.date)
+              }}
+              modifiersStyles={{
+                holiday: {
+                  backgroundColor: '#fee2e2',
+                  color: '#dc2626',
+                  fontWeight: 'bold'
+                },
+                event: {
+                  backgroundColor: '#dbeafe',
+                  color: '#2563eb',
+                  fontWeight: 'bold'
+                }
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -158,17 +160,52 @@ export function AdminCalendar() {
       {/* Quick Stats */}
       <Card>
         <CardHeader>
-          <CardTitle>This Month Summary</CardTitle>
+          <CardTitle>Event Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-4 rounded-lg bg-red-50">
-              <p className="text-2xl font-bold text-red-600">{calendarData.holidays.length}</p>
-              <p className="text-sm text-red-600">Holidays</p>
+          <div className="space-y-4">
+            {/* This Month */}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-2">This Month</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 rounded-lg bg-red-50">
+                  <p className="text-2xl font-bold text-red-600">{calendarData.holidays.length}</p>
+                  <p className="text-sm text-red-600">Holidays</p>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-blue-50">
+                  <p className="text-2xl font-bold text-blue-600">{calendarData.events.length}</p>
+                  <p className="text-sm text-blue-600">Events</p>
+                </div>
+              </div>
             </div>
-            <div className="text-center p-4 rounded-lg bg-blue-50">
-              <p className="text-2xl font-bold text-blue-600">{calendarData.events.length}</p>
-              <p className="text-sm text-blue-600">Events</p>
+
+            {/* Next Month */}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-2">Next Month</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 rounded-lg bg-red-50">
+                  <p className="text-2xl font-bold text-red-600">
+                    {calendarData.holidays.filter(h => {
+                      const nextMonth = new Date()
+                      nextMonth.setMonth(nextMonth.getMonth() + 1)
+                      return h.date.getMonth() === nextMonth.getMonth() &&
+                        h.date.getFullYear() === nextMonth.getFullYear()
+                    }).length}
+                  </p>
+                  <p className="text-sm text-red-600">Holidays</p>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-blue-50">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {calendarData.events.filter(e => {
+                      const nextMonth = new Date()
+                      nextMonth.setMonth(nextMonth.getMonth() + 1)
+                      return e.date.getMonth() === nextMonth.getMonth() &&
+                        e.date.getFullYear() === nextMonth.getFullYear()
+                    }).length}
+                  </p>
+                  <p className="text-sm text-blue-600">Events</p>
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>

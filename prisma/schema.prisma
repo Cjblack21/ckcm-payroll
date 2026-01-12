@@ -238,7 +238,7 @@ model HeaderSettings {
   schoolName      String
   schoolAddress   String
   systemName      String
-  logoUrl         String   @default("/ckcm.png")
+  logoUrl         String   @default("/brgy-logo.png")
   showLogo        Boolean  @default(true)
   headerAlignment String   @default("center")
   fontSize        String   @default("medium")

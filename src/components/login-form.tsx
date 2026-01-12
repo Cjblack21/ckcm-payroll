@@ -33,21 +33,14 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      const result = await signIn("credentials", {
-        email: data.email.trim().toLowerCase(),
-        password: data.password.trim(),
+      const result = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
         redirect: false,
       })
-      const err = result?.error
-      if (err) {
-        console.warn("SignIn error:", err)
-        if (err === "CredentialsSignin") {
-          toast.error("Invalid email or password")
-        } else if (err === "CLIENT_FETCH_ERROR") {
-          toast.error("Connection error. Please check your network and try again.")
-        } else {
-          toast.error(`Login failed: ${err}`)
-        }
+
+      if (result?.error) {
+        toast.error('Invalid email or password')
       } else if (result?.ok) {
         toast.success("Logged in successfully!")
         router.push("/dashboard")
@@ -62,14 +55,14 @@ export function LoginForm({
   }
 
   const handleGoogleSignIn = async () => {
-    await signIn("google", { 
+    await signIn("google", {
       callbackUrl: "/dashboard"
     })
   }
 
   return (
-    <form 
-      className={cn("space-y-5", className)} 
+    <form
+      className={cn("space-y-5", className)}
       onSubmit={handleSubmit(onSubmit)}
       {...props}
     >
@@ -78,13 +71,13 @@ export function LoginForm({
         <Label htmlFor="email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
           Email
         </Label>
-        <Input 
-          id="email" 
-          type="email" 
-          placeholder="user@ckcm.com" 
+        <Input
+          id="email"
+          type="email"
+          placeholder="user@example.com"
           {...register("email")}
           disabled={isLoading}
-          className="h-12 bg-slate-100 dark:bg-[#1a2942] border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-orange-500 focus-visible:border-orange-500"
+          className="h-12 bg-slate-100 dark:bg-white/10 border-slate-300 dark:border-white/20 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-white/40 focus-visible:ring-[#00A3B1] focus-visible:border-[#00A3B1]"
         />
         {errors.email && (
           <p className="text-sm text-destructive">{errors.email.message}</p>
@@ -97,13 +90,13 @@ export function LoginForm({
           Password
         </Label>
         <div className="relative">
-          <Input 
-            id="password" 
+          <Input
+            id="password"
             type={showPassword ? "text" : "password"}
             placeholder="Enter your password"
             {...register("password")}
             disabled={isLoading}
-            className="h-12 bg-slate-100 dark:bg-[#1a2942] border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-orange-500 focus-visible:border-orange-500 pr-10"
+            className="h-12 bg-slate-100 dark:bg-white/10 border-slate-300 dark:border-white/20 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-white/40 focus-visible:ring-[#00A3B1] focus-visible:border-[#00A3B1] pr-10"
           />
           <button
             type="button"
@@ -122,18 +115,18 @@ export function LoginForm({
       {/* Remember Me & Forgot Password */}
       <div className="flex items-center justify-between text-xs">
         <label className="flex items-center gap-2 text-slate-600 dark:text-slate-400 cursor-pointer">
-          <input type="checkbox" className="rounded border-slate-400 dark:border-slate-600 bg-slate-100 dark:bg-[#1a2942] text-orange-500 focus:ring-orange-500" />
+          <input type="checkbox" className="rounded border-white/30 bg-white/10 text-[#00A3B1] focus:ring-[#00A3B1]" />
           <span>Remember Me</span>
         </label>
-        <a href="#" className="text-orange-500 hover:text-orange-400">
+        <a href="#" className="text-[#00A1AE] hover:text-[#00818c] dark:text-white dark:hover:text-[#00A3B1] transition-colors">
           Forgot password?
         </a>
       </div>
 
       {/* Sign In Button */}
-      <Button 
-        type="submit" 
-        className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors rounded-lg" 
+      <Button
+        type="submit"
+        className="w-full h-12 bg-gradient-to-r from-[#00A3B1] to-[#00818c] hover:opacity-90 text-white font-semibold transition-all rounded-lg shadow-lg"
         disabled={isLoading}
       >
         {isLoading ? (
@@ -185,9 +178,7 @@ export function LoginForm({
         Sign in with Google
       </Button>
 
-      <p className="text-center text-xs text-slate-500">
-        Only @ckcm.edu.ph email addresses are allowed
-      </p>
+
     </form>
   )
 }

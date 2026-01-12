@@ -1,12 +1,12 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { 
-  Users, 
-  Wallet, 
-  UserCheck, 
-  UserX, 
-  Banknote, 
+import {
+  Users,
+  Wallet,
+  UserCheck,
+  UserX,
+  Banknote,
   Calendar as CalendarIcon,
   ArrowUpRight,
   ArrowDownRight,
@@ -23,12 +23,12 @@ export default async function AdminDashboard() {
 
   // Get real data from database
   const dashboardStats = await getDashboardStats()
-  
-  const attendanceRate = dashboardStats.totalPersonnel > 0 
+
+  const attendanceRate = dashboardStats.totalPersonnel > 0
     ? ((dashboardStats.attendanceToday / dashboardStats.totalPersonnel) * 100).toFixed(1)
     : "0"
-    
-  const absentRate = dashboardStats.totalPersonnel > 0 
+
+  const absentRate = dashboardStats.totalPersonnel > 0
     ? ((dashboardStats.absentToday / dashboardStats.totalPersonnel) * 100).toFixed(1)
     : "0"
 
@@ -46,7 +46,7 @@ export default async function AdminDashboard() {
     {
       title: "Monthly Payroll",
       value: `₱${Math.round(Number(dashboardStats.monthlyPayroll)).toLocaleString()}`,
-      description: "Current month total", 
+      description: "Current month total",
       icon: Wallet,
       trend: "up",
       color: "text-green-600",
@@ -55,7 +55,7 @@ export default async function AdminDashboard() {
     },
     {
       title: "Attendance Today",
-      value: `${dashboardStats.attendanceToday} / ${dashboardStats.totalPersonnel}`,
+      value: `${dashboardStats.attendanceToday} / ${dashboardStats.attendanceToday + dashboardStats.absentToday}`,
       description: `Present: ${dashboardStats.attendanceToday} • Absent: ${dashboardStats.absentToday}`,
       icon: UserCheck,
       trend: "stable",
@@ -103,7 +103,7 @@ export default async function AdminDashboard() {
           Welcome back, {session?.user.name}!
         </h1>
         <p className="text-muted-foreground">
-          Here&apos;s what&apos;s happening with your CKCM Payroll Management System today.
+          Here&apos;s what&apos;s happening with your POBLACION - PMS dashboard today.
         </p>
       </div>
 
@@ -135,6 +135,107 @@ export default async function AdminDashboard() {
           )
         })}
       </div>
+
+      {/* Attendance Statistics Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5 text-blue-600" />
+            Attendance Statistics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Present */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Present</span>
+                <span className="text-sm font-bold text-green-600">
+                  {dashboardStats.attendanceToday}
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-green-500 transition-all duration-500"
+                  style={{
+                    width: `${dashboardStats.totalPersonnel > 0
+                      ? (dashboardStats.attendanceToday / dashboardStats.totalPersonnel * 100)
+                      : 0}%`
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {dashboardStats.totalPersonnel > 0
+                  ? ((dashboardStats.attendanceToday / dashboardStats.totalPersonnel * 100).toFixed(1))
+                  : 0}% of total personnel
+              </p>
+            </div>
+
+            {/* Absent */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Absent</span>
+                <span className="text-sm font-bold text-red-600">
+                  {dashboardStats.absentToday}
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-red-500 transition-all duration-500"
+                  style={{
+                    width: `${dashboardStats.totalPersonnel > 0
+                      ? (dashboardStats.absentToday / dashboardStats.totalPersonnel * 100)
+                      : 0}%`
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {dashboardStats.totalPersonnel > 0
+                  ? ((dashboardStats.absentToday / dashboardStats.totalPersonnel * 100).toFixed(1))
+                  : 0}% of total personnel
+              </p>
+            </div>
+
+            {/* Attendance Rate */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Attendance Rate</span>
+                <span className="text-sm font-bold text-blue-600">
+                  {attendanceRate}%
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-500"
+                  style={{ width: `${attendanceRate}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Overall presence rate
+              </p>
+            </div>
+
+            {/* Absence Rate */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Absence Rate</span>
+                <span className="text-sm font-bold text-orange-600">
+                  {absentRate}%
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-orange-500 transition-all duration-500"
+                  style={{ width: `${absentRate}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Overall absence rate
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts and Analytics Section */}
       <div className="grid gap-8 lg:grid-cols-3">

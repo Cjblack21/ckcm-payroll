@@ -22,7 +22,7 @@ export default function LoginPage() {
   }, [])
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0a1628]">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#00A3B1] via-[#41BD87] to-[#82D65A]">
       {/* Enhanced Theme Toggle with Dropdown */}
       {mounted && (
         <DropdownMenu>
@@ -38,7 +38,7 @@ export default function LoginPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40 bg-slate-800/95 backdrop-blur-md border-slate-700">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("light")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -46,7 +46,7 @@ export default function LoginPage() {
               <span>Light</span>
               {theme === "light" && <span className="ml-auto text-xs">✓</span>}
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("dark")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -54,7 +54,7 @@ export default function LoginPage() {
               <span>Dark</span>
               {theme === "dark" && <span className="ml-auto text-xs">✓</span>}
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("system")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -72,13 +72,13 @@ export default function LoginPage() {
           <div className="flex flex-col items-center space-y-6">
             {/* Logo */}
             <div className="flex justify-center">
-              <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center">
+              <div className="w-32 h-32 bg-[#00939d] rounded-2xl flex items-center justify-center transform translate-y-8 shadow-xl">
                 <Image
-                  src="/ckcm.png"
-                  alt="CKCM Logo"
-                  width={48}
-                  height={48}
-                  className="h-12 w-12"
+                  src="/brgy-logo.png"
+                  alt="Barangay Logo"
+                  width={112}
+                  height={112}
+                  className="h-28 w-28 transform translate-y-2"
                   unoptimized
                 />
               </div>
@@ -87,7 +87,7 @@ export default function LoginPage() {
             {/* Title */}
             <div className="text-center space-y-2">
               <h1 className="text-3xl font-bold text-white">
-                CKCM Payroll
+                TUBOD BARANGAY POBLACION PMS
               </h1>
               <p className="text-sm text-slate-400">
                 Sign in to continue to your account
@@ -95,13 +95,13 @@ export default function LoginPage() {
             </div>
 
             {/* Login Card */}
-            <div className="w-full bg-[#0f1f3a] rounded-2xl p-8 border border-slate-800">
+            <div className="w-full bg-white/10 backdrop-blur-xl rounded-2xl p-8 border border-white/20 shadow-2xl">
               <LoginForm />
             </div>
 
             {/* Footer */}
             <p className="text-center text-xs text-slate-500">
-              © 2025 CKCM. All rights reserved.
+              © 2026 PMS. All rights reserved.
             </p>
           </div>
         </div>

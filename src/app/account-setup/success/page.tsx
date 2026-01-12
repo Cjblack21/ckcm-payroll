@@ -38,8 +38,8 @@ function SuccessContent() {
           {/* Logo */}
           <div className="flex justify-center">
             <Image
-              src="/ckcm.png"
-              alt="CKCM Logo"
+              src="/brgy-logo.png"
+              alt="Barangay Logo"
               width={64}
               height={64}
               className="h-16 w-16"
@@ -60,7 +60,7 @@ function SuccessContent() {
               Account Created Successfully!
             </h1>
             <p className="text-slate-600 dark:text-slate-400">
-              Welcome to CKCM Payroll Management System, <span className="font-semibold text-slate-900 dark:text-white">{userName}</span>
+              Welcome to POBLACION - PMS, <span className="font-semibold text-slate-900 dark:text-white">{userName}</span>
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-500">
               Your account has been set up and is ready to use.
@@ -82,7 +82,7 @@ function SuccessContent() {
         </div>
 
         <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
-          © 2025 CKCM. All rights reserved.
+          © 2026 PMS. All rights reserved.
         </p>
       </div>
     </div>

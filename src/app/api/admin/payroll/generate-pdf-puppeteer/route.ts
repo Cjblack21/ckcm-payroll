@@ -3,20 +3,20 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import puppeteer from 'puppeteer'
-import { 
-  calculateLateDeduction, 
-  calculateAbsenceDeduction, 
-  calculatePartialDeduction, 
-  calculateEarnings 
+import {
+  calculateLateDeduction,
+  calculateAbsenceDeduction,
+  calculatePartialDeduction,
+  calculateEarnings
 } from "@/lib/attendance-calculations"
 
 function getCurrentBiweeklyPeriod() {
   const now = new Date()
   const currentDate = now.getDate()
-  
+
   let periodStart: Date
   let periodEnd: Date
-  
+
   if (currentDate <= 15) {
     periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
     periodEnd = new Date(now.getFullYear(), now.getMonth(), 15)
@@ -24,19 +24,19 @@ function getCurrentBiweeklyPeriod() {
     periodStart = new Date(now.getFullYear(), now.getMonth(), 16)
     periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   }
-  
+
   periodStart.setHours(0, 0, 0, 0)
   periodEnd.setHours(23, 59, 59, 999)
-  
+
   return { periodStart, periodEnd }
 }
 
 export async function POST(request: NextRequest) {
   let browser;
-  
+
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
     // Get users with their personnel type and basic salary
     const users = await prisma.user.findMany({
       where: { isActive: true, role: 'PERSONNEL' },
-      select: { 
-        users_id: true, 
-        name: true, 
+      select: {
+        users_id: true,
+        name: true,
         email: true,
         personnelType: {
           select: {
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
 
     // Get all attendance data for real-time calculation
     const attendance = await prisma.attendance.findMany({
-      where: { 
-        users_id: { in: userIds }, 
+      where: {
+        users_id: { in: userIds },
         date: { gte: periodStart, lte: periodEnd }
       },
       select: {
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       if (record.status === 'PRESENT' && timeOut) {
         const earnings = calculateEarnings(monthlySalary, timeIn, timeOut)
         const workHours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
-        
+
         earningsMap.set(record.users_id, (earningsMap.get(record.users_id) || 0) + earnings)
         workHoursMap.set(record.users_id, (workHoursMap.get(record.users_id) || 0) + workHours)
       } else if (record.status === 'LATE' && timeOut) {
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
         const [hours, minutes] = timeInEnd.split(':').map(Number)
         expectedTimeIn.setHours(hours, minutes, 0, 0)
         const lateDeduction = await calculateLateDeduction(monthlySalary, timeIn, expectedTimeIn)
-        
+
         earningsMap.set(record.users_id, (earningsMap.get(record.users_id) || 0) + earnings)
         workHoursMap.set(record.users_id, (workHoursMap.get(record.users_id) || 0) + workHours)
         attendanceDeductionsMap.set(record.users_id, (attendanceDeductionsMap.get(record.users_id) || 0) + lateDeduction)
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       } else if (record.status === 'PARTIAL' && timeOut) {
         const workHours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60)
         const partialDeduction = await calculatePartialDeduction(monthlySalary, workHours)
-        
+
         earningsMap.set(record.users_id, (earningsMap.get(record.users_id) || 0) + (workHours * (monthlySalary / 30 / 8)))
         workHoursMap.set(record.users_id, (workHoursMap.get(record.users_id) || 0) + workHours)
         attendanceDeductionsMap.set(record.users_id, (attendanceDeductionsMap.get(record.users_id) || 0) + partialDeduction)
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       const monthlyPaymentPercent = Number(loan.monthlyPaymentPercent)
       const monthlyPayment = (loanAmount * monthlyPaymentPercent) / 100
       const biweeklyPayment = monthlyPayment / 2
-      
+
       loanPaymentsMap.set(loan.users_id, (loanPaymentsMap.get(loan.users_id) || 0) + biweeklyPayment)
     }
 
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       const realTimeEarnings = earningsMap.get(u.users_id) || 0
       const realWorkHours = workHoursMap.get(u.users_id) || 0
       const loanPayments = loanPaymentsMap.get(u.users_id) || 0
-      
+
       const overtimePay = Math.max(0, realTimeEarnings - biweeklyBasicSalary)
       const totalDeductions = attendanceDeductions + nonAttendanceDeductions + loanPayments
       const grossPay = biweeklyBasicSalary + overtimePay
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
           <div style="text-align: center; margin-bottom: 4px; border-bottom: 1px solid #000; padding-bottom: 2px;">
             ${headerSettings?.showLogo ? `
               <div style="margin-bottom: 1px;">
-                <img src="${headerSettings.logoUrl}" alt="Logo" style="height: 16px; width: auto;" onerror="this.src='/ckcm.png'">
+                <img src="${headerSettings.logoUrl}" alt="Logo" style="height: 16px; width: auto;" onerror="this.src='/brgy-logo.png'">
               </div>
             ` : ''}
             <div style="font-weight: bold; font-size: 8px; margin-bottom: 1px;">
@@ -380,7 +380,7 @@ export async function POST(request: NextRequest) {
     })
 
     const page = await browser.newPage()
-    
+
     // Set content and wait for it to load
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
 

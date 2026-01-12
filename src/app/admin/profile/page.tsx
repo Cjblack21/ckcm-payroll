@@ -51,9 +51,13 @@ export default function AdminProfile() {
   const [resettingAttendance, setResettingAttendance] = useState(false)
   const [resettingPositions, setResettingPositions] = useState(false)
   const [resettingCountdown, setResettingCountdown] = useState(false)
+  const [resettingMandatoryDeductions, setResettingMandatoryDeductions] = useState(false)
+  const [resettingOverloadPay, setResettingOverloadPay] = useState(false)
+  const [resettingLoans, setResettingLoans] = useState(false)
+  const [resettingOtherDeductions, setResettingOtherDeductions] = useState(false)
   const [resettingAll, setResettingAll] = useState(false)
   const [showResetModal, setShowResetModal] = useState(false)
-  const [resetType, setResetType] = useState<'payroll' | 'attendance' | 'positions' | 'countdown' | 'all' | null>(null)
+  const [resetType, setResetType] = useState<'payroll' | 'attendance' | 'positions' | 'countdown' | 'mandatory-deductions' | 'overload-pay' | 'loans' | 'other-deductions' | 'all' | null>(null)
   const [resetPassword, setResetPassword] = useState('')
 
   useEffect(() => {
@@ -261,6 +265,26 @@ export default function AdminProfile() {
     setShowResetModal(true)
   }
 
+  function handleResetMandatoryDeductions() {
+    setResetType('mandatory-deductions')
+    setShowResetModal(true)
+  }
+
+  function handleResetOverloadPay() {
+    setResetType('overload-pay')
+    setShowResetModal(true)
+  }
+
+  function handleResetLoans() {
+    setResetType('loans')
+    setShowResetModal(true)
+  }
+
+  function handleResetOtherDeductions() {
+    setResetType('other-deductions')
+    setShowResetModal(true)
+  }
+
   function handleResetAll() {
     setResetType('all')
     setShowResetModal(true)
@@ -281,6 +305,14 @@ export default function AdminProfile() {
         setResettingPositions(true)
       } else if (resetType === 'countdown') {
         setResettingCountdown(true)
+      } else if (resetType === 'mandatory-deductions') {
+        setResettingMandatoryDeductions(true)
+      } else if (resetType === 'overload-pay') {
+        setResettingOverloadPay(true)
+      } else if (resetType === 'loans') {
+        setResettingLoans(true)
+      } else if (resetType === 'other-deductions') {
+        setResettingOtherDeductions(true)
       } else {
         setResettingAll(true)
       }
@@ -307,7 +339,14 @@ export default function AdminProfile() {
         throw new Error(result.error || `Failed to reset ${resetType}`)
       }
 
-      const typeLabel = resetType === 'payroll' ? 'Payroll' : resetType === 'attendance' ? 'Attendance' : resetType === 'positions' ? 'Positions' : resetType === 'countdown' ? 'Payroll Release Countdown' : 'All'
+      const typeLabel = resetType === 'payroll' ? 'Payroll' : 
+                        resetType === 'attendance' ? 'Attendance' : 
+                        resetType === 'positions' ? 'Positions' : 
+                        resetType === 'countdown' ? 'Payroll Release Countdown' : 
+                        resetType === 'mandatory-deductions' ? 'Mandatory Deductions' : 
+                        resetType === 'overload-pay' ? 'Overload Pay' : 
+                        resetType === 'loans' ? 'Loans' : 
+                        resetType === 'other-deductions' ? 'Other Deductions' : 'All'
       
       // Show detailed feedback for attendance reset
       if (resetType === 'attendance' && result.deletedCount) {
@@ -326,6 +365,10 @@ export default function AdminProfile() {
       setResettingAttendance(false)
       setResettingPositions(false)
       setResettingCountdown(false)
+      setResettingMandatoryDeductions(false)
+      setResettingOverloadPay(false)
+      setResettingLoans(false)
+      setResettingOtherDeductions(false)
       setResettingAll(false)
     }
   }
@@ -700,6 +743,86 @@ export default function AdminProfile() {
                 </div>
               </div>
 
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="font-semibold text-red-900">Reset Mandatory Deductions</div>
+                    <div className="text-sm text-red-700 mt-1">
+                      This will permanently delete all mandatory deduction records (PHILHEALTH, TAX, SSS, Pag-IBIG, etc.).
+                      This action cannot be undone.
+                    </div>
+                  </div>
+                  <Button 
+                    variant="destructive"
+                    onClick={handleResetMandatoryDeductions}
+                    disabled={resettingMandatoryDeductions}
+                    className="shrink-0"
+                  >
+                    {resettingMandatoryDeductions ? "Resetting..." : "Reset Mandatory Deductions"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="font-semibold text-red-900">Reset Overload Pay</div>
+                    <div className="text-sm text-red-700 mt-1">
+                      This will permanently delete all overload pay records (overtime, position pay, bonuses, etc.).
+                      This action cannot be undone.
+                    </div>
+                  </div>
+                  <Button 
+                    variant="destructive"
+                    onClick={handleResetOverloadPay}
+                    disabled={resettingOverloadPay}
+                    className="shrink-0"
+                  >
+                    {resettingOverloadPay ? "Resetting..." : "Reset Overload Pay"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="font-semibold text-red-900">Reset Loans</div>
+                    <div className="text-sm text-red-700 mt-1">
+                      This will permanently delete all loan records and balances for all employees.
+                      This action cannot be undone.
+                    </div>
+                  </div>
+                  <Button 
+                    variant="destructive"
+                    onClick={handleResetLoans}
+                    disabled={resettingLoans}
+                    className="shrink-0"
+                  >
+                    {resettingLoans ? "Resetting..." : "Reset Loans"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="font-semibold text-red-900">Reset Other Deductions</div>
+                    <div className="text-sm text-red-700 mt-1">
+                      This will permanently delete all non-mandatory deduction records (excluding attendance deductions).
+                      This action cannot be undone.
+                    </div>
+                  </div>
+                  <Button 
+                    variant="destructive"
+                    onClick={handleResetOtherDeductions}
+                    disabled={resettingOtherDeductions}
+                    className="shrink-0"
+                  >
+                    {resettingOtherDeductions ? "Resetting..." : "Reset Other Deductions"}
+                  </Button>
+                </div>
+              </div>
+
               <div className="text-xs text-muted-foreground">
                 ⚠️ Warning: These actions will require multiple confirmations and cannot be reversed.
               </div>
@@ -809,7 +932,14 @@ export default function AdminProfile() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Reset {resetType === 'payroll' ? 'Payroll' : resetType === 'attendance' ? 'Attendance' : resetType === 'positions' ? 'Positions' : resetType === 'countdown' ? 'Countdown' : 'ALL'} Data
+                  Reset {resetType === 'payroll' ? 'Payroll' : 
+                         resetType === 'attendance' ? 'Attendance' : 
+                         resetType === 'positions' ? 'Positions' : 
+                         resetType === 'countdown' ? 'Countdown' : 
+                         resetType === 'mandatory-deductions' ? 'Mandatory Deductions' : 
+                         resetType === 'overload-pay' ? 'Overload Pay' : 
+                         resetType === 'loans' ? 'Loans' : 
+                         resetType === 'other-deductions' ? 'Other Deductions' : 'ALL'} Data
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">This action requires your password</p>
               </div>
@@ -834,8 +964,22 @@ export default function AdminProfile() {
                 </div>
               ) : null}
               <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
-                Are you sure you want to reset {resetType === 'payroll' ? 'payroll' : resetType === 'attendance' ? 'attendance' : resetType === 'positions' ? 'positions' : resetType === 'countdown' ? 'payroll release countdown' : 'EVERYTHING'}?
-                This will permanently {resetType === 'countdown' ? 'clear the period dates and reset the countdown to zero' : `delete all ${resetType === 'payroll' ? 'payroll entries' : resetType === 'attendance' ? 'attendance records' : resetType === 'positions' ? 'position/personnel type data' : 'system data'}`} and cannot be undone.
+                Are you sure you want to reset {resetType === 'payroll' ? 'payroll' : 
+                                                  resetType === 'attendance' ? 'attendance' : 
+                                                  resetType === 'positions' ? 'positions' : 
+                                                  resetType === 'countdown' ? 'payroll release countdown' : 
+                                                  resetType === 'mandatory-deductions' ? 'mandatory deductions' : 
+                                                  resetType === 'overload-pay' ? 'overload pay' : 
+                                                  resetType === 'loans' ? 'loans' : 
+                                                  resetType === 'other-deductions' ? 'other deductions' : 'EVERYTHING'}?
+                This will permanently {resetType === 'countdown' ? 'clear the period dates and reset the countdown to zero' : 
+                                      `delete all ${resetType === 'payroll' ? 'payroll entries' : 
+                                                    resetType === 'attendance' ? 'attendance records' : 
+                                                    resetType === 'positions' ? 'position/personnel type data' : 
+                                                    resetType === 'mandatory-deductions' ? 'mandatory deduction records' : 
+                                                    resetType === 'overload-pay' ? 'overload pay records' : 
+                                                    resetType === 'loans' ? 'loan records' : 
+                                                    resetType === 'other-deductions' ? 'other deduction records' : 'system data'}`} and cannot be undone.
               </p>
 
               <div className="space-y-2">
@@ -856,16 +1000,16 @@ export default function AdminProfile() {
               <Button
                 variant="outline"
                 onClick={cancelReset}
-                disabled={resettingPayroll || resettingAttendance || resettingPositions || resettingCountdown || resettingAll}
+                disabled={resettingPayroll || resettingAttendance || resettingPositions || resettingCountdown || resettingMandatoryDeductions || resettingOverloadPay || resettingLoans || resettingOtherDeductions || resettingAll}
               >
                 Cancel
               </Button>
               <Button
                 variant="destructive"
                 onClick={confirmReset}
-                disabled={resettingPayroll || resettingAttendance || resettingPositions || resettingCountdown || resettingAll || !resetPassword}
+                disabled={resettingPayroll || resettingAttendance || resettingPositions || resettingCountdown || resettingMandatoryDeductions || resettingOverloadPay || resettingLoans || resettingOtherDeductions || resettingAll || !resetPassword}
               >
-                {resettingPayroll || resettingAttendance || resettingPositions || resettingCountdown || resettingAll ? 'Resetting...' : 'Confirm Reset'}
+                {resettingPayroll || resettingAttendance || resettingPositions || resettingCountdown || resettingMandatoryDeductions || resettingOverloadPay || resettingLoans || resettingOtherDeductions || resettingAll ? 'Resetting...' : 'Confirm Reset'}
               </Button>
             </div>
           </div>

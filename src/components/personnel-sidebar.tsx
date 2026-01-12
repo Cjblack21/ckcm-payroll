@@ -49,7 +49,7 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
   if (!mounted) return null
-  
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -57,14 +57,14 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
           <SidebarMenuItem>
             <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:justify-center">
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                <img 
-                  src="/ckcm.png" 
-                  alt="CKCM Logo" 
+                <img
+                  src="/brgy-logo.png"
+                  alt="Barangay Logo"
                   className="h-8 w-8 object-contain"
                 />
               </div>
               <div className="group-data-[collapsible=icon]:hidden flex flex-col gap-0.5 leading-none">
-                <span className="font-semibold">CKCM PMS</span>
+                <span className="font-semibold">POBLACION - PMS</span>
                 <span className="text-xs text-muted-foreground">Welcome to PMS</span>
               </div>
             </div>
@@ -79,7 +79,7 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden">
         <SidebarSeparator />
-        
+
         {/* Main Dashboard */}
         <SidebarGroup key="personnel-main-v2">
           <SidebarGroupLabel>Overview</SidebarGroupLabel>
@@ -164,8 +164,8 @@ export function PersonnelSidebar({ user, ...props }: PersonnelSidebarProps) {
       </SidebarContent>
       <SidebarFooter>
         <div className="group-data-[collapsible=icon]:hidden px-3 py-2 text-center border-t">
-          <p className="text-xs font-medium">CKCM Payroll Management System</p>
-          <p className="text-xs text-muted-foreground">© 2025 All rights reserved</p>
+          <p className="text-xs font-medium">POBLACION - PMS</p>
+          <p className="text-xs text-muted-foreground">© 2026 PMS. All rights reserved.</p>
         </div>
       </SidebarFooter>
       <SidebarRail />

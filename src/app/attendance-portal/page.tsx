@@ -52,8 +52,8 @@ export default function AttendancePortalPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successModalMessage, setSuccessModalMessage] = useState('')
   const [successModalType, setSuccessModalType] = useState<'time-in' | 'time-out'>('time-in')
-  const [userAttendanceStatus, setUserAttendanceStatus] = useState<{hasTimedIn: boolean, hasTimedOut: boolean} | null>(null)
-  
+  const [userAttendanceStatus, setUserAttendanceStatus] = useState<{ hasTimedIn: boolean, hasTimedOut: boolean } | null>(null)
+
   // Auto-refresh interval in milliseconds (default: 30 seconds)
   const AUTO_REFRESH_INTERVAL = 30000
 
@@ -71,7 +71,7 @@ export default function AttendancePortalPage() {
     if (showAlreadyTimedInModal && settings) {
       const timeOutStart = settings.timeOutStart
       const currentTime = hhmmNow()
-      
+
       if (timeOutStart && currentTime >= timeOutStart) {
         setShowAlreadyTimedInModal(false)
       }
@@ -85,12 +85,12 @@ export default function AttendancePortalPage() {
         const res = await fetch(`${BASE_PATH}/api/attendance/settings`)
         const data = await res.json()
         setSettings((data.settings || null) as AttendanceSettings | null)
-      } catch (e) {}
+      } catch (e) { }
     }
-    
+
     fetchSettings()
   }, [])
-  
+
   // Auto-refresh settings periodically
   useEffect(() => {
     const refreshSettings = async () => {
@@ -98,9 +98,9 @@ export default function AttendancePortalPage() {
         const res = await fetch(`${BASE_PATH}/api/attendance/settings`)
         const data = await res.json()
         setSettings((data.settings || null) as AttendanceSettings | null)
-      } catch (e) {}
+      } catch (e) { }
     }
-    
+
     const interval = setInterval(refreshSettings, AUTO_REFRESH_INTERVAL)
     return () => clearInterval(interval)
   }, [BASE_PATH, AUTO_REFRESH_INTERVAL])
@@ -116,15 +116,15 @@ export default function AttendancePortalPage() {
   function within(start?: string | null, end?: string | null): boolean | null {
     if (!start || !end) return null
     const cur = hhmmNow()
-    
+
     // Convert to minutes for proper comparison
     const currentMinutes = parseInt(cur.split(':')[0]) * 60 + parseInt(cur.split(':')[1])
     const startMinutes = parseInt(start.split(':')[0]) * 60 + parseInt(start.split(':')[1])
     const endMinutes = parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1])
-    
+
     // Check if this is an overnight window (start > end)
     const isOvernightWindow = startMinutes > endMinutes
-    
+
     if (isOvernightWindow) {
       // Overnight window: valid if current >= start OR current <= end
       return currentMinutes >= startMinutes || currentMinutes <= endMinutes
@@ -156,7 +156,7 @@ export default function AttendancePortalPage() {
     setSaving(true)
     setMessage(null)
     setLeaveStatus(null)
-    
+
     try {
       // Use API route for attendance portal (no authentication required)
       const payload = schoolId.trim().includes('@') ? { email: schoolId.trim() } : { users_id: schoolId.trim() }
@@ -165,9 +165,9 @@ export default function AttendancePortalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      
+
       const result = await response.json()
-      
+
       if (!response.ok) {
         // Check if error is due to leave
         if (result.onLeave) {
@@ -178,22 +178,22 @@ export default function AttendancePortalPage() {
         // Determine modal type based on response
         const wasTimeIn = !result.record?.timeOut || result.lateDeduction
         const wasTimeOut = result.record?.timeOut || result.earlyTimeoutDeduction
-        
+
         // Clear the form
         setSchoolId("")
         setUserAttendanceStatus(null) // Reset status
-        
+
         // Determine modal type and message
         let modalMessage = 'Attendance recorded successfully!'
         let modalType: 'time-in' | 'time-out' = wasTimeOut ? 'time-out' : 'time-in'
-        
+
         // Show late message if applicable
         if (result.lateDeduction) {
           modalType = 'time-in'
           const totalMinutes = Math.floor(result.lateDeduction.minutes / 60)
           const hours = Math.floor(totalMinutes / 60)
           const minutes = totalMinutes % 60
-          
+
           let timeText = ''
           if (hours > 0 && minutes > 0) {
             timeText = `${hours} ${hours === 1 ? 'hour' : 'hours'} and ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
@@ -202,7 +202,7 @@ export default function AttendancePortalPage() {
           } else {
             timeText = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
           }
-          
+
           const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
           modalMessage = `You timed in at ${currentTime}\nYou are ${timeText} late`
         } else if (wasTimeIn) {
@@ -210,14 +210,14 @@ export default function AttendancePortalPage() {
           const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
           modalMessage = `You timed in at ${currentTime}\nOn time! Great job! ✨`
         }
-        
+
         // Show early timeout message if applicable
         if (result.earlyTimeoutDeduction) {
           modalType = 'time-out'
           const totalMinutes = result.earlyTimeoutDeduction.minutes
           const hours = Math.floor(totalMinutes / 60)
           const minutes = totalMinutes % 60
-          
+
           let timeText = ''
           if (hours > 0 && minutes > 0) {
             timeText = `${hours} ${hours === 1 ? 'hour' : 'hours'} and ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
@@ -226,7 +226,7 @@ export default function AttendancePortalPage() {
           } else {
             timeText = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
           }
-          
+
           const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
           modalMessage = `You timed out at ${currentTime}\nYou left ${timeText} early`
         } else if (wasTimeOut && !result.earlyTimeoutDeduction) {
@@ -234,12 +234,12 @@ export default function AttendancePortalPage() {
           const currentTime = formatInTimeZone(new Date(), "Asia/Manila", "h:mm a")
           modalMessage = `You timed out at ${currentTime}\nThank you for your hard work today! 💪`
         }
-        
+
         // Show success modal
         setSuccessModalType(modalType)
         setSuccessModalMessage(modalMessage)
         setShowSuccessModal(true)
-        
+
         // Auto-dismiss modal after 3 seconds
         setTimeout(() => {
           setShowSuccessModal(false)
@@ -257,7 +257,7 @@ export default function AttendancePortalPage() {
     if (!settings) return true
 
     const currentTime = hhmmNow()
-    
+
     // Block only after cutoff (timeOutEnd)
     if (settings.timeOutEnd) {
       const [ch, cm] = currentTime.split(':').map(Number)
@@ -322,7 +322,7 @@ export default function AttendancePortalPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40 bg-slate-800/95 backdrop-blur-md border-slate-700">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("light")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -330,7 +330,7 @@ export default function AttendancePortalPage() {
               <span>Light</span>
               {theme === "light" && <span className="ml-auto text-xs">✓</span>}
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("dark")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -338,7 +338,7 @@ export default function AttendancePortalPage() {
               <span>Dark</span>
               {theme === "dark" && <span className="ml-auto text-xs">✓</span>}
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("system")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -357,11 +357,11 @@ export default function AttendancePortalPage() {
             {/* Logo */}
             <div className="flex justify-center">
               <Image
-                src="/ckcm.png"
-                alt="CKCM Logo"
-                width={120}
-                height={120}
-                className="h-30 w-30"
+                src="/brgy-logo.png"
+                alt="Barangay Logo"
+                width={224}
+                height={224}
+                className="h-56 w-56 transform translate-y-12"
                 unoptimized
               />
             </div>
@@ -369,7 +369,7 @@ export default function AttendancePortalPage() {
             {/* Title */}
             <div className="text-center space-y-2">
               <h1 className="text-4xl font-bold text-white">
-                CKCM Attendance
+                POBLACION Attendance
               </h1>
               <p className="text-sm text-slate-400">
                 Submit your time in/out using your School ID or Email
@@ -393,9 +393,9 @@ export default function AttendancePortalPage() {
                 <label className="text-lg font-semibold text-white block">
                   School ID or Email
                 </label>
-                <Input 
-                  placeholder="Enter your School ID or Email" 
-                  value={schoolId} 
+                <Input
+                  placeholder="Enter your School ID or Email"
+                  value={schoolId}
                   onChange={(e) => setSchoolId(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && canPunch && !saving && onPunch()}
                   className="h-16 text-center text-2xl font-medium bg-slate-800/50 border-slate-700 focus:border-orange-500 text-white placeholder:text-slate-500"
@@ -403,9 +403,9 @@ export default function AttendancePortalPage() {
               </div>
 
               {/* Submit Button */}
-              <Button 
+              <Button
                 className="w-full h-14 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg transition-all duration-200"
-                disabled={saving || !schoolId.trim() || !canPunch || (userAttendanceStatus?.hasTimedOut === true)} 
+                disabled={saving || !schoolId.trim() || !canPunch || (userAttendanceStatus?.hasTimedOut === true)}
                 onClick={onPunch}
               >
                 {saving ? (
@@ -451,17 +451,16 @@ export default function AttendancePortalPage() {
               {/* Current Status Badge */}
               {settings && (inWindow !== null || outWindow !== null) && (
                 <div className="text-center">
-                  <Badge 
+                  <Badge
                     variant="outline"
-                    className={`text-xs px-3 py-1.5 font-medium ${
-                      inWindow 
-                        ? 'bg-green-500/10 text-green-400 border-green-500/30' 
-                        : outWindow 
-                        ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' 
+                    className={`text-xs px-3 py-1.5 font-medium ${inWindow
+                      ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                      : outWindow
+                        ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
                         : canPunch
-                        ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
-                        : 'bg-slate-700 text-slate-400 border-slate-600'
-                    }`}
+                          ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                          : 'bg-slate-700 text-slate-400 border-slate-600'
+                      }`}
                   >
                     {inWindow ? '🟢 On-time window' : outWindow ? '🟠 Time-out window' : canPunch ? '⚠️ Late/Early (deductions apply)' : '⚪ Past cutoff (attendance closed)'}
                   </Badge>
@@ -470,11 +469,10 @@ export default function AttendancePortalPage() {
 
               {/* Message Display */}
               {message && !leaveStatus && (
-                <div className={`text-center text-sm p-3 rounded-lg font-medium ${
-                  message.includes('successfully') 
-                    ? 'bg-green-500/10 text-green-400 border border-green-500/30' 
-                    : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                }`}>
+                <div className={`text-center text-sm p-3 rounded-lg font-medium ${message.includes('successfully')
+                  ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                  : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                  }`}>
                   <div className="flex items-center justify-center gap-2">
                     {message.includes('successfully') ? (
                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -487,7 +485,7 @@ export default function AttendancePortalPage() {
                   </div>
                 </div>
               )}
-              
+
               {leaveStatus && (
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-center">
                   <div className="text-sm font-medium text-blue-400">
@@ -499,7 +497,7 @@ export default function AttendancePortalPage() {
 
             {/* Footer */}
             <p className="text-center text-xs text-slate-500">
-              © 2025 CKCM. All rights reserved.
+              © 2026 PMS. All rights reserved.
             </p>
           </div>
         </div>
@@ -524,8 +522,8 @@ export default function AttendancePortalPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Time In:</span>
                     <span className="font-medium">
-                      {attendanceStatus.timeIn ? 
-                        formatInTimeZone(new Date(attendanceStatus.timeIn), 'Asia/Manila', 'h:mm a') : 
+                      {attendanceStatus.timeIn ?
+                        formatInTimeZone(new Date(attendanceStatus.timeIn), 'Asia/Manila', 'h:mm a') :
                         '—'
                       }
                     </span>
@@ -540,7 +538,7 @@ export default function AttendancePortalPage() {
               </div>
             )}
             <div className="text-sm text-muted-foreground">
-              You can only time out during the designated time-out window. 
+              You can only time out during the designated time-out window.
               Please wait for the time-out period to record your departure.
             </div>
             <div className="flex justify-end">
@@ -574,8 +572,8 @@ export default function AttendancePortalPage() {
           <div className="py-6">
             <div className="text-center">
               <div className="text-5xl mb-4">
-                {successModalMessage.includes('late') ? '⏰' : 
-                 successModalMessage.includes('early') ? '⚠️' : '✅'}
+                {successModalMessage.includes('late') ? '⏰' :
+                  successModalMessage.includes('early') ? '⚠️' : '✅'}
               </div>
               <p className="text-xl font-semibold text-foreground mb-2 whitespace-pre-line">
                 {successModalMessage}

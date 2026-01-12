@@ -9,36 +9,36 @@ function getCurrentBiweeklyPeriod() {
   const year = now.getFullYear()
   const month = now.getMonth()
   const day = now.getDate()
-  
+
   // Find the first Monday of the year
   const firstMonday = new Date(year, 0, 1)
   const dayOfWeek = firstMonday.getDay()
   const daysToAdd = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
   firstMonday.setDate(firstMonday.getDate() + daysToAdd)
-  
+
   // Calculate which biweekly period we're in
   const daysSinceFirstMonday = Math.floor((now.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24))
   const biweeklyPeriod = Math.floor(daysSinceFirstMonday / 14)
-  
+
   // Calculate start and end of current biweekly period
   const periodStart = new Date(firstMonday)
   periodStart.setDate(periodStart.getDate() + (biweeklyPeriod * 14))
-  
+
   const periodEnd = new Date(periodStart)
   periodEnd.setDate(periodEnd.getDate() + 13)
   periodEnd.setHours(23, 59, 59, 999)
-  
+
   return { periodStart, periodEnd }
 }
 
 export async function POST(request: NextRequest) {
   console.log('🔍 Screenshot route called - START')
-  
+
   try {
     console.log('🔍 Getting session...')
     const session = await getServerSession(authOptions)
     console.log('🔍 Session result:', session ? 'Found' : 'Not found')
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       console.log('❌ Unauthorized access - session:', session)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -56,10 +56,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔍 Proceeding with full payslip generation...')
-    
+
     let periodStart: Date
     let periodEnd: Date
-    
+
     if (body.periodStart && body.periodEnd) {
       periodStart = new Date(body.periodStart)
       periodEnd = new Date(body.periodEnd)
@@ -83,19 +83,19 @@ export async function POST(request: NextRequest) {
 
     // USE STORED PAYROLL DATA APPROACH: Get existing payroll entries with correct breakdown
     console.log('🔧 Using stored payroll data from archive (correct breakdown)...')
-    
+
     // Get header settings or create default
     let headerSettings = await prisma.headerSettings.findFirst()
     console.log('📋 Header settings found:', !!headerSettings)
-    
+
     if (!headerSettings) {
       console.log('⚠️ No header settings found, creating defaults...')
       headerSettings = await prisma.headerSettings.create({
         data: {
-          schoolName: "Christ the King College De Maranding",
-          schoolAddress: "Maranding Lala Lanao del Norte",
-          systemName: "CKCM PMS (Payroll Management System)",
-          logoUrl: "/ckcm.png",
+          schoolName: "TUBOD BARANGAY POBLACION",
+          schoolAddress: "Tubod, Lanao del Norte",
+          systemName: "POBLACION - PMS",
+          logoUrl: "/brgy-logo.png",
           showLogo: true,
           headerAlignment: 'center',
           fontSize: 'medium',
@@ -105,6 +105,28 @@ export async function POST(request: NextRequest) {
       })
       console.log('✅ Default header settings created')
     }
+
+    // Get all users with their personnel type info first
+    const usersWithPersonnelType = await prisma.user.findMany({
+      select: {
+        users_id: true,
+        name: true,
+        email: true,
+        personnelType: {
+          select: {
+            name: true,
+            department: true,
+            basicSalary: true
+          }
+        }
+      }
+    })
+    console.log('👥 Users with personnel type:', usersWithPersonnelType.map(u => ({
+      id: u.users_id,
+      name: u.name,
+      dept: u.personnelType?.department,
+      pos: u.personnelType?.name
+    })))
 
     // Get stored payroll entries for the period (same as archive route)
     // First, let's see what's actually in the database
@@ -126,51 +148,53 @@ export async function POST(request: NextRequest) {
       periodEndTime: e.periodEnd.getTime(),
       status: e.status
     })))
-    
+
     // First try exact date match
     let payrollEntries = await prisma.payrollEntry.findMany({
-      where: { 
+      where: {
         periodStart: periodStart,
         periodEnd: periodEnd
       },
       include: {
-        user: { 
-          select: { 
-            users_id: true, 
-            name: true, 
+        user: {
+          select: {
+            users_id: true,
+            name: true,
             email: true,
             personnelType: {
               select: {
+                name: true,
+                department: true,
                 basicSalary: true
               }
             }
-          } 
+          }
         }
       }
     })
-    
+
     console.log('👥 Found stored payroll entries (exact match):', payrollEntries.length)
-    
+
     // If no exact match, try with date range tolerance for timezone differences
     if (payrollEntries.length === 0) {
       console.log('⚠️ No exact match found, trying with date range tolerance...')
       payrollEntries = await prisma.payrollEntry.findMany({
-        where: { 
+        where: {
           periodStart: { gte: new Date(periodStart.getTime() - 86400000), lte: new Date(periodStart.getTime() + 86400000) },
           periodEnd: { gte: new Date(periodEnd.getTime() - 86400000), lte: new Date(periodEnd.getTime() + 86400000) }
         },
         include: {
-          user: { 
-            select: { 
-              users_id: true, 
-              name: true, 
+          user: {
+            select: {
+              users_id: true,
+              name: true,
               email: true,
               personnelType: {
                 select: {
                   basicSalary: true
                 }
               }
-            } 
+            }
           }
         }
       })
@@ -230,7 +254,7 @@ export async function POST(request: NextRequest) {
           status: 'ACTIVE'
         }
       })
-      
+
       // Get overload pay for this user
       const overloadPayRecords = await prisma.overloadPay.findMany({
         where: {
@@ -267,14 +291,14 @@ export async function POST(request: NextRequest) {
       // SIMPLE SOLUTION: Use personnel type monthly salary and standard 22 working days
       const monthlyBasicSalary = entry.user?.personnelType?.basicSalary ? Number(entry.user.personnelType.basicSalary) : Number(entry.basicSalary) * 2
       const semiMonthlyBasicSalary = monthlyBasicSalary / 2
-      
+
       // Daily salary = Monthly ÷ 22 (standard working days per month)
       const dailySalary = monthlyBasicSalary / 22
       const timeInEnd = attendanceSettings?.timeInEnd || '09:30'
-      
+
       let totalAttendanceDeductions = 0
       const attendanceDeductionDetails: any[] = []
-      
+
       attendanceRecords.forEach(record => {
         if (record.status === 'ABSENT') {
           attendanceDeductionDetails.push({
@@ -291,7 +315,7 @@ export async function POST(request: NextRequest) {
           const perSecond = dailySalary / 8 / 60 / 60
           const secondsLate = Math.max(0, (timeIn.getTime() - expected.getTime()) / 1000)
           const lateAmount = secondsLate * perSecond // Remove 50% cap
-          
+
           // Check for early timeout
           let earlyAmount = 0
           if (record.timeOut && attendanceSettings?.timeOutStart) {
@@ -302,7 +326,7 @@ export async function POST(request: NextRequest) {
             const secondsEarly = Math.max(0, (expectedTimeOut.getTime() - timeOut.getTime()) / 1000)
             earlyAmount = secondsEarly * perSecond
           }
-          
+
           if (lateAmount > 0) {
             attendanceDeductionDetails.push({
               date: record.date.toISOString().split('T')[0],
@@ -311,7 +335,7 @@ export async function POST(request: NextRequest) {
             })
             totalAttendanceDeductions += lateAmount
           }
-          
+
           if (earlyAmount > 0 && record.timeOut) {
             const minutesEarly = Math.round(earlyAmount / perSecond / 60)
             attendanceDeductionDetails.push({
@@ -343,17 +367,19 @@ export async function POST(request: NextRequest) {
       })
 
       // Get other deduction records (non-attendance related)
-      const otherDeductionRecords = deductionRecords.filter(deduction => 
+      const otherDeductionRecords = deductionRecords.filter(deduction =>
         !['Late Arrival', 'Late Penalty', 'Absence Deduction', 'Absent', 'Late', 'Tardiness', 'Early Time-Out', 'Partial Attendance'].includes(deduction.deductionType.name)
       )
-      
+
       // Map deduction records with isMandatory flag preserved
       const otherDeductionDetails = otherDeductionRecords.map(deduction => ({
         type: deduction.deductionType.name,
         amount: Number(deduction.amount),
         description: deduction.deductionType.description || '',
         appliedAt: deduction.appliedAt.toISOString().split('T')[0],
-        isMandatory: deduction.deductionType.isMandatory
+        isMandatory: deduction.deductionType.isMandatory,
+        calculationType: deduction.deductionType.calculationType,
+        percentageValue: deduction.deductionType.percentageValue ? Number(deduction.deductionType.percentageValue) : null
       }))
 
       // Calculate loan details with purpose label
@@ -366,6 +392,8 @@ export async function POST(request: NextRequest) {
           type: loan.purpose || 'Loan Payment',
           amount: periodPayment,
           description: `${loan.purpose || 'Loan'} (${loan.monthlyPaymentPercent}% of ₱${Number(loan.amount).toLocaleString()})`,
+          originalAmount: Number(loan.amount),
+          remainingBalance: Number(loan.balance || loan.amount),
           loanId: loan.loans_id
         }
       })
@@ -374,15 +402,34 @@ export async function POST(request: NextRequest) {
       const totalLoanPayments = loanDetails.reduce((sum, detail) => sum + detail.amount, 0)
       const totalOtherDeductions = otherDeductionDetails.reduce((sum, detail) => sum + detail.amount, 0)
       const totalDeductions = totalAttendanceDeductions + totalLoanPayments + totalOtherDeductions
-      
+
       // Calculate correct net pay: Semi-Monthly Basic + Overload - Total Deductions
       const grossPay = semiMonthlyBasicSalary + totalOverloadPay
       const correctNetPay = grossPay - totalDeductions
-      
+
+      // Get user data from the separately queried list
+      const userData = usersWithPersonnelType.find(u => u.users_id === entry.users_id);
+
+      // Debug logging
+      console.log('🔍 User data:', {
+        userId: entry.users_id,
+        userName: entry.user?.name,
+        fromEntry: {
+          dept: entry.user?.personnelType?.department,
+          pos: entry.user?.personnelType?.name
+        },
+        fromSeparateQuery: {
+          dept: userData?.personnelType?.department,
+          pos: userData?.personnelType?.name
+        }
+      });
+
       return {
         users_id: entry.users_id,
         name: entry.user?.name || null,
         email: entry.user?.email || '',
+        department: userData?.personnelType?.department || entry.user?.personnelType?.department || null,
+        position: userData?.personnelType?.name || entry.user?.personnelType?.name || null,
         totalHours: attendanceDetails.reduce((sum, detail) => sum + detail.workHours, 0),
         totalSalary: correctNetPay, // Use calculated net pay
         released: entry.status === 'RELEASED',
@@ -422,7 +469,7 @@ export async function POST(request: NextRequest) {
           <div class="payslip-header">
             <div class="logo-container">
               ${headerSettings?.showLogo ? `
-                <img src="${headerSettings.logoUrl}" alt="Logo" class="logo" onerror="this.src='/ckcm.png'">
+                <img src="${headerSettings.logoUrl}" alt="Logo" class="logo" onerror="this.src='/brgy-logo.png'">
               ` : ''}
             </div>
             <div class="school-name">${headerSettings?.schoolName || 'PAYSLIP'}</div>
@@ -442,6 +489,14 @@ export async function POST(request: NextRequest) {
               <span class="value">${employee.email}</span>
             </div>
             <div class="info-row">
+              <span class="label">Department:</span>
+              <span class="value">${employee.department || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Position:</span>
+              <span class="value">${employee.position || 'N/A'}</span>
+            </div>
+            <div class="info-row">
               <span class="label">Period:</span>
               <span class="value">${new Date(periodStart).toLocaleDateString()} - ${new Date(periodEnd).toLocaleDateString()}</span>
             </div>
@@ -459,24 +514,27 @@ export async function POST(request: NextRequest) {
               <span>Basic Salary (Semi-Monthly):</span>
               <span>₱${(breakdown.biweeklyBasicSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
-            ${breakdown.overloadPayDetails && breakdown.overloadPayDetails.length > 0 ? 
-              breakdown.overloadPayDetails.map((detail: any) => `
+            ${breakdown.overloadPayDetails && breakdown.overloadPayDetails.length > 0 ? `
+              <div style="font-size: 10px; font-weight: bold; color: #666; margin-top: 4px; margin-bottom: 2px;">Additional Pay:</div>
+              ${breakdown.overloadPayDetails.map((detail: any) => `
             <div class="detail-row" style="color: #2e7d32;">
-              <span>+ ${detail.type === 'POSITION_PAY' ? 'Position Pay' : 
-                         detail.type === 'BONUS' ? 'Bonus' : 
-                         detail.type === '13TH_MONTH' ? '13th Month Pay' : 
-                         detail.type === 'OVERTIME' ? 'Overtime' : 
-                         detail.type}:</span>
+              <span>+ ${detail.type === 'POSITION_PAY' ? 'Position Pay' :
+          detail.type === 'BONUS' ? 'Bonus' :
+            detail.type === '13TH_MONTH' ? '13th Month Pay' :
+              detail.type === 'OVERTIME' ? 'Overtime' :
+                detail.type}:</span>
               <span>₱${Number(detail.amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
-              `).join('') : 
-              ((breakdown.overtimePay || 0) > 0 ? `
+              `).join('')}
+            ` :
+          ((breakdown.overtimePay || 0) > 0 ? `
+              <div style="font-size: 10px; font-weight: bold; color: #666; margin-top: 4px; margin-bottom: 2px;">Additional Pay:</div>
             <div class="detail-row" style="color: #2e7d32;">
-              <span>+ Additional Pay:</span>
+              <span>+ Overtime:</span>
               <span>₱${(breakdown.overtimePay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
               ` : '')
-            }
+        }
             <div class="detail-row total">
               <span>GROSS PAY:</span>
               <span>₱${(breakdown.grossPay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
@@ -496,64 +554,112 @@ export async function POST(request: NextRequest) {
             ` : ''}
             
             ${(() => {
-              // Show actual loans (not [DEDUCTION] items)
-              const actualLoans = breakdown.loanDetails || []
-              
-              let html = ''
-              
-              if (actualLoans.length > 0) {
-                html += `
+          // Separate actual loans from [DEDUCTION] items
+          const allLoans = breakdown.loanDetails || []
+          const actualLoans = allLoans.filter((loan: any) => !loan.type?.includes('[DEDUCTION]') && !loan.description?.includes('[DEDUCTION]'))
+          const deductionLoans = allLoans.filter((loan: any) => loan.type?.includes('[DEDUCTION]') || loan.description?.includes('[DEDUCTION]'))
+
+          let html = ''
+
+          if (actualLoans.length > 0) {
+            html += `
                   <div class="deduction-section">
                     <div class="deduction-title">Loan Payments:</div>
-                    ${actualLoans.map((loan: any) => `
-                      <div class="detail-row deduction-detail">
-                        <span>${loan.description}</span>
-                        <span class="deduction">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    ${actualLoans.map((loan: any) => {
+              // Clean up loan name - remove percentage details
+              const loanName = (loan.description || loan.type || 'Loan Payment').split('(')[0].trim();
+              return `
+                      <div style="margin-bottom: 4px;">
+                        <div class="detail-row deduction-detail">
+                          <span style="font-weight: 500;">${loanName}</span>
+                          <span class="deduction" style="font-weight: bold;">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        ${loan.originalAmount ? `<div style="font-size: 7px; color: #999; margin-left: 12px;">Total Amount: ₱${loan.originalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                        ${loan.remainingBalance && loan.remainingBalance > 0 ? `<div style="font-size: 7px; color: #999; margin-left: 12px;">Remaining Balance: ₱${loan.remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
                       </div>
-                    `).join('')}
+                    `}).join('')}
                   </div>
                 `
-              }
-              
-              return html
-            })()}
+          }
+
+          // Show [DEDUCTION] items under Deduction Payments
+          if (deductionLoans.length > 0) {
+            html += `
+                  <div class="deduction-section">
+                    <div class="deduction-title">Deduction Payments:</div>
+                    ${deductionLoans.map((loan: any) => {
+              // Clean up deduction name - remove [DEDUCTION] prefix and percentage details
+              let deductionName = (loan.description || loan.type || 'Deduction').replace(/^\[DEDUCTION\]\s*/i, '').split('(')[0].trim();
+              return `
+                      <div style="margin-bottom: 4px;">
+                        <div class="detail-row deduction-detail">
+                          <span style="font-weight: 500;">${deductionName}</span>
+                          <span class="deduction" style="font-weight: bold;">-₱${loan.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        ${loan.originalAmount ? `<div style="font-size: 7px; color: #999; margin-left: 12px;">Total Amount: ₱${loan.originalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                        ${loan.remainingBalance && loan.remainingBalance > 0 ? `<div style="font-size: 7px; color: #999; margin-left: 12px;">Remaining Balance: ₱${loan.remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                      </div>
+                    `}).join('')}
+                  </div>
+                `
+          }
+
+          return html
+        })()}
             
             ${(() => {
-              const mandatoryDeductions = breakdown.otherDeductionDetails?.filter((d: any) => d.isMandatory) || []
-              const otherDeductions = breakdown.otherDeductionDetails?.filter((d: any) => !d.isMandatory) || []
-              
-              let html = ''
-              
-              if (mandatoryDeductions.length > 0) {
-                html += `
+          const mandatoryDeductions = breakdown.otherDeductionDetails?.filter((d: any) => d.isMandatory) || []
+          const otherDeductions = breakdown.otherDeductionDetails?.filter((d: any) => !d.isMandatory) || []
+
+          let html = ''
+
+          if (mandatoryDeductions.length > 0) {
+            html += `
                   <div class="deduction-section">
                     <div class="deduction-title">Mandatory Deductions:</div>
-                    ${mandatoryDeductions.map((deduction: any) => `
-                      <div class="detail-row deduction-detail">
-                        <span>${deduction.type}${deduction.description ? ` (${deduction.appliedAt})` : ''}</span>
-                        <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    ${mandatoryDeductions.map((deduction: any) => {
+              // Clean up mandatory deduction name - remove percentage details
+              const deductionName = (deduction.type || 'Deduction').split('(')[0].trim();
+              const calcType = deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue
+                ? `${deduction.percentageValue}% of salary`
+                : 'Fixed amount';
+              return `
+                      <div style="margin-bottom: 4px;">
+                        <div class="detail-row deduction-detail">
+                          <span style="font-weight: 500;">${deductionName}</span>
+                          <span class="deduction" style="font-weight: bold;">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style="font-size: 7px; color: #999; margin-left: 12px;">${calcType}</div>
                       </div>
-                    `).join('')}
+                    `}).join('')}
                   </div>
                 `
-              }
-              
-              if (otherDeductions.length > 0) {
-                html += `
+          }
+
+          if (otherDeductions.length > 0) {
+            html += `
                   <div class="deduction-section">
-                    <div class="deduction-title">Other Deductions:</div>
-                    ${otherDeductions.map((deduction: any) => `
-                      <div class="detail-row deduction-detail">
-                        <span>${deduction.description} (${deduction.appliedAt})</span>
-                        <span class="deduction">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    <div class="deduction-title">Deduction Payments:</div>
+                    ${otherDeductions.map((deduction: any) => {
+              // Clean up deduction name - remove [DEDUCTION] prefix and percentage details
+              let deductionName = deduction.type || deduction.description || 'Deduction';
+              deductionName = deductionName.replace(/^\[DEDUCTION\]\s*/i, '').split('(')[0].trim();
+              return `
+                      <div style="margin-bottom: 4px;">
+                        <div class="detail-row deduction-detail">
+                          <span style="font-weight: 500;">${deductionName}</span>
+                          <span class="deduction" style="font-weight: bold;">-₱${deduction.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        ${deduction.originalAmount ? `<div style="font-size: 7px; color: #999; margin-left: 12px;">Total Amount: ₱${deduction.originalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                        ${deduction.remainingBalance && deduction.remainingBalance > 0 ? `<div style="font-size: 7px; color: #999; margin-left: 12px;">Remaining Balance: ₱${deduction.remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
                       </div>
-                    `).join('')}
+                    `}).join('')}
                   </div>
                 `
-              }
-              
-              return html
-            })()}
+          }
+
+          return html
+        })()}
             
             <div class="detail-row net-pay">
               <span>NET PAY:</span>
@@ -764,7 +870,7 @@ export async function POST(request: NextRequest) {
       name: error instanceof Error ? error.name : 'Unknown error type'
     })
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to generate payslips',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

@@ -8,13 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Settings, 
-  Upload, 
-  Save, 
-  Eye, 
-  Building2, 
-  MapPin, 
+import {
+  Settings,
+  Upload,
+  Save,
+  Eye,
+  Building2,
+  MapPin,
   FileText,
   Image as ImageIcon,
   Type,
@@ -38,10 +38,10 @@ type HeaderSettings = {
 
 export default function HeaderSettingsPage() {
   const [settings, setSettings] = useState<HeaderSettings>({
-    schoolName: "Christ the King College De Maranding",
-    schoolAddress: "Maranding Lala Lanao del Norte",
-    systemName: "CKCM PMS (Payroll Management System)",
-    logoUrl: "/ckcm.png",
+    schoolName: "TUBOD BARANGAY POBLACION",
+    schoolAddress: "Tubod, Lanao del Norte",
+    systemName: "POBLACION - PMS",
+    logoUrl: "/brgy-logo.png",
     showLogo: true,
     headerAlignment: 'center',
     fontSize: 'medium',
@@ -78,7 +78,7 @@ export default function HeaderSettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       })
-      
+
       if (res.ok) {
         toast.success('Header settings saved successfully!')
       } else {
@@ -98,10 +98,10 @@ export default function HeaderSettingsPage() {
 
   function resetToDefaults() {
     setSettings({
-      schoolName: "Christ the King College De Maranding",
-      schoolAddress: "Maranding Lala Lanao del Norte",
-      systemName: "CKCM PMS (Payroll Management System)",
-      logoUrl: "/ckcm.png",
+      schoolName: "TUBOD BARANGAY POBLACION",
+      schoolAddress: "Tubod, Lanao del Norte",
+      systemName: "POBLACION - PMS",
+      logoUrl: "/brgy-logo.png",
       showLogo: true,
       headerAlignment: 'center',
       fontSize: 'medium',
@@ -120,15 +120,15 @@ export default function HeaderSettingsPage() {
         toast.error('Please select an image file')
         return
       }
-      
+
       // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         toast.error('File size must be less than 5MB')
         return
       }
-      
+
       setSelectedFile(file)
-      
+
       // Create preview URL
       const previewUrl = URL.createObjectURL(file)
       setLogoPreview(previewUrl)
@@ -145,12 +145,12 @@ export default function HeaderSettingsPage() {
     try {
       const formData = new FormData()
       formData.append('logo', selectedFile)
-      
+
       const res = await fetch('/api/admin/header-settings/upload-logo', {
         method: 'POST',
         body: formData
       })
-      
+
       if (res.ok) {
         const data = await res.json()
         setSettings(prev => ({ ...prev, logoUrl: data.logoUrl }))
@@ -188,15 +188,15 @@ export default function HeaderSettingsPage() {
           <p className="text-muted-foreground">Customize the payroll slip header design and content</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => setPreviewMode(!previewMode)}
             className="hover:bg-gray-50"
           >
             <Eye className="h-4 w-4 mr-2" />
             {previewMode ? 'Hide Preview' : 'Show Preview'}
           </Button>
-          <Button 
+          <Button
             onClick={saveSettings}
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -274,12 +274,12 @@ export default function HeaderSettingsPage() {
               <div className="space-y-2">
                 <Label>Current Logo</Label>
                 <div className="flex items-center gap-4 p-4 border rounded-lg bg-gray-50">
-                  <img 
-                    src={settings.logoUrl} 
-                    alt="Current Logo" 
+                  <img
+                    src={settings.logoUrl}
+                    alt="Current Logo"
                     className="h-16 w-auto object-contain"
                     onError={(e) => {
-                      e.currentTarget.src = '/ckcm.png'
+                      e.currentTarget.src = '/brgy-logo.png'
                     }}
                   />
                   <div className="flex-1">
@@ -318,9 +318,9 @@ export default function HeaderSettingsPage() {
                   <Label>Selected File</Label>
                   <div className="flex items-center gap-4 p-4 border rounded-lg bg-blue-50">
                     {logoPreview && (
-                      <img 
-                        src={logoPreview} 
-                        alt="Preview" 
+                      <img
+                        src={logoPreview}
+                        alt="Preview"
                         className="h-16 w-auto object-contain"
                       />
                     )}
@@ -374,7 +374,7 @@ export default function HeaderSettingsPage() {
                   className="w-full"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Use /ckcm.png for the default CKCM logo
+                  Use /brgy-logo.png for the default Barangay logo
                 </p>
               </div>
 
@@ -499,14 +499,14 @@ export default function HeaderSettingsPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button 
+                <Button
                   onClick={resetToDefaults}
                   variant="outline"
                   className="hover:bg-gray-50 w-full sm:w-auto"
                 >
                   Reset to Defaults
                 </Button>
-                <Button 
+                <Button
                   onClick={saveSettings}
                   disabled={loading}
                   className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
@@ -532,20 +532,19 @@ export default function HeaderSettingsPage() {
               {previewMode ? (
                 <div className="space-y-4">
                   <div className="border-2 border-dashed border-gray-300 p-4 rounded-lg">
-                    <div 
-                      className={`text-${settings.fontSize === 'small' ? 'sm' : settings.fontSize === 'large' ? 'lg' : 'base'} ${
-                        settings.headerAlignment === 'center' ? 'text-center' : 
+                    <div
+                      className={`text-${settings.fontSize === 'small' ? 'sm' : settings.fontSize === 'large' ? 'lg' : 'base'} ${settings.headerAlignment === 'center' ? 'text-center' :
                         settings.headerAlignment === 'right' ? 'text-right' : 'text-left'
-                      }`}
+                        }`}
                     >
                       {settings.showLogo && (
                         <div className="mb-4">
-                          <img 
-                            src={settings.logoUrl} 
-                            alt="School Logo" 
+                          <img
+                            src={settings.logoUrl}
+                            alt="School Logo"
                             className="h-16 w-auto mx-auto"
                             onError={(e) => {
-                              e.currentTarget.src = '/ckcm.png'
+                              e.currentTarget.src = '/brgy-logo.png'
                             }}
                           />
                         </div>

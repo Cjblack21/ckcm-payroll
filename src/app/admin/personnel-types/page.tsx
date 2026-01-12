@@ -11,11 +11,11 @@ import { Plus, Edit, Trash2, Eye, UserCheck } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { SSRSafe } from "@/components/ssr-safe"
 import { getPersonnelTypes, createPersonnelType, updatePersonnelType, deletePersonnelType, type PersonnelType as ServerPersonnelType } from "@/lib/actions/personnel"
@@ -68,15 +68,15 @@ export default function PersonnelTypesPage() {
   async function load() {
     try {
       setLoading(true)
-      
+
       // Load positions
       const result = await getPersonnelTypes()
-      
+
       if (!result.success) {
         toast.error(result.error || 'Failed to load types')
         return
       }
-      
+
       // Transform server data to match local type
       const transformedTypes: PersonnelType[] = (result.personnelTypes || []).map((type: ServerPersonnelType) => ({
         personnel_types_id: type.personnel_types_id,
@@ -88,7 +88,7 @@ export default function PersonnelTypesPage() {
         createdAt: type.createdAt.toISOString()
       }))
       setTypes(transformedTypes)
-      
+
       // Load attendance settings to get working days
       await loadAttendanceSettings()
     } catch {
@@ -104,13 +104,13 @@ export default function PersonnelTypesPage() {
       if (response.ok) {
         const data = await response.json()
         setAttendanceSettings(data.settings)
-        
+
         // Calculate working days if period is set
         if (data.settings?.periodStart && data.settings?.periodEnd) {
           const startDate = new Date(data.settings.periodStart)
           const endDate = new Date(data.settings.periodEnd)
           let days = 0
-          
+
           const currentDate = new Date(startDate)
           while (currentDate <= endDate) {
             if (currentDate.getDay() !== 0) { // Exclude Sundays
@@ -118,9 +118,9 @@ export default function PersonnelTypesPage() {
             }
             currentDate.setDate(currentDate.getDate() + 1)
           }
-          
+
           console.log('Calculated working days from period:', days, 'Period:', data.settings.periodStart, 'to', data.settings.periodEnd)
-          
+
           // Ensure minimum working days is reasonable (at least 22 for monthly salary calculations)
           // This prevents incorrect daily rates when period is set incorrectly
           if (days >= 22 && days <= 31) {
@@ -143,8 +143,6 @@ export default function PersonnelTypesPage() {
   useEffect(() => { load() }, [])
 
   const resetForm = () => {
-    setName('')
-    setPersonnelType('NON_TEACHING')
     setDepartment('')
     setBasicSalaryInput('')
     setIsActive(true)
@@ -153,16 +151,16 @@ export default function PersonnelTypesPage() {
 
   async function create() {
     // Validation
-    if (!name.trim()) {
-      toast.error('Position name is required')
+    if (!department) {
+      toast.error('Position is required')
       return
     }
-    
+
     if (!basicSalaryInput.trim() || basic <= 0) {
       toast.error('Valid monthly salary is required')
       return
     }
-    
+
     try {
       console.log('Creating position with data:', {
         name,
@@ -171,23 +169,23 @@ export default function PersonnelTypesPage() {
         basicSalary: basic,
         isActive
       })
-      
+
       const result = await createPersonnelType({
-        name,
+        name: department,
         type: personnelType,
-        department: department || undefined,
+        department: department,
         basicSalary: basic,
         isActive
       })
-      
+
       console.log('Create result:', result)
-      
+
       if (!result.success) {
         console.error('Failed to create position:', result.error)
         toast.error(result.error || 'Failed to add position')
         return
       }
-      
+
       toast.success('Position added successfully!')
       setOpen(false)
       resetForm()
@@ -201,21 +199,21 @@ export default function PersonnelTypesPage() {
 
   async function update() {
     if (!selectedType) return
-    
+
     try {
       const result = await updatePersonnelType(selectedType.personnel_types_id, {
-        name,
+        name: department,
         type: personnelType,
-        department: department.trim() || undefined,
+        department: department,
         basicSalary: basic,
         isActive
       })
-      
+
       if (!result.success) {
         toast.error(result.error || 'Failed to update')
         return
       }
-      
+
       toast.success('Position updated')
       setEditOpen(false)
       resetForm()
@@ -227,15 +225,15 @@ export default function PersonnelTypesPage() {
 
   async function deleteType(type: PersonnelType) {
     if (!confirm(`Are you sure you want to delete "${type.name}"?`)) return
-    
+
     try {
       const result = await deletePersonnelType(type.personnel_types_id)
-      
+
       if (!result.success) {
         toast.error(result.error || 'Failed to delete')
         return
       }
-      
+
       toast.success('Position deleted')
       load()
     } catch {
@@ -245,9 +243,9 @@ export default function PersonnelTypesPage() {
 
   const openEditDialog = (type: PersonnelType) => {
     setSelectedType(type)
-    setName(type.name)
+    // setName(type.name) // name is derived from department now
     setPersonnelType(type.type || 'NON_TEACHING')
-    setDepartment(type.department || '')
+    setDepartment(type.department || type.name || '')
     setBasicSalaryInput(type.basicSalary.toString())
     setIsActive(type.isActive)
     setEditOpen(true)
@@ -268,159 +266,147 @@ export default function PersonnelTypesPage() {
           </h2>
           <p className="text-muted-foreground text-sm">Manage positions and configure salary structures</p>
         </div>
-      <SSRSafe>
-        <Dialog open={open} onOpenChange={(isOpen) => {
-          setOpen(isOpen)
-          if (isOpen) {
-            resetForm()
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2"/>Add New Position</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle className="text-2xl">Add New Position</DialogTitle>
-              <DialogDescription>Create a new position and view automatic salary calculations.</DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-6 py-4">
-              {/* Input Section */}
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="department" className="text-base font-semibold">Department</Label>
-                  <Select value={department} onValueChange={setDepartment}>
-                    <SelectTrigger className="w-full h-11 text-base">
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="College Department">College Department</SelectItem>
-                      <SelectItem value="Highschool Department">Highschool Department</SelectItem>
-                      <SelectItem value="Elementary Department">Elementary Department</SelectItem>
-                      <SelectItem value="SUP">SUP</SelectItem>
-                      <SelectItem value="BED">BED</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="position-name" className="text-base font-semibold">Position Name</Label>
-                  <Input 
-                    id="position-name"
-                    value={name} 
-                    onChange={(e) => setName(e.target.value)} 
-                    placeholder="e.g. Senior Developer, Manager, Accountant" 
-                    className="w-full h-11 text-base"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="monthly-salary" className="text-base font-semibold">Monthly Salary (PHP)</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">₱</span>
-                    <Input 
-                      id="monthly-salary"
-                      value={basicSalaryInput} 
-                      onChange={(e) => setBasicSalaryInput(e.target.value)} 
-                      placeholder="25000 or 25k" 
-                      className="w-full h-11 pl-8 text-base font-medium"
-                    />
+        <SSRSafe>
+          <Dialog open={open} onOpenChange={(isOpen) => {
+            setOpen(isOpen)
+            if (isOpen) {
+              resetForm()
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button><Plus className="h-4 w-4 mr-2" />Add New Position</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle className="text-2xl">Add New Position</DialogTitle>
+                <DialogDescription>Create a new position and view automatic salary calculations.</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 py-4">
+                {/* Input Section */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="department" className="text-base font-semibold">Position Category</Label>
+                    <Select value={department} onValueChange={setDepartment}>
+                      <SelectTrigger className="w-full h-11 text-base">
+                        <SelectValue placeholder="Select Position" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Barangay Officials">Barangay Officials</SelectItem>
+                        <SelectItem value="Barangay Personnel">Barangay Personnel</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    Tip: Use shorthand like 25k (25,000) or 1.5m (1,500,000)
-                  </p>
+
+
+
+                  <div className="space-y-2">
+                    <Label htmlFor="monthly-salary" className="text-base font-semibold">Monthly Salary (PHP)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">₱</span>
+                      <Input
+                        id="monthly-salary"
+                        value={basicSalaryInput}
+                        onChange={(e) => setBasicSalaryInput(e.target.value)}
+                        placeholder="25000 or 25k"
+                        className="w-full h-11 pl-8 text-base font-medium"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      Tip: Use shorthand like 25k (25,000) or 1.5m (1,500,000)
+                    </p>
+                  </div>
                 </div>
+
+                {/* Salary Breakdown Section */}
+                {basic > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-px flex-1 bg-border"></div>
+                      <h4 className="font-semibold text-base text-muted-foreground">Automatic Salary Breakdown</h4>
+                      <div className="h-px flex-1 bg-border"></div>
+                    </div>
+
+                    {/* Unified Salary Breakdown Card */}
+                    <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-lg p-6 border border-green-200 dark:border-green-900 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h5 className="font-semibold text-base text-green-700 dark:text-green-400 flex items-center gap-2">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          Complete Salary Breakdown
+                        </h5>
+                        <span className="text-2xl font-bold text-green-600 dark:text-green-400">₱{basic.toLocaleString()}</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                            <span className="text-sm text-muted-foreground">Semi-Monthly</span>
+                            <span className="text-base font-semibold">₱{semiMonthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">÷ 2 (half month)</p>
+                        </div>
+
+                        <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                            <span className="text-sm text-muted-foreground">Weekly</span>
+                            <span className="text-base font-semibold">₱{weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">÷ 4 weeks</p>
+                        </div>
+
+                        <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                            <span className="text-sm text-muted-foreground">Daily Rate</span>
+                            <span className="text-base font-semibold">₱{daily.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">÷ {workingDays} working days</p>
+                        </div>
+
+                        <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                            <span className="text-sm text-muted-foreground">Hourly Rate</span>
+                            <span className="text-base font-semibold">₱{hourly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">÷ 8 hours per day</p>
+                        </div>
+
+                        <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                            <span className="text-sm text-muted-foreground">Per Minute</span>
+                            <span className="text-base font-semibold">₱{min.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">÷ 60 minutes per hour</p>
+                        </div>
+
+                        <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
+                            <span className="text-sm text-muted-foreground">Per Second</span>
+                            <span className="text-base font-semibold">₱{sec.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">÷ 60 seconds per minute</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!basic && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">Enter a monthly salary to see automatic breakdown</p>
+                  </div>
+                )}
               </div>
 
-              {/* Salary Breakdown Section */}
-              {basic > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="h-px flex-1 bg-border"></div>
-                    <h4 className="font-semibold text-base text-muted-foreground">Automatic Salary Breakdown</h4>
-                    <div className="h-px flex-1 bg-border"></div>
-                  </div>
-                  
-                  {/* Unified Salary Breakdown Card */}
-                  <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-lg p-6 border border-green-200 dark:border-green-900 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h5 className="font-semibold text-base text-green-700 dark:text-green-400 flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        Complete Salary Breakdown
-                      </h5>
-                      <span className="text-2xl font-bold text-green-600 dark:text-green-400">₱{basic.toLocaleString()}</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
-                          <span className="text-sm text-muted-foreground">Semi-Monthly</span>
-                          <span className="text-base font-semibold">₱{semiMonthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">÷ 2 (half month)</p>
-                      </div>
-                      
-                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
-                          <span className="text-sm text-muted-foreground">Weekly</span>
-                          <span className="text-base font-semibold">₱{weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">÷ 4 weeks</p>
-                      </div>
-                      
-                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
-                          <span className="text-sm text-muted-foreground">Daily Rate</span>
-                          <span className="text-base font-semibold">₱{daily.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">÷ {workingDays} working days</p>
-                      </div>
-                      
-                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
-                          <span className="text-sm text-muted-foreground">Hourly Rate</span>
-                          <span className="text-base font-semibold">₱{hourly.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">÷ 8 hours per day</p>
-                      </div>
-                      
-                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
-                          <span className="text-sm text-muted-foreground">Per Minute</span>
-                          <span className="text-base font-semibold">₱{min.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">÷ 60 minutes per hour</p>
-                      </div>
-                      
-                      <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
-                          <span className="text-sm text-muted-foreground">Per Second</span>
-                          <span className="text-base font-semibold">₱{sec.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">÷ 60 seconds per minute</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!basic && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="text-sm">Enter a monthly salary to see automatic breakdown</p>
-                </div>
-              )}
-            </div>
-            
-            <DialogFooter className="flex gap-3 pt-4 border-t">
-              <Button variant="outline" onClick={() => { setOpen(false); resetForm(); }} className="flex-1">
-                Cancel
-              </Button>
-              <Button onClick={create} disabled={!name.trim() || !basicSalaryInput.trim()} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                Create Position
-              </Button>
-            </DialogFooter>
-          </DialogContent>
+              <DialogFooter className="flex gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => { setOpen(false); resetForm(); }} className="flex-1">
+                  Cancel
+                </Button>
+                <Button onClick={create} disabled={!department || !basicSalaryInput.trim()} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                  Create Position
+                </Button>
+              </DialogFooter>
+            </DialogContent>
           </Dialog>
         </SSRSafe>
       </div>
@@ -436,7 +422,6 @@ export default function PersonnelTypesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Department</TableHead>
                   <TableHead>Position</TableHead>
                   <TableHead>Net Pay</TableHead>
                   <TableHead>Status</TableHead>
@@ -447,7 +432,6 @@ export default function PersonnelTypesPage() {
               <TableBody>
                 {types.map(t => (
                   <TableRow key={t.personnel_types_id}>
-                    <TableCell className="text-muted-foreground">{t.department || '-'}</TableCell>
                     <TableCell className="font-medium">{t.name}</TableCell>
                     <TableCell>₱{Number(t.basicSalary).toLocaleString()}</TableCell>
                     <TableCell>
@@ -478,7 +462,7 @@ export default function PersonnelTypesPage() {
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => deleteType(t)}
                               className="text-red-600"
                             >
@@ -510,46 +494,34 @@ export default function PersonnelTypesPage() {
               <DialogTitle className="text-2xl">Edit Position</DialogTitle>
               <DialogDescription>Update position information and view automatic salary calculations.</DialogDescription>
             </DialogHeader>
-            
+
             <div className="space-y-6 py-4">
               {/* Input Section */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-6 border space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-department" className="text-base font-semibold">Department</Label>
+                  <Label htmlFor="department" className="text-base font-semibold">Position</Label>
                   <Select value={department} onValueChange={setDepartment}>
                     <SelectTrigger className="w-full h-11 text-base">
-                      <SelectValue placeholder="Select department" />
+                      <SelectValue placeholder="Select Position" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="College Department">College Department</SelectItem>
-                      <SelectItem value="Highschool Department">Highschool Department</SelectItem>
-                      <SelectItem value="Elementary Department">Elementary Department</SelectItem>
-                      <SelectItem value="SUP">SUP</SelectItem>
-                      <SelectItem value="BED">BED</SelectItem>
+                      <SelectItem value="Barangay Officials">Barangay Officials</SelectItem>
+                      <SelectItem value="Barangay Personnel">Barangay Personnel</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-position-name" className="text-base font-semibold">Position Name</Label>
-                  <Input 
-                    id="edit-position-name"
-                    value={name} 
-                    onChange={(e) => setName(e.target.value)} 
-                    placeholder="e.g. Senior Developer, Manager, Accountant" 
-                    className="w-full h-11 text-base"
-                  />
-                </div>
-                
+
+                {/* Position Name Input Removed */}
+
                 <div className="space-y-2">
                   <Label htmlFor="edit-monthly-salary" className="text-base font-semibold">Monthly Salary (PHP)</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">₱</span>
-                    <Input 
+                    <Input
                       id="edit-monthly-salary"
-                      value={basicSalaryInput} 
-                      onChange={(e) => setBasicSalaryInput(e.target.value)} 
-                      placeholder="25000 or 25k" 
+                      value={basicSalaryInput}
+                      onChange={(e) => setBasicSalaryInput(e.target.value)}
+                      placeholder="25000 or 25k"
                       className="w-full h-11 pl-8 text-base font-medium"
                     />
                   </div>
@@ -582,7 +554,7 @@ export default function PersonnelTypesPage() {
                     <h4 className="font-semibold text-base text-muted-foreground">Automatic Salary Breakdown</h4>
                     <div className="h-px flex-1 bg-border"></div>
                   </div>
-                  
+
                   {/* Unified Salary Breakdown Card */}
                   <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-lg p-6 border border-green-200 dark:border-green-900 space-y-4">
                     <div className="flex items-center justify-between">
@@ -592,7 +564,7 @@ export default function PersonnelTypesPage() {
                       </h5>
                       <span className="text-2xl font-bold text-green-600 dark:text-green-400">₱{basic.toLocaleString()}</span>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
@@ -601,7 +573,7 @@ export default function PersonnelTypesPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">÷ 2 (half month)</p>
                       </div>
-                      
+
                       <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
                           <span className="text-sm text-muted-foreground">Weekly</span>
@@ -609,7 +581,7 @@ export default function PersonnelTypesPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">÷ 4 weeks</p>
                       </div>
-                      
+
                       <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
                           <span className="text-sm text-muted-foreground">Daily Rate</span>
@@ -617,7 +589,7 @@ export default function PersonnelTypesPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">÷ {workingDays} working days</p>
                       </div>
-                      
+
                       <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
                           <span className="text-sm text-muted-foreground">Hourly Rate</span>
@@ -625,7 +597,7 @@ export default function PersonnelTypesPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">÷ 8 hours per day</p>
                       </div>
-                      
+
                       <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
                           <span className="text-sm text-muted-foreground">Per Minute</span>
@@ -633,7 +605,7 @@ export default function PersonnelTypesPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">÷ 60 minutes per hour</p>
                       </div>
-                      
+
                       <div className="bg-white/50 dark:bg-black/20 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center pb-2 border-b border-green-200/50 dark:border-green-900/50">
                           <span className="text-sm text-muted-foreground">Per Second</span>
@@ -642,10 +614,10 @@ export default function PersonnelTypesPage() {
                         <p className="text-xs text-muted-foreground">÷ 60 seconds per minute</p>
                       </div>
                     </div>
-                    
+
                     <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-900">
                       <p className="text-xs text-muted-foreground">
-                        {attendanceSettings?.periodStart && attendanceSettings?.periodEnd 
+                        {attendanceSettings?.periodStart && attendanceSettings?.periodEnd
                           ? `Period: ${new Date(attendanceSettings.periodStart).toLocaleDateString()} - ${new Date(attendanceSettings.periodEnd).toLocaleDateString()}`
                           : 'No attendance period set - using 22 working days default'
                         }
@@ -661,12 +633,12 @@ export default function PersonnelTypesPage() {
                 </div>
               )}
             </div>
-            
+
             <DialogFooter className="flex gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => { setEditOpen(false); resetForm(); }} className="flex-1">
                 Cancel
               </Button>
-              <Button onClick={update} disabled={!name.trim() || !basicSalaryInput.trim()} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+              <Button onClick={update} disabled={!department || !basicSalaryInput.trim()} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
                 Update Position
               </Button>
             </DialogFooter>
@@ -706,10 +678,10 @@ export default function PersonnelTypesPage() {
                     </div>
                     <div>
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Created On</p>
-                      <p className="text-sm font-medium">{new Date(selectedType.createdAt).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
+                      <p className="text-sm font-medium">{new Date(selectedType.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
                       })}</p>
                     </div>
                   </div>

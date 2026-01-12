@@ -8,43 +8,43 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
 } from '@/components/ui/dialog'
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select'
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { 
-  Search, 
-  Plus, 
-  MoreHorizontal, 
-  Edit, 
-  Eye, 
-  UserCheck, 
+import {
+  Search,
+  Plus,
+  MoreHorizontal,
+  Edit,
+  Eye,
+  UserCheck,
   UserX,
   Archive,
   Trash2
@@ -167,7 +167,7 @@ export function UserManagement() {
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(person => 
+      filtered = filtered.filter(person =>
         person.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         person.name?.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -184,33 +184,33 @@ export function UserManagement() {
   // Load personnel on mount
   useEffect(() => {
     fetchPersonnel()
-    ;(async () => {
-      try {
-        console.log('Fetching personnel types from /api/admin/personnel-types...')
-        const res = await fetch('/api/admin/personnel-types', { cache: 'no-store' })
-        console.log('Personnel types response status:', res.status)
-        
-        if (!res.ok) {
-          const errorText = await res.text()
-          console.error('Failed to fetch personnel types:', res.status, errorText)
+      ; (async () => {
+        try {
+          console.log('Fetching personnel types from /api/admin/personnel-types...')
+          const res = await fetch('/api/admin/personnel-types', { cache: 'no-store' })
+          console.log('Personnel types response status:', res.status)
+
+          if (!res.ok) {
+            const errorText = await res.text()
+            console.error('Failed to fetch personnel types:', res.status, errorText)
+            toast.error('Failed to load personnel types')
+            return
+          }
+
+          const data = await res.json()
+          console.log('Loaded personnel types:', data)
+          console.log('Number of personnel types:', data.length)
+          setPersonnelTypes(data)
+
+          if (data.length === 0) {
+            console.warn('No personnel types found. Please create some in Personnel Types page.')
+            toast.error('No personnel types found. Please create personnel types first.')
+          }
+        } catch (error) {
+          console.error('Error loading personnel types:', error)
           toast.error('Failed to load personnel types')
-          return
         }
-        
-        const data = await res.json()
-        console.log('Loaded personnel types:', data)
-        console.log('Number of personnel types:', data.length)
-        setPersonnelTypes(data)
-        
-        if (data.length === 0) {
-          console.warn('No personnel types found. Please create some in Personnel Types page.')
-          toast.error('No personnel types found. Please create personnel types first.')
-        }
-      } catch (error) {
-        console.error('Error loading personnel types:', error)
-        toast.error('Failed to load personnel types')
-      }
-    })()
+      })()
   }, [])
 
   // Handle create personnel
@@ -276,7 +276,7 @@ export function UserManagement() {
       }
       // Ensure personnel_types_id key exists (empty string means clear)
       if (!Object.prototype.hasOwnProperty.call(updateData, 'personnel_types_id')) {
-        ;(updateData as Record<string, unknown>).personnel_types_id = ''
+        ; (updateData as Record<string, unknown>).personnel_types_id = ''
       }
 
       const response = await fetch(`/api/admin/users/${selectedPersonnel.users_id}`, {
@@ -364,7 +364,7 @@ export function UserManagement() {
 
       // Password verified, proceed with deactivation
       await performStatusToggle(pendingDeactivation)
-      
+
       // Close dialog and reset
       setShowPasswordDialog(false)
       setAdminPassword('')
@@ -418,12 +418,12 @@ export function UserManagement() {
   // Handle bulk activate
   const handleBulkActivate = async () => {
     if (selectedPersonnelIds.size === 0) return
-    
+
     try {
       const promises = Array.from(selectedPersonnelIds).map(personnelId => {
         const person = personnel.find(p => p.users_id === personnelId)
         if (!person) return Promise.resolve()
-        
+
         return fetch(`/api/admin/users/${personnelId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -444,12 +444,12 @@ export function UserManagement() {
   // Handle bulk deactivate
   const handleBulkDeactivate = async () => {
     if (selectedPersonnelIds.size === 0) return
-    
+
     try {
       const promises = Array.from(selectedPersonnelIds).map(personnelId => {
         const person = personnel.find(p => p.users_id === personnelId)
         if (!person) return Promise.resolve()
-        
+
         return fetch(`/api/admin/users/${personnelId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -478,13 +478,13 @@ export function UserManagement() {
   const handleDeleteRequest = async (person: User) => {
     setPendingDelete(person)
     setDeleteRecordCounts(null)
-    
+
     // First check if there are related records
     try {
       const response = await fetch(`/api/admin/users/${person.users_id}`, {
         method: 'DELETE'
       })
-      
+
       if (!response.ok) {
         const data = await response.json()
         if (data.needsForce && data.counts) {
@@ -494,17 +494,17 @@ export function UserManagement() {
     } catch (error) {
       console.error('Error checking delete:', error)
     }
-    
+
     setIsDeleteDialogOpen(true)
   }
 
   const handleConfirmDelete = async (force: boolean = false) => {
     if (!pendingDelete) return
     try {
-      const url = force 
+      const url = force
         ? `/api/admin/users/${pendingDelete.users_id}?force=true`
         : `/api/admin/users/${pendingDelete.users_id}`
-        
+
       const response = await fetch(url, {
         method: 'DELETE'
       })
@@ -556,18 +556,18 @@ export function UserManagement() {
         <div className="flex items-center space-x-2 flex-wrap gap-2">
           {selectedPersonnelIds.size > 0 && (
             <>
-              <Button 
-                onClick={handleBulkActivate} 
-                variant="outline" 
+              <Button
+                onClick={handleBulkActivate}
+                variant="outline"
                 size="sm"
                 className="text-green-600 hover:text-green-700"
               >
                 <UserCheck className="h-4 w-4 mr-2" />
                 Activate
               </Button>
-              <Button 
-                onClick={handleBulkDeactivate} 
-                variant="outline" 
+              <Button
+                onClick={handleBulkDeactivate}
+                variant="outline"
                 size="sm"
                 className="text-red-600 hover:text-red-700"
               >
@@ -576,8 +576,8 @@ export function UserManagement() {
               </Button>
             </>
           )}
-          <Button 
-            onClick={() => setShowDeactivated(!showDeactivated)} 
+          <Button
+            onClick={() => setShowDeactivated(!showDeactivated)}
             variant={showDeactivated ? "default" : "outline"}
             size="sm"
           >
@@ -592,106 +592,98 @@ export function UserManagement() {
                   Add Personnel
                 </Button>
               </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Create New Personnel</DialogTitle>
-                <DialogDescription>
-                  Add new personnel to the system with their role and permissions.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="create-email">Email</Label>
-                  <Input
-                    id="create-email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="user@example.com"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="create-name">Full Name</Label>
-                  <Input
-                    id="create-name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="John Doe"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="create-password">Password *</Label>
-                  <Input
-                    id="create-password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Min. 6 characters"
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">Must be at least 6 characters</p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="create-role">Role</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value: 'ADMIN' | 'PERSONNEL') => 
-                      setFormData({ ...formData, role: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PERSONNEL">Personnel</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="create-personnel-type">Position</Label>
-                  <Select
-                    value={formData.personnel_types_id || 'none'}
-                    onValueChange={(value) => {
-                      console.log('Selected position:', value)
-                      const selectedType = personnelTypes.find(t => t.personnel_types_id === value)
-                      console.log('Selected type details:', selectedType)
-                      setFormData({ ...formData, personnel_types_id: value === "none" ? undefined : value })
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select position" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No position</SelectItem>
-                      {personnelTypes.map((type) => (
-                        <SelectItem key={type.personnel_types_id} value={type.personnel_types_id}>
-                          {type.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="create-department">Department</Label>
-                  <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                    {formData.personnel_types_id && formData.personnel_types_id !== 'none' 
-                      ? (personnelTypes.find(t => t.personnel_types_id === formData.personnel_types_id)?.department || 'No department assigned')
-                      : 'Select a position first'}
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Create New Personnel</DialogTitle>
+                  <DialogDescription>
+                    Add new personnel to the system with their role and permissions.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="create-email">Email</Label>
+                    <Input
+                      id="create-email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="user@example.com"
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">Department is set by the position. To change it, update the position settings.</p>
+                  <div className="grid gap-2">
+                    <Label htmlFor="create-name">Full Name</Label>
+                    <Input
+                      id="create-name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="create-password">Password *</Label>
+                    <Input
+                      id="create-password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="Min. 6 characters"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">Must be at least 6 characters</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="create-role">Role</Label>
+                    <Select
+                      value={formData.role}
+                      onValueChange={(value: 'ADMIN' | 'PERSONNEL') =>
+                        setFormData({ ...formData, role: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PERSONNEL">Personnel</SelectItem>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="create-personnel-type">Position</Label>
+                    <Select
+                      value={formData.personnel_types_id || 'none'}
+                      onValueChange={(value) => {
+                        console.log('Selected position:', value)
+                        const selectedType = personnelTypes.find(t => t.personnel_types_id === value)
+                        console.log('Selected type details:', selectedType)
+                        setFormData({ ...formData, personnel_types_id: value === "none" ? undefined : value })
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select position" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No position</SelectItem>
+                        {personnelTypes.map((type) => (
+                          <SelectItem key={type.personnel_types_id} value={type.personnel_types_id}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                 </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreatePersonnel}>
-                  Create Personnel
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreatePersonnel}>
+                    Create Personnel
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </SSRSafe>
         </div>
       </div>
@@ -763,7 +755,7 @@ export function UserManagement() {
                   <TableHead>Personnel ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Department</TableHead>
+
                   <TableHead>Position</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
@@ -796,11 +788,7 @@ export function UserManagement() {
                       {person.name || 'No name set'}
                     </TableCell>
                     <TableCell>{person.email}</TableCell>
-                    <TableCell>
-                      <div className="max-w-[220px] truncate text-muted-foreground text-xs">
-                        {person.personnelType?.department || '-'}
-                      </div>
-                    </TableCell>
+
                     <TableCell>
                       <Badge variant="outline">
                         {person.personnelType?.name || 'N/A'}
@@ -888,156 +876,148 @@ export function UserManagement() {
       {/* Edit Personnel Dialog */}
       <SSRSafe>
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Edit Personnel</DialogTitle>
-            <DialogDescription>
-              Update personnel information and permissions.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-email">Email</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-name">Full Name</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-password">New Password (optional)</Label>
-              <Input
-                id="edit-password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Leave empty to keep current password"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-role">Role</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(value: 'ADMIN' | 'PERSONNEL') => 
-                  setFormData({ ...formData, role: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PERSONNEL">Personnel</SelectItem>
-                  <SelectItem value="ADMIN">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-personnel-type">Position</Label>
-              <Select
-                value={formData.personnel_types_id || 'none'}
-                onValueChange={(value) => 
-                  setFormData({ ...formData, personnel_types_id: value === "none" ? undefined : value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select position" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No position</SelectItem>
-                  {personnelTypes.map((type) => (
-                    <SelectItem key={type.personnel_types_id} value={type.personnel_types_id}>
-                      {type.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-department">Department</Label>
-              <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                {formData.personnel_types_id && formData.personnel_types_id !== 'none' 
-                  ? (personnelTypes.find(t => t.personnel_types_id === formData.personnel_types_id)?.department || 'No department assigned')
-                  : 'Select a position first'}
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Personnel</DialogTitle>
+              <DialogDescription>
+                Update personnel information and permissions.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
               </div>
-              <p className="text-xs text-muted-foreground">Department is set by the position. To change it, update the position settings.</p>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-name">Full Name</Label>
+                <Input
+                  id="edit-name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-password">New Password (optional)</Label>
+                <Input
+                  id="edit-password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Leave empty to keep current password"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-role">Role</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value: 'ADMIN' | 'PERSONNEL') =>
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PERSONNEL">Personnel</SelectItem>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-personnel-type">Position</Label>
+                <Select
+                  value={formData.personnel_types_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, personnel_types_id: value === "none" ? undefined : value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No position</SelectItem>
+                    {personnelTypes.map((type) => (
+                      <SelectItem key={type.personnel_types_id} value={type.personnel_types_id}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpdatePersonnel}>
-              Update Personnel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdatePersonnel}>
+                Update Personnel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SSRSafe>
 
       {/* View Personnel Dialog */}
       <SSRSafe>
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Personnel Details</DialogTitle>
-            <DialogDescription>
-              View detailed information about this personnel.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedPersonnel && (
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label>Personnel ID</Label>
-                <div className="text-sm text-muted-foreground font-mono">
-                  {selectedPersonnel.users_id}
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Personnel Details</DialogTitle>
+              <DialogDescription>
+                View detailed information about this personnel.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedPersonnel && (
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label>Personnel ID</Label>
+                  <div className="text-sm text-muted-foreground font-mono">
+                    {selectedPersonnel.users_id}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Email</Label>
+                  <div>{selectedPersonnel.email}</div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Full Name</Label>
+                  <div>{selectedPersonnel.name || 'No name set'}</div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Role</Label>
+                  <Badge variant={selectedPersonnel.role === 'ADMIN' ? 'default' : 'secondary'}>
+                    {selectedPersonnel.role}
+                  </Badge>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Status</Label>
+                  <Badge variant={selectedPersonnel.isActive ? 'default' : 'destructive'}>
+                    {selectedPersonnel.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Created</Label>
+                  <div>{new Date(selectedPersonnel.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Last Updated</Label>
+                  <div>{new Date(selectedPersonnel.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Email</Label>
-                <div>{selectedPersonnel.email}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Full Name</Label>
-                <div>{selectedPersonnel.name || 'No name set'}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Role</Label>
-                <Badge variant={selectedPersonnel.role === 'ADMIN' ? 'default' : 'secondary'}>
-                  {selectedPersonnel.role}
-                </Badge>
-              </div>
-              <div className="grid gap-2">
-                <Label>Status</Label>
-                <Badge variant={selectedPersonnel.isActive ? 'default' : 'destructive'}>
-                  {selectedPersonnel.isActive ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-              <div className="grid gap-2">
-                <Label>Created</Label>
-                <div>{new Date(selectedPersonnel.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Last Updated</Label>
-                <div>{new Date(selectedPersonnel.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SSRSafe>
 
       {/* Delete Confirmation Dialog */}
@@ -1070,7 +1050,7 @@ export function UserManagement() {
                 <div className="text-xs text-muted-foreground">
                   ID: <span className="font-mono">{pendingDelete.users_id}</span>
                 </div>
-                
+
                 {deleteRecordCounts && (
                   <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
                     <p className="text-sm font-semibold text-red-900 dark:text-red-100 mb-3">
@@ -1107,7 +1087,7 @@ export function UserManagement() {
                     </p>
                   </div>
                 )}
-                
+
                 {!deleteRecordCounts && (
                   <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
                     <p className="text-xs text-yellow-800 dark:text-yellow-200">
@@ -1122,8 +1102,8 @@ export function UserManagement() {
                 Cancel
               </Button>
               {deleteRecordCounts ? (
-                <Button 
-                  variant="destructive" 
+                <Button
+                  variant="destructive"
                   onClick={() => handleConfirmDelete(true)}
                   className="w-full sm:w-auto"
                 >
@@ -1131,8 +1111,8 @@ export function UserManagement() {
                   Force Delete All
                 </Button>
               ) : (
-                <Button 
-                  variant="destructive" 
+                <Button
+                  variant="destructive"
                   onClick={() => handleConfirmDelete(false)}
                   className="w-full sm:w-auto"
                 >
@@ -1180,7 +1160,7 @@ export function UserManagement() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="admin-password" className="text-sm font-medium">
                     Enter your admin password to confirm
@@ -1205,8 +1185,8 @@ export function UserManagement() {
               </div>
             )}
             <DialogFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowPasswordDialog(false)
                   setAdminPassword('')
@@ -1215,7 +1195,7 @@ export function UserManagement() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 variant="destructive"
                 onClick={handleConfirmDeactivation}
                 disabled={!adminPassword}

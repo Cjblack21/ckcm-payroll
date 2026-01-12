@@ -53,7 +53,7 @@ export function RegisterForm({
       }
 
       toast.success(result.message || "Account created successfully!")
-      
+
       // Redirect to login page after 1.5 seconds
       setTimeout(() => {
         router.push("/")
@@ -68,8 +68,8 @@ export function RegisterForm({
   }
 
   return (
-    <form 
-      className={cn("space-y-5", className)} 
+    <form
+      className={cn("space-y-5", className)}
       onSubmit={handleSubmit(onSubmit)}
       {...props}
     >
@@ -80,10 +80,10 @@ export function RegisterForm({
         </Label>
         <div className="relative">
           <User className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            id="name" 
-            type="text" 
-            placeholder="Juan Dela Cruz" 
+          <Input
+            id="name"
+            type="text"
+            placeholder="Juan Dela Cruz"
             {...register("name")}
             disabled={isLoading}
             className="h-12 rounded-xl pl-10 transition-all focus-visible:ring-2"
@@ -101,10 +101,10 @@ export function RegisterForm({
         </Label>
         <div className="relative">
           <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            id="email" 
-            type="email" 
-            placeholder="you@ckcm.edu.ph" 
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
             {...register("email")}
             disabled={isLoading}
             className="h-12 rounded-xl pl-10 transition-all focus-visible:ring-2"
@@ -122,8 +122,8 @@ export function RegisterForm({
         </Label>
         <div className="relative">
           <Lock className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            id="password" 
+          <Input
+            id="password"
             type={showPassword ? "text" : "password"}
             placeholder="Create a password (min. 6 characters)"
             {...register("password")}
@@ -151,8 +151,8 @@ export function RegisterForm({
         </Label>
         <div className="relative">
           <Lock className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            id="confirmPassword" 
+          <Input
+            id="confirmPassword"
             type={showConfirmPassword ? "text" : "password"}
             placeholder="Confirm your password"
             {...register("confirmPassword")}
@@ -174,9 +174,9 @@ export function RegisterForm({
       </div>
 
       {/* Register Button */}
-      <Button 
-        type="submit" 
-        className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold shadow-lg shadow-blue-500/30 transition-all hover:shadow-xl hover:shadow-blue-500/40" 
+      <Button
+        type="submit"
+        className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold shadow-lg shadow-blue-500/30 transition-all hover:shadow-xl hover:shadow-blue-500/40"
         disabled={isLoading}
       >
         {isLoading ? (
@@ -189,16 +189,14 @@ export function RegisterForm({
         )}
       </Button>
 
-      <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-        Only @ckcm.edu.ph email addresses are allowed
-      </p>
+
 
       {/* Login Link */}
       <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
         <p className="text-center text-sm text-slate-600 dark:text-slate-400">
           Already have an account?{" "}
-          <a 
-            href="/" 
+          <a
+            href="/"
             className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
           >
             Sign in

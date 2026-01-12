@@ -67,43 +67,6 @@ export function AdminDashboardCharts() {
   }
   return (
     <div className="space-y-6">
-      {/* Attendance Trends */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Attendance Trends</CardTitle>
-          <CardDescription>Monthly attendance vs absence rates</CardDescription>
-        </CardHeader>
-        <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData.attendanceData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="present"
-                name="Present"
-                stackId="1"
-                stroke="#10b981"
-                fill="#10b981"
-                fillOpacity={0.6}
-              />
-              <Area
-                type="monotone"
-                dataKey="absent"
-                name="Absent"
-                stackId="1"
-                stroke="#ef4444"
-                fill="#ef4444"
-                fillOpacity={0.6}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
       {/* Payroll Trends */}
       <Card>
         <CardHeader>
@@ -115,14 +78,14 @@ export function AdminDashboardCharts() {
             <LineChart data={chartData.payrollData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
-              <YAxis 
+              <YAxis
                 tickFormatter={(value) => {
                   if (value >= 1000000) return `₱${(value / 1000000).toFixed(1)}M`
                   if (value >= 1000) return `₱${(value / 1000).toFixed(0)}K`
                   return `₱${value}`
                 }}
               />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => [`₱${value.toLocaleString()}`, "Amount"]}
               />
               <Legend />
@@ -151,12 +114,12 @@ export function AdminDashboardCharts() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis yAxisId="left" />
-              <YAxis 
-                yAxisId="right" 
+              <YAxis
+                yAxisId="right"
                 orientation="right"
                 tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}K`}
               />
-              <Tooltip 
+              <Tooltip
                 formatter={(value, name) => [
                   name === "loans" ? value : `₱${value.toLocaleString()}`,
                   name === "loans" ? "Loans Count" : "Total Amount"

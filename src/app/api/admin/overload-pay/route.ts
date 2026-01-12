@@ -79,17 +79,17 @@ export async function POST(request: NextRequest) {
       }))
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: `Additional pay added to ${targetEmployees.length} employee(s)`,
       count: records.count
     })
   } catch (error) {
     console.error("Error creating additional pay:", error)
     console.error("Error details:", error instanceof Error ? error.message : String(error))
-    return NextResponse.json({ 
-      error: "Failed to create additional pay", 
-      details: error instanceof Error ? error.message : String(error) 
+    return NextResponse.json({
+      error: "Failed to create additional pay",
+      details: error instanceof Error ? error.message : String(error)
     }, { status: 500 })
   }
 }

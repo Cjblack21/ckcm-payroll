@@ -4,6 +4,8 @@ export interface PayslipData {
   users_id: string
   name: string | null
   email: string
+  department?: string | null
+  position?: string | null
   totalHours: number
   totalSalary: number
   released: boolean
@@ -40,7 +42,7 @@ export async function getHeaderSettings(): Promise<HeaderSettings | null> {
   try {
     const settings = await prisma.headerSettings.findFirst()
     if (!settings) return null
-    
+
     // Type cast to match interface
     return {
       schoolName: settings.schoolName,
@@ -64,7 +66,7 @@ export function generatePayslipHTML(
   headerSettings: HeaderSettings | null
 ): string {
   const breakdown = employee.breakdown
-  
+
   return `
     <div class="payslip" style="
       width: 100%;
@@ -83,7 +85,7 @@ export function generatePayslipHTML(
         <div style="text-align: ${headerSettings.headerAlignment}; margin-bottom: 4px; border-bottom: 1px solid #000; padding-bottom: 2px;">
           ${headerSettings.showLogo ? `
             <div style="margin-bottom: 1px;">
-              <img src="${headerSettings.logoUrl}" alt="Logo" style="height: 12px; width: auto;" onerror="this.src='/ckcm.png'">
+              <img src="${headerSettings.logoUrl}" alt="Logo" style="height: 12px; width: auto;" onerror="this.src='/brgy-logo.png'">
             </div>
           ` : ''}
           <div style="font-weight: bold; font-size: ${headerSettings.fontSize === 'small' ? '5px' : headerSettings.fontSize === 'large' ? '6px' : '5px'}; margin-bottom: 1px; line-height: 1.0;">
@@ -116,27 +118,33 @@ export function generatePayslipHTML(
       <div style="margin-bottom: 2px;">
         <strong>Email:</strong> ${employee.email}
       </div>
+      ${employee.department ? `
+      <div style="margin-bottom: 2px;">
+        <strong>Department:</strong> ${employee.department}
+      </div>
+      ` : ''}
+      ${employee.position ? `
+      <div style="margin-bottom: 2px;">
+        <strong>Position:</strong> ${employee.position}
+      </div>
+      ` : ''}
       <div style="margin-bottom: 2px;">
         <strong>Period:</strong> ${new Date(period.periodStart).toLocaleDateString()} - ${new Date(period.periodEnd).toLocaleDateString()}
       </div>
       
       <div style="margin: 4px 0; border-top: 1px solid #ccc; padding-top: 2px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-          <span>Work Hours:</span>
-          <span>${employee.totalHours.toFixed(2)} hrs</span>
-        </div>
         ${breakdown ? `
           <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-            <span>Basic:</span>
-            <span>₱${(breakdown.biweeklyBasicSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <span>Monthly Basic Salary (MONTHLY):</span>
+            <span>₱${((breakdown.biweeklyBasicSalary || 0) * 2).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
-            <span>OT:</span>
-            <span>₱${(breakdown.overtimePay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px solid #ddd;">
+            <span style="font-weight: bold; color: #16a34a;">Basic Salary (Semi-Monthly):</span>
+            <span style="font-weight: bold; color: #16a34a;">₱${(breakdown.biweeklyBasicSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 1px; border-top: 1px solid #ccc; padding-top: 1px;">
-            <span><strong>Gross:</strong></span>
-            <span><strong>₱${(breakdown.grossPay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></span>
+          <div style="display: flex; justify-content: space-between; margin: 2px 0; padding: 2px 0; background: #dbeafe; border: 1px solid #3b82f6;">
+            <span style="font-weight: bold; font-size: 7px; color: #1e40af; padding-left: 2px;">GROSS PAY</span>
+            <span style="font-weight: bold; font-size: 7px; color: #1e40af; padding-right: 2px;">₱${(breakdown.grossPay || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
           ${breakdown.attendanceDeductionDetails && breakdown.attendanceDeductionDetails.length > 0 ? `
             <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 5px;">
@@ -159,18 +167,22 @@ export function generatePayslipHTML(
             </div>
           ` : ''}
           ${breakdown.loanDetails && breakdown.loanDetails.length > 0 ? `
-            <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 5px;">
-              <div style="font-weight: bold; margin-bottom: 1px; color: #d97706; font-size: 6px;">Loan Payments:</div>
-              ${breakdown.loanDetails.map((loan: any) => `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5px;">
-                  <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${loan.description || loan.type}">${loan.description || loan.type || 'Loan Payment'}</span>
-                  <span style="font-weight: bold; color: #d97706;">-₱${(loan.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <div style="margin-top: 2px; padding-top: 2px; font-size: 5px;">
+              <div style="font-weight: bold; margin-bottom: 1px; font-size: 6px;">Loan Payments:</div>
+              ${breakdown.loanDetails.map((loan: any) => {
+    // Clean up loan name - remove percentage details
+    const loanName = (loan.type || 'Loan Payment').split('(')[0].trim();
+    return `
+                <div style="margin-bottom: 1px;">
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${loanName}">${loanName}</span>
+                    <span style="font-weight: bold; color: #d97706;">-₱${(loan.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  </div>
+                  ${loan.originalAmount ? `<div style="font-size: 4px; color: #999; margin-left: 2px;">Total Amount: ₱${(loan.originalAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                  ${loan.remainingBalance && loan.remainingBalance > 0 ? `<div style="font-size: 4px; color: #999; margin-left: 2px;">Remaining Balance: ₱${(loan.remainingBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
                 </div>
-              `).join('')}
-              <div style="display: flex; justify-content: space-between; margin-top: 1px; padding-top: 1px; border-top: 0.5px solid #ddd;">
-                <span style="font-weight: bold; font-size: 6px;">Total Loans:</span>
-                <span style="font-weight: bold; color: #d97706; font-size: 6px;">-₱${(breakdown.loanPayments || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-              </div>
+                `;
+  }).join('')}
             </div>
           ` : `
             <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
@@ -179,25 +191,57 @@ export function generatePayslipHTML(
             </div>
           `}
           ${(breakdown.otherDeductionDetails && breakdown.otherDeductionDetails.length > 0) || (breakdown.deductionDetails && breakdown.deductionDetails.length > 0) ? `
-            <div style="margin-top: 2px; padding-top: 2px; border-top: 1px solid #eee; font-size: 5px;">
-              <div style="font-weight: bold; margin-bottom: 1px; color: #7c3aed; font-size: 6px;">Other Deductions:</div>
-              ${(breakdown.otherDeductionDetails || breakdown.deductionDetails || []).map((deduction: any) => `
-                <div style="margin-bottom: 0.5px;">
-                  <div style="display: flex; justify-content: space-between;">
-                    <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${deduction.type || deduction.description}">${deduction.type || deduction.description || 'Deduction'}</span>
-                    <span style="font-weight: bold; color: #7c3aed;">-₱${(deduction.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                  </div>
-                  ${deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue ? `
-                    <div style="font-size: 4px; color: #999; margin-left: 2px;">
-                      ${deduction.percentageValue}% of salary
-                    </div>
-                  ` : ''}
-                </div>
-              `).join('')}
-              <div style="display: flex; justify-content: space-between; margin-top: 1px; padding-top: 1px; border-top: 0.5px solid #ddd;">
-                <span style="font-weight: bold; font-size: 6px;">Total Other Ded:</span>
-                <span style="font-weight: bold; color: #7c3aed; font-size: 6px;">-₱${(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-              </div>
+            <div style="margin-top: 2px; padding-top: 2px; font-size: 5px;">
+              ${(() => {
+          const allDeductions = breakdown.otherDeductionDetails || breakdown.deductionDetails || [];
+          const nonMandatory = allDeductions.filter((d: any) => !d.isMandatory);
+          const mandatory = allDeductions.filter((d: any) => d.isMandatory);
+
+          let html = '';
+
+          // Deduction Payments (non-mandatory)
+          if (nonMandatory.length > 0) {
+            html += '<div style="font-weight: bold; margin-bottom: 1px; font-size: 6px;">Deduction Payments:</div>';
+            nonMandatory.forEach((deduction: any) => {
+              // Clean up deduction name - remove [DEDUCTION] prefix and percentage details
+              let deductionName = deduction.type || deduction.description || 'Deduction';
+              deductionName = deductionName.replace(/^\[DEDUCTION\]\s*/i, '').split('(')[0].trim();
+              html += `
+                      <div style="margin-bottom: 1px;">
+                        <div style="display: flex; justify-content: space-between;">
+                          <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${deductionName}">${deductionName}</span>
+                          <span style="font-weight: bold; color: #dc2626;">-₱${(deduction.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        ${deduction.originalAmount ? `<div style="font-size: 4px; color: #999; margin-left: 2px;">Total Amount: ₱${(deduction.originalAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                        ${deduction.remainingBalance && deduction.remainingBalance > 0 ? `<div style="font-size: 4px; color: #999; margin-left: 2px;">Remaining Balance: ₱${(deduction.remainingBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>` : ''}
+                      </div>
+                    `;
+            });
+          }
+
+          // Mandatory Deductions
+          if (mandatory.length > 0) {
+            html += '<div style="font-weight: bold; margin-bottom: 1px; margin-top: 2px; font-size: 6px;">Mandatory Deductions:</div>';
+            mandatory.forEach((deduction: any) => {
+              // Clean up mandatory deduction name - just show the name
+              const deductionName = (deduction.type || 'Deduction').split('(')[0].trim();
+              const calcType = deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue
+                ? `${deduction.percentageValue}% of salary`
+                : 'Fixed amount';
+              html += `
+                      <div style="margin-bottom: 1px;">
+                        <div style="display: flex; justify-content: space-between;">
+                          <span style="max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #666;" title="${deductionName}">${deductionName}</span>
+                          <span style="font-weight: bold; color: #dc2626;">-₱${(deduction.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style="font-size: 4px; color: #999; margin-left: 2px;">${calcType}</div>
+                      </div>
+                    `;
+            });
+          }
+
+          return html;
+        })()}
             </div>
           ` : breakdown.nonAttendanceDeductions > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
@@ -205,14 +249,10 @@ export function generatePayslipHTML(
               <span>-₱${(breakdown.nonAttendanceDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
             </div>
           ` : ''}
-          <div style="display: flex; justify-content: space-between; margin-bottom: 1px; border-top: 1px solid #ccc; padding-top: 1px;">
-            <span><strong>Total Ded:</strong></span>
-            <span><strong>-₱${(breakdown.totalDeductions || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></span>
-          </div>
         ` : ''}
-        <div style="display: flex; justify-content: space-between; margin-top: 2px; border-top: 2px solid #000; padding-top: 1px; font-weight: bold; font-size: 8px;">
-          <span>NET PAY:</span>
-          <span>₱${employee.totalSalary.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        <div style="display: flex; justify-content: space-between; margin-top: 3px; padding: 3px 2px; background: #1f2937; color: white; font-weight: bold; font-size: 8px; border-radius: 2px;">
+          <span>NET PAY</span>
+          <span>-₱${employee.totalSalary.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
         </div>
       </div>
       

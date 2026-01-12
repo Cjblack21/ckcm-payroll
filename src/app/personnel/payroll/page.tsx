@@ -82,7 +82,7 @@ export default function PersonnelPayrollPage() {
 
   const deleteSelectedPayrolls = async () => {
     if (selectedPayrolls.length === 0) return
-    
+
     if (!confirm(`Are you sure you want to delete ${selectedPayrolls.length} payroll(s)?`)) {
       return
     }
@@ -136,11 +136,11 @@ export default function PersonnelPayrollPage() {
     try {
       setLoading(true)
       console.log('Loading payroll data...')
-      
+
       const response = await fetch('/api/personnel/payroll', { cache: 'no-store' })
       console.log('Response status:', response.status)
       console.log('Response ok:', response.ok)
-      
+
       if (response.ok) {
         const payrollData = await response.json()
         console.log('Payroll data received:', payrollData)
@@ -161,7 +161,7 @@ export default function PersonnelPayrollPage() {
             const text = await response.text()
             errorPayload = { message: text.slice(0, 300) }
           }
-        } catch {}
+        } catch { }
         console.error('Failed to load payroll data:', {
           status: response.status,
           statusText: response.statusText,
@@ -200,7 +200,7 @@ export default function PersonnelPayrollPage() {
       })
       const result = await response.json()
       console.log('Create test payroll response:', result)
-      
+
       if (response.ok) {
         alert(`Test payroll created successfully! ${result.message}`)
         // Reload the payroll data
@@ -222,7 +222,7 @@ export default function PersonnelPayrollPage() {
 
   const fetchBreakdownForPayroll = async (payroll: any) => {
     setLoadingBreakdown(true)
-    
+
     try {
       // SIMPLE - Use the data that's already in the table (it's correct!)
       const snapshot = payroll.breakdownSnapshot
@@ -230,7 +230,7 @@ export default function PersonnelPayrollPage() {
       const periodSalary = monthlyBasic / 2
       const overload = snapshot?.totalAdditions || 0
       const deductions = payroll.deductions || 0
-      
+
       setSelectedBreakdown({
         basicSalary: periodSalary,
         monthlyBasicSalary: monthlyBasic,
@@ -261,7 +261,7 @@ export default function PersonnelPayrollPage() {
       setLoadingBreakdown(false)
     }
   }
-  
+
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-PH', {
@@ -286,7 +286,7 @@ export default function PersonnelPayrollPage() {
       // Get current time in Philippines (UTC+8)
       const now = new Date()
       const philippinesTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
-      
+
       // Use scheduledRelease if available, otherwise calculate from period end + release time
       let releaseDateTime: Date
       if (data.periodInfo?.current?.scheduledRelease) {
@@ -299,9 +299,9 @@ export default function PersonnelPayrollPage() {
         releaseDateTime.setHours(hours, minutes, 0, 0)
         console.log('Using period end + releaseTime:', releaseDateTime.toISOString())
       }
-      
+
       const diff = releaseDateTime.getTime() - philippinesTime.getTime()
-      
+
       if (diff <= 0) {
         setTimeUntilRelease('Release available now!')
         if (!canRelease) {
@@ -309,27 +309,27 @@ export default function PersonnelPayrollPage() {
         }
         return
       }
-      
+
       // If counting down, ensure canRelease is false
       if (canRelease) {
         setCanRelease(false)
       }
-      
+
       const days = Math.floor(diff / (1000 * 60 * 60 * 24))
       const hrs = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
       const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
       const secs = Math.floor((diff % (1000 * 60)) / 1000)
-      
+
       let countdown = ''
       if (days > 0) countdown += `${days}d `
       countdown += `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-      
+
       setTimeUntilRelease(countdown)
     }
 
     updateCountdown()
     const interval = setInterval(updateCountdown, 1000)
-    
+
     return () => clearInterval(interval)
   }, [data?.periodInfo?.current?.end, data?.periodInfo?.current?.releaseTime, canRelease])
 
@@ -390,24 +390,24 @@ export default function PersonnelPayrollPage() {
             snapshot = null
           }
         }
-        
+
         const monthlyBasic = Number(latestPayroll.user?.personnelType?.basicSalary || 20000)
         const periodSalary = monthlyBasic / 2
         const dbNetPay = Number(latestPayroll.netPay || 0)
         const deductions = Number(latestPayroll.deductions || 0)
-        
+
         // Calculate additional pay from snapshot or derive from net pay
         // Always calculate from net pay formula for accuracy
         // Formula: netPay = periodSalary + overloadPay - deductions
         // Therefore: overloadPay = netPay - periodSalary + deductions
         const calculatedOverload = dbNetPay - periodSalary + deductions
         let overloadPay = calculatedOverload > 0 ? calculatedOverload : 0
-        
+
         // Use snapshot value if it exists and is greater than calculated
         if (snapshot?.totalAdditions && Number(snapshot.totalAdditions) > overloadPay) {
           overloadPay = Number(snapshot.totalAdditions)
         }
-        
+
         console.log('💰 Additional Pay Calculation:', {
           snapshot: snapshot?.totalAdditions,
           calculated: dbNetPay - periodSalary + deductions,
@@ -416,7 +416,7 @@ export default function PersonnelPayrollPage() {
           periodSalary,
           deductions
         })
-        
+
         return (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <Card className="border-l-4 border-l-purple-500">
@@ -488,21 +488,19 @@ export default function PersonnelPayrollPage() {
             <div className="flex gap-2 border-b">
               <button
                 onClick={() => setArchiveOpen(false)}
-                className={`px-4 py-2 font-medium transition-colors ${
-                  !archiveOpen
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`px-4 py-2 font-medium transition-colors ${!archiveOpen
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 Current Payroll
               </button>
               <button
                 onClick={() => setArchiveOpen(true)}
-                className={`px-4 py-2 font-medium transition-colors ${
-                  archiveOpen
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`px-4 py-2 font-medium transition-colors ${archiveOpen
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 Archived Payrolls
               </button>
@@ -570,71 +568,71 @@ export default function PersonnelPayrollPage() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-3 font-semibold w-12">
-                        <input
-                          type="checkbox"
-                          checked={selectAll}
-                          onChange={handleSelectAll}
-                          className="cursor-pointer"
-                        />
-                      </th>
-                      <th className="text-left p-3 font-semibold">Period</th>
-                      <th className="text-left p-3 font-semibold">Net Pay</th>
-                      <th className="text-left p-3 font-semibold">Status</th>
-                      <th className="text-center p-3 font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                <tbody>
-                  {archivedPayrolls.map((payroll: any) => (
-                    <tr key={payroll.payroll_entries_id} className="border-b hover:bg-muted/50">
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedPayrolls.includes(payroll.payroll_entries_id)}
-                          onChange={() => handleSelectPayroll(payroll.payroll_entries_id)}
-                          className="cursor-pointer"
-                        />
-                      </td>
-                      <td className="p-3">
-                        {formatDate(payroll.periodStart)} - {formatDate(payroll.periodEnd)}
-                      </td>
-                      <td className="p-3 font-semibold text-green-600">
-                        {formatCurrency(Number(payroll.netPay))}
-                      </td>
-                      <td className="p-3">
-                        <Badge variant={payroll.status === 'RELEASED' ? 'default' : 'secondary'} 
-                               className={payroll.status === 'RELEASED' ? 'bg-green-600' : ''}>
-                          {payroll.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="flex gap-2 justify-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => viewDetails(payroll)}
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deletePayroll(payroll.payroll_entries_id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            </>
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3 font-semibold w-12">
+                          <input
+                            type="checkbox"
+                            checked={selectAll}
+                            onChange={handleSelectAll}
+                            className="cursor-pointer"
+                          />
+                        </th>
+                        <th className="text-left p-3 font-semibold">Period</th>
+                        <th className="text-left p-3 font-semibold">Net Pay</th>
+                        <th className="text-left p-3 font-semibold">Status</th>
+                        <th className="text-center p-3 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {archivedPayrolls.map((payroll: any) => (
+                        <tr key={payroll.payroll_entries_id} className="border-b hover:bg-muted/50">
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedPayrolls.includes(payroll.payroll_entries_id)}
+                              onChange={() => handleSelectPayroll(payroll.payroll_entries_id)}
+                              className="cursor-pointer"
+                            />
+                          </td>
+                          <td className="p-3">
+                            {formatDate(payroll.periodStart)} - {formatDate(payroll.periodEnd)}
+                          </td>
+                          <td className="p-3 font-semibold text-green-600">
+                            {formatCurrency(Number(payroll.netPay))}
+                          </td>
+                          <td className="p-3">
+                            <Badge variant={payroll.status === 'RELEASED' ? 'default' : 'secondary'}
+                              className={payroll.status === 'RELEASED' ? 'bg-green-600' : ''}>
+                              {payroll.status}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex gap-2 justify-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => viewDetails(payroll)}
+                              >
+                                <FileText className="h-4 w-4 mr-2" />
+                                View
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deletePayroll(payroll.payroll_entries_id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <p className="text-center text-muted-foreground py-8">
                 No archived payrolls yet.
@@ -658,7 +656,7 @@ export default function PersonnelPayrollPage() {
             let snapshot = selectedPayroll.breakdownSnapshot
             console.log('🔥 RAW breakdownSnapshot:', selectedPayroll.breakdownSnapshot)
             console.log('🔥 Type:', typeof selectedPayroll.breakdownSnapshot)
-            
+
             if (snapshot && typeof snapshot === 'string') {
               try {
                 snapshot = JSON.parse(snapshot)
@@ -668,22 +666,22 @@ export default function PersonnelPayrollPage() {
                 snapshot = null
               }
             }
-            
+
             const monthlyBasic = Number(selectedPayroll.user?.personnelType?.basicSalary || 20000)
             const periodSalary = monthlyBasic / 2 // Semi-monthly = monthly / 2
             const dbNetPay = Number(selectedPayroll.netPay || 0)
             const deductions = Number(selectedPayroll.deductions || 0)
-            
+
             // Get details from snapshot (archived) or fetched data (current)
             let overloadPayDetails = snapshot?.overloadPayDetails || []
             let deductionDetails = snapshot?.deductionDetails || []
             let loanDetails = snapshot?.loanDetails || []
-            
+
             // If no snapshot, use fetched details
             if (overloadPayDetails.length === 0 && fetchedDetails?.additionalPay) {
               overloadPayDetails = fetchedDetails.additionalPay
             }
-            
+
             // ALWAYS use recalculated attendance deductions from fetchedDetails
             if (fetchedDetails?.deductions) {
               // Get attendance deductions from fetched (recalculated)
@@ -691,37 +689,37 @@ export default function PersonnelPayrollPage() {
                 const type = d.type?.toLowerCase() || ''
                 return type.includes('late') || type.includes('early') || type.includes('absent') || type.includes('tardiness') || type.includes('partial')
               })
-              
+
               // Get non-attendance deductions from fetched or snapshot
               const fetchedNonAttendance = fetchedDetails.deductions.filter((d: any) => {
                 const type = d.type?.toLowerCase() || ''
                 return !type.includes('late') && !type.includes('early') && !type.includes('absent') && !type.includes('tardiness') && !type.includes('partial')
               })
-              
+
               const snapshotNonAttendance = deductionDetails.filter((d: any) => {
                 const type = d.type?.toLowerCase() || ''
                 return !type.includes('late') && !type.includes('early') && !type.includes('absent') && !type.includes('tardiness') && !type.includes('partial')
               })
-              
+
               // ALWAYS use recalculated attendance + other deductions
               deductionDetails = [
                 ...fetchedAttendance,
                 ...fetchedNonAttendance.length > 0 ? fetchedNonAttendance : snapshotNonAttendance
               ]
             }
-            
+
             if (loanDetails.length === 0 && fetchedDetails?.loans) {
               loanDetails = fetchedDetails.loans
             }
-            
+
             // Calculate overload pay
             let overloadPay = overloadPayDetails.reduce((sum: number, detail: any) => sum + Number(detail.amount), 0)
-            
+
             // Fallback: if still 0, calculate from netPay
             if (overloadPay === 0 && dbNetPay > periodSalary) {
               overloadPay = dbNetPay - periodSalary + deductions
             }
-            
+
             const mandatoryDeductions = deductionDetails.filter((d: any) => d.isMandatory)
             const attendanceDeductions = deductionDetails.filter((d: any) => {
               const type = d.type?.toLowerCase() || ''
@@ -731,215 +729,215 @@ export default function PersonnelPayrollPage() {
               const type = d.type?.toLowerCase() || ''
               return !d.isMandatory && !type.includes('late') && !type.includes('early') && !type.includes('absent') && !type.includes('tardiness') && !type.includes('partial')
             })
-            
+
             // Separate loans from deduction payments
             const actualLoans = loanDetails.filter((l: any) => !l.type?.startsWith('[DEDUCTION]'))
             const deductionPayments = loanDetails.filter((l: any) => l.type?.startsWith('[DEDUCTION]'))
-            
+
             const grossPay = periodSalary + overloadPay
             const netPay = grossPay - deductions
-            
+
             return (
-            <div className="space-y-4 pb-8">
-              {/* Header with Logo */}
-              <div className="text-center border-b-2 border-gray-300 dark:border-gray-700 pb-4">
-                <div className="flex justify-center mb-3">
-                  <img src="/ckcm.png" alt="CKCM Logo" className="h-16 w-16" />
+              <div className="space-y-4 pb-8">
+                {/* Header with Logo */}
+                <div className="text-center border-b-2 border-gray-300 dark:border-gray-700 pb-4">
+                  <div className="flex justify-center mb-3">
+                    <img src="/brgy-logo.png" alt="Barangay Logo" className="h-16 w-16" />
+                  </div>
+                  <h3 className="font-bold text-base">TUBOD BARANGAY POBLACION</h3>
+                  <p className="text-xs text-muted-foreground">Tubod, Lanao del Norte</p>
+                  <p className="text-xs text-muted-foreground">POBLACION - PMS</p>
+                  <h2 className="font-bold text-xl mt-3">PAYROLL DETAILS</h2>
                 </div>
-                <h3 className="font-bold text-base">Christ the King College De Maranding</h3>
-                <p className="text-xs text-muted-foreground">Maranding Lala Lanao del Norte</p>
-                <p className="text-xs text-muted-foreground">CKCM PMS (Payroll Management System)</p>
-                <h2 className="font-bold text-xl mt-3">PAYROLL DETAILS</h2>
-              </div>
 
-              {/* Personnel Information */}
-              <div className="space-y-1 text-sm border-b pb-3">
-                <div className="flex justify-between">
-                  <span className="font-semibold">Personnel:</span>
-                  <span>{selectedPayroll.user?.name || 'N/A'}</span>
+                {/* Personnel Information */}
+                <div className="space-y-1 text-sm border-b pb-3">
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Personnel:</span>
+                    <span>{selectedPayroll.user?.name || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Email:</span>
+                    <span className="text-xs">{selectedPayroll.user?.email || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Department:</span>
+                    <span>{selectedPayroll.user?.department || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Position:</span>
+                    <span>{selectedPayroll.user?.position || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Personnel Type:</span>
+                    <span>{selectedPayroll.user?.personnelType?.name || snapshot?.personnelType || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Period:</span>
+                    <span>{formatDate(selectedPayroll.periodStart)} - {formatDate(selectedPayroll.periodEnd)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Email:</span>
-                  <span className="text-xs">{selectedPayroll.user?.email || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Department:</span>
-                  <span>{selectedPayroll.user?.department || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Position:</span>
-                  <span>{selectedPayroll.user?.position || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Personnel Type:</span>
-                  <span>{selectedPayroll.user?.personnelType?.name || snapshot?.personnelType || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Period:</span>
-                  <span>{formatDate(selectedPayroll.periodStart)} - {formatDate(selectedPayroll.periodEnd)}</span>
-                </div>
-              </div>
 
-              {/* Salary Details */}
-              <div className="space-y-2">
-                <div className="flex justify-between py-2 border-b">
-                  <span className="font-semibold">Monthly Basic Salary</span>
-                  <span>{formatCurrency(monthlyBasic)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b bg-green-50 dark:bg-green-950/20 px-2">
-                  <span className="font-semibold">Period Salary (Semi-Monthly)</span>
-                  <span className="text-green-600 font-bold">{formatCurrency(periodSalary)}</span>
-                </div>
-                
-                {/* Additional Pay Section */}
-                {(overloadPayDetails.length > 0 || overloadPay > 0) && (
-                  <p className="text-sm font-semibold text-muted-foreground mt-2">Additional Pay:</p>
-                )}
-                
-                {/* Additional Pay Details */}
-                {overloadPayDetails.length > 0 ? (
-                  overloadPayDetails.map((detail: any, idx: number) => (
-                    <div key={idx} className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
-                      <span className="font-semibold">
-                        + {detail.type === 'POSITION_PAY' ? 'Position Pay' : 
-                           detail.type === 'BONUS' ? 'Bonus' : 
-                           detail.type === '13TH_MONTH' ? '13th Month Pay' : 
-                           detail.type === 'OVERTIME' ? 'Overtime' : 
-                           detail.type}
-                      </span>
-                      <span className="text-emerald-600 font-bold">+{formatCurrency(Number(detail.amount))}</span>
-                    </div>
-                  ))
-                ) : (
-                  overloadPay > 0 && (
-                    <div className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
-                      <span className="font-semibold">+ Additional Pay</span>
-                      <span className="text-emerald-600 font-bold">+{formatCurrency(overloadPay)}</span>
-                    </div>
-                  )
-                )}
-                
-                {/* GROSS PAY */}
-                <div className="flex justify-between py-3 bg-blue-50 dark:bg-blue-950/20 px-2 rounded font-bold text-lg">
-                  <span>GROSS PAY</span>
-                  <span className="text-blue-600">{formatCurrency(grossPay)}</span>
-                </div>
-                
-                {/* Loan Payments */}
-                {actualLoans.length > 0 && (
-                  <>
-                    <p className="text-sm font-semibold text-muted-foreground mt-2">Loan Payments:</p>
-                    {actualLoans.map((loan: any, idx: number) => (
-                      <div key={idx} className="border-b pl-4 py-1.5">
-                        <div className="flex justify-between">
-                          <span className="text-sm">{loan.type}</span>
-                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(loan.amount)}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                          {loan.originalAmount && (
-                            <div>Total Amount: {formatCurrency(loan.originalAmount)}</div>
-                          )}
-                          {loan.remainingBalance > 0 && (
-                            <div>Remaining Balance: {formatCurrency(loan.remainingBalance)}</div>
-                          )}
-                        </div>
+                {/* Salary Details */}
+                <div className="space-y-2">
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="font-semibold">Monthly Basic Salary</span>
+                    <span>{formatCurrency(monthlyBasic)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b bg-green-50 dark:bg-green-950/20 px-2">
+                    <span className="font-semibold">Period Salary (Semi-Monthly)</span>
+                    <span className="text-green-600 font-bold">{formatCurrency(periodSalary)}</span>
+                  </div>
+
+                  {/* Additional Pay Section */}
+                  {(overloadPayDetails.length > 0 || overloadPay > 0) && (
+                    <p className="text-sm font-semibold text-muted-foreground mt-2">Additional Pay:</p>
+                  )}
+
+                  {/* Additional Pay Details */}
+                  {overloadPayDetails.length > 0 ? (
+                    overloadPayDetails.map((detail: any, idx: number) => (
+                      <div key={idx} className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
+                        <span className="font-semibold">
+                          + {detail.type === 'POSITION_PAY' ? 'Position Pay' :
+                            detail.type === 'BONUS' ? 'Bonus' :
+                              detail.type === '13TH_MONTH' ? '13th Month Pay' :
+                                detail.type === 'OVERTIME' ? 'Overtime' :
+                                  detail.type}
+                        </span>
+                        <span className="text-emerald-600 font-bold">+{formatCurrency(Number(detail.amount))}</span>
                       </div>
-                    ))}
-                  </>
-                )}
-                
-                {/* Deduction Payments */}
-                {deductionPayments.length > 0 && (
-                  <>
-                    <p className="text-sm font-semibold text-muted-foreground mt-2">Deduction Payments:</p>
-                    {deductionPayments.map((deduction: any, idx: number) => (
-                      <div key={idx} className="border-b pl-4 py-1.5">
-                        <div className="flex justify-between">
-                          <span className="text-sm">{deduction.type?.replace('[DEDUCTION] ', '') || deduction.type}</span>
-                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                          {deduction.originalAmount && (
-                            <div>Total Amount: {formatCurrency(deduction.originalAmount)}</div>
-                          )}
-                          {deduction.remainingBalance > 0 && (
-                            <div>Remaining Balance: {formatCurrency(deduction.remainingBalance)}</div>
-                          )}
-                        </div>
+                    ))
+                  ) : (
+                    overloadPay > 0 && (
+                      <div className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
+                        <span className="font-semibold">+ Additional Pay</span>
+                        <span className="text-emerald-600 font-bold">+{formatCurrency(overloadPay)}</span>
                       </div>
-                    ))}
-                  </>
-                )}
-                
-                {/* Mandatory Deduction Details */}
-                {mandatoryDeductions.length > 0 && (
-                  <>
-                    <p className="text-sm font-semibold text-muted-foreground mt-2">Mandatory Deductions:</p>
-                    {mandatoryDeductions.map((deduction: any, idx: number) => (
-                      <div key={idx} className="border-b pl-4 py-1.5">
-                        <div className="flex justify-between">
-                          <span className="text-sm">{deduction.type}</span>
-                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                    )
+                  )}
+
+                  {/* GROSS PAY */}
+                  <div className="flex justify-between py-3 bg-blue-50 dark:bg-blue-950/20 px-2 rounded font-bold text-lg">
+                    <span>GROSS PAY</span>
+                    <span className="text-blue-600">{formatCurrency(grossPay)}</span>
+                  </div>
+
+                  {/* Loan Payments */}
+                  {actualLoans.length > 0 && (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground mt-2">Loan Payments:</p>
+                      {actualLoans.map((loan: any, idx: number) => (
+                        <div key={idx} className="border-b pl-4 py-1.5">
+                          <div className="flex justify-between">
+                            <span className="text-sm">{loan.type}</span>
+                            <span className="text-sm text-red-600 font-semibold">-{formatCurrency(loan.amount)}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                            {loan.originalAmount && (
+                              <div>Total Amount: {formatCurrency(loan.originalAmount)}</div>
+                            )}
+                            {loan.remainingBalance > 0 && (
+                              <div>Remaining Balance: {formatCurrency(loan.remainingBalance)}</div>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue 
-                            ? `${deduction.percentageValue}% of salary` 
-                            : 'Fixed amount'}
+                      ))}
+                    </>
+                  )}
+
+                  {/* Deduction Payments */}
+                  {deductionPayments.length > 0 && (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground mt-2">Deduction Payments:</p>
+                      {deductionPayments.map((deduction: any, idx: number) => (
+                        <div key={idx} className="border-b pl-4 py-1.5">
+                          <div className="flex justify-between">
+                            <span className="text-sm">{deduction.type?.replace('[DEDUCTION] ', '') || deduction.type}</span>
+                            <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                            {deduction.originalAmount && (
+                              <div>Total Amount: {formatCurrency(deduction.originalAmount)}</div>
+                            )}
+                            {deduction.remainingBalance > 0 && (
+                              <div>Remaining Balance: {formatCurrency(deduction.remainingBalance)}</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                
-                {/* Attendance Deductions */}
-                {attendanceDeductions.length > 0 && (
-                  <>
-                    <p className="text-sm font-semibold text-muted-foreground mt-2">Attendance Deductions:</p>
-                    {attendanceDeductions.map((deduction: any, idx: number) => {
-                      // Hardcoded correct values
-                      let correctedAmount = deduction.amount
-                      if (deduction.type === 'Late Arrival') {
-                        correctedAmount = 896.89
-                      } else if (deduction.type === 'Early Time-Out') {
-                        correctedAmount = 6.37
-                      }
-                      
-                      return (
+                      ))}
+                    </>
+                  )}
+
+                  {/* Mandatory Deduction Details */}
+                  {mandatoryDeductions.length > 0 && (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground mt-2">Mandatory Deductions:</p>
+                      {mandatoryDeductions.map((deduction: any, idx: number) => (
+                        <div key={idx} className="border-b pl-4 py-1.5">
+                          <div className="flex justify-between">
+                            <span className="text-sm">{deduction.type}</span>
+                            <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue
+                              ? `${deduction.percentageValue}% of salary`
+                              : 'Fixed amount'}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Attendance Deductions */}
+                  {attendanceDeductions.length > 0 && (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground mt-2">Attendance Deductions:</p>
+                      {attendanceDeductions.map((deduction: any, idx: number) => {
+                        // Hardcoded correct values
+                        let correctedAmount = deduction.amount
+                        if (deduction.type === 'Late Arrival') {
+                          correctedAmount = 896.89
+                        } else if (deduction.type === 'Early Time-Out') {
+                          correctedAmount = 6.37
+                        }
+
+                        return (
+                          <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
+                            <span className="text-sm">{deduction.type}</span>
+                            <span className="text-sm text-red-600 font-semibold">-{formatCurrency(correctedAmount)}</span>
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {otherDeductions.length > 0 && (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground mt-2">Other Deductions:</p>
+                      {otherDeductions.map((deduction: any, idx: number) => (
                         <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
                           <span className="text-sm">{deduction.type}</span>
-                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(correctedAmount)}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
                         </div>
-                      )
-                    })}
-                  </>
-                )}
-                
-                {otherDeductions.length > 0 && (
-                  <>
-                    <p className="text-sm font-semibold text-muted-foreground mt-2">Other Deductions:</p>
-                    {otherDeductions.map((deduction: any, idx: number) => (
-                      <div key={idx} className="flex justify-between py-1.5 border-b pl-4">
-                        <span className="text-sm">{deduction.type}</span>
-                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
-                
-                {(mandatoryDeductions.length === 0 && otherDeductions.length === 0) && deductions > 0 && (
-                  <div className="flex justify-between py-2 border-b bg-red-50 dark:bg-red-950/20 px-2">
-                    <span className="font-semibold">- Total Deductions</span>
-                    <span className="text-red-600 font-bold">-{formatCurrency(deductions)}</span>
+                      ))}
+                    </>
+                  )}
+
+                  {(mandatoryDeductions.length === 0 && otherDeductions.length === 0) && deductions > 0 && (
+                    <div className="flex justify-between py-2 border-b bg-red-50 dark:bg-red-950/20 px-2">
+                      <span className="font-semibold">- Total Deductions</span>
+                      <span className="text-red-600 font-bold">-{formatCurrency(deductions)}</span>
+                    </div>
+                  )}
+
+                  {/* NET PAY */}
+                  <div className="flex justify-between py-3 bg-primary/10 px-2 rounded">
+                    <span className="text-lg font-bold">NET PAY</span>
+                    <span className="text-lg font-bold text-primary">{formatCurrency(netPay)}</span>
                   </div>
-                )}
-                
-                {/* NET PAY */}
-                <div className="flex justify-between py-3 bg-primary/10 px-2 rounded">
-                  <span className="text-lg font-bold">NET PAY</span>
-                  <span className="text-lg font-bold text-primary">{formatCurrency(netPay)}</span>
                 </div>
               </div>
-            </div>
             )
           })()}
         </DialogContent>

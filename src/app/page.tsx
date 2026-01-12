@@ -37,7 +37,7 @@ export default function Home() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40 bg-slate-800/95 backdrop-blur-md border-slate-700">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("light")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -45,7 +45,7 @@ export default function Home() {
               <span>Light</span>
               {theme === "light" && <span className="ml-auto text-xs">✓</span>}
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("dark")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -53,7 +53,7 @@ export default function Home() {
               <span>Dark</span>
               {theme === "dark" && <span className="ml-auto text-xs">✓</span>}
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => setTheme("system")}
               className="cursor-pointer gap-2 text-slate-300"
             >
@@ -71,13 +71,13 @@ export default function Home() {
           <div className="flex flex-col items-center space-y-6">
             {/* Logo */}
             <div className="flex justify-center">
-              <img src="/ckcm.png" alt="CKCM Logo" className="w-24 h-24 object-contain" />
+              <img src="/brgy-logo.png" alt="Barangay Logo" className="w-40 h-40 object-contain transform translate-y-12" />
             </div>
 
             {/* Title */}
             <div className="text-center space-y-2">
               <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-                CKCM Payroll
+                TUBOD BARANGAY POBLACION PMS
               </h1>
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 Sign in to continue to your account
@@ -85,26 +85,26 @@ export default function Home() {
             </div>
 
             {/* Login Card */}
-            <div className="w-full bg-white dark:bg-[#0f1f3a] rounded-2xl p-8 border border-slate-200 dark:border-slate-800 shadow-xl">
+            <div className="w-full bg-white dark:bg-white/10 dark:backdrop-blur-xl rounded-2xl p-8 border border-slate-200 dark:border-white/20 shadow-xl">
               <LoginForm />
             </div>
 
             {/* Footer */}
             <p className="text-center text-xs text-slate-500 dark:text-slate-500">
-              © 2025 CKCM. All rights reserved.
+              © 2026 PMS. All rights reserved.
             </p>
           </div>
         </div>
       </div>
 
       {/* Right Side - Illustration */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-orange-500 to-red-600 items-center justify-center p-12 relative overflow-hidden">
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-[#00A3B1] via-[#41BD87] to-[#82D65A] items-center justify-center p-12 relative overflow-hidden">
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <circle cx="20" cy="20" r="1.5" fill="white" opacity="0.3"/>
+                <circle cx="20" cy="20" r="1.5" fill="white" opacity="0.3" />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
@@ -116,21 +116,19 @@ export default function Home() {
           {/* Animated Gears */}
           <div className="relative h-64 flex items-center justify-center">
             {/* Large Gear - Center */}
-            <Settings className="absolute w-48 h-48 text-white animate-spin-slow" style={{animationDuration: '10s'}} />
-            
+            <Settings className="absolute w-48 h-48 text-white animate-spin-slow" style={{ animationDuration: '10s' }} />
+
             {/* Medium Gear - Top Right */}
-            <Settings className="absolute w-32 h-32 text-white/90 top-4 right-20 animate-spin-slow" style={{animationDuration: '7s', animationDirection: 'reverse'}} />
-            
+            <Settings className="absolute w-32 h-32 text-white/90 top-4 right-20 animate-spin-slow" style={{ animationDuration: '7s', animationDirection: 'reverse' }} />
+
             {/* Small Gear - Bottom Left */}
-            <Settings className="absolute w-24 h-24 text-white/85 bottom-8 left-16 animate-spin-slow" style={{animationDuration: '6s'}} />
+            <Settings className="absolute w-24 h-24 text-white/85 bottom-8 left-16 animate-spin-slow" style={{ animationDuration: '6s' }} />
           </div>
-          
+
           {/* Text Content */}
           <div className="space-y-6">
             <h2 className="text-5xl font-bold text-white leading-tight">
-              CKCM PAYROLL
-              <br />
-              MANAGEMENT SYSTEM
+              TUBOD BARANGAY POBLACION PMS
             </h2>
             <p className="text-xl text-white/90 max-w-lg mx-auto">
               Streamline your payroll process with our comprehensive management system

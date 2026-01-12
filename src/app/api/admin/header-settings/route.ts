@@ -6,22 +6,22 @@ import { prisma } from "@/lib/prisma"
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get header settings from database or return defaults
     let settings = await prisma.headerSettings.findFirst()
-    
+
     if (!settings) {
       // Create default settings if none exist
       settings = await prisma.headerSettings.create({
         data: {
-          schoolName: "Christ the King College De Maranding",
-          schoolAddress: "Maranding Lala Lanao del Norte",
-          systemName: "CKCM PMS (Payroll Management System)",
-          logoUrl: "/ckcm.png",
+          schoolName: "TUBOD BARANGAY POBLACION",
+          schoolAddress: "Tubod, Lanao del Norte",
+          systemName: "POBLACION - PMS",
+          logoUrl: "/brgy-logo.png",
           showLogo: true,
           headerAlignment: 'center',
           fontSize: 'medium',
@@ -34,8 +34,8 @@ export async function GET() {
     // Parse workingDays from JSON string to array
     const parsedSettings = {
       ...settings,
-      workingDays: typeof settings.workingDays === 'string' 
-        ? JSON.parse(settings.workingDays) 
+      workingDays: typeof settings.workingDays === 'string'
+        ? JSON.parse(settings.workingDays)
         : settings.workingDays
     }
 
@@ -53,7 +53,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
     // Check if settings exist
     const existingSettings = await prisma.headerSettings.findFirst()
-    
+
     let settings
     if (existingSettings) {
       // Update existing settings
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
           schoolName,
           schoolAddress,
           systemName,
-          logoUrl: logoUrl || "/ckcm.png",
+          logoUrl: logoUrl || "/brgy-logo.png",
           showLogo: showLogo !== undefined ? showLogo : true,
           headerAlignment: headerAlignment || 'center',
           fontSize: fontSize || 'medium',
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
           schoolName,
           schoolAddress,
           systemName,
-          logoUrl: logoUrl || "/ckcm.png",
+          logoUrl: logoUrl || "/brgy-logo.png",
           showLogo: showLogo !== undefined ? showLogo : true,
           headerAlignment: headerAlignment || 'center',
           fontSize: fontSize || 'medium',

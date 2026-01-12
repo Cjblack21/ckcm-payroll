@@ -23,13 +23,13 @@ export default function ArchivedPayrollDetailsDialog({
   useEffect(() => {
     async function fetchLiveBreakdown() {
       if (!entry || !isOpen) return
-      
+
       setLoading(true)
       try {
         let overloadPayDetails: any[] = []
         let deductionDetails: any[] = []
         let loanDetails: any[] = []
-        
+
         // Parse snapshot if string
         let snapshot = entry.breakdownSnapshot
         if (snapshot && typeof snapshot === 'string') {
@@ -40,12 +40,12 @@ export default function ArchivedPayrollDetailsDialog({
             snapshot = null
           }
         }
-        
+
         // Get from snapshot first
         overloadPayDetails = snapshot?.overloadPayDetails || []
         deductionDetails = snapshot?.deductionDetails || []
         loanDetails = snapshot?.loanDetails || []
-        
+
         // If snapshot doesn't have detailed breakdown, fetch live data
         if (overloadPayDetails.length === 0 || deductionDetails.length === 0) {
           // Fetch overload pays
@@ -60,7 +60,7 @@ export default function ArchivedPayrollDetailsDialog({
               }))
             }
           }
-          
+
           // Fetch deductions
           const deductionsRes = await fetch('/api/admin/deductions')
           if (deductionsRes.ok) {
@@ -77,7 +77,7 @@ export default function ArchivedPayrollDetailsDialog({
               }))
             }
           }
-          
+
           // Fetch loans
           const loansRes = await fetch('/api/admin/loans')
           if (loansRes.ok) {
@@ -97,7 +97,7 @@ export default function ArchivedPayrollDetailsDialog({
             }
           }
         }
-        
+
         setLiveData({ overloadPayDetails, deductionDetails, loanDetails })
       } catch (error) {
         console.error('Error fetching live breakdown:', error)
@@ -105,7 +105,7 @@ export default function ArchivedPayrollDetailsDialog({
         setLoading(false)
       }
     }
-    
+
     fetchLiveBreakdown()
   }, [entry?.users_id, isOpen])
 
@@ -159,23 +159,23 @@ export default function ArchivedPayrollDetailsDialog({
         <DialogHeader>
           <DialogTitle>Archived Payroll Details</DialogTitle>
         </DialogHeader>
-        
+
         {loading && (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
           </div>
         )}
-        
+
         {!loading && (
           <div className="space-y-4 pb-8">
             {/* Header with Logo */}
             <div className="text-center border-b-2 border-gray-300 dark:border-gray-700 pb-4">
               <div className="flex justify-center mb-3">
-                <img src="/ckcm.png" alt="CKCM Logo" className="h-16 w-16" />
+                <img src="/brgy-logo.png" alt="Barangay Logo" className="h-16 w-16" />
               </div>
-              <h3 className="font-bold text-base">Christ the King College De Maranding</h3>
-              <p className="text-xs text-muted-foreground">Maranding Lala Lanao del Norte</p>
-              <p className="text-xs text-muted-foreground">CKCM PMS (Payroll Management System)</p>
+              <h3 className="font-bold text-base">TUBOD BARANGAY POBLACION</h3>
+              <p className="text-xs text-muted-foreground">Tubod, Lanao del Norte</p>
+              <p className="text-xs text-muted-foreground">POBLACION - PMS</p>
               <h2 className="font-bold text-xl mt-3">PAYROLL DETAILS</h2>
             </div>
 
@@ -198,10 +198,6 @@ export default function ArchivedPayrollDetailsDialog({
                 <span>{entry.user?.personnelType?.name || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="font-semibold">Personnel Type:</span>
-                <span>{entry.user?.personnelType?.name || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
                 <span className="font-semibold">Period:</span>
                 <span>{formatDateForDisplay(new Date(period.periodStart))} - {formatDateForDisplay(new Date(period.periodEnd))}</span>
               </div>
@@ -210,30 +206,30 @@ export default function ArchivedPayrollDetailsDialog({
             {/* Salary Details */}
             <div className="space-y-2">
               <div className="flex justify-between py-2 border-b">
-                <span className="font-semibold">Monthly Basic Salary</span>
+                <span className="font-semibold">Monthly Basic Salary (MONTHLY)</span>
                 <span>{formatCurrency(monthlyBasic)}</span>
               </div>
               <div className="flex justify-between py-2 border-b bg-green-50 dark:bg-green-950/20 px-2">
-                <span className="font-semibold">Period Salary (Semi-Monthly)</span>
+                <span className="font-semibold">Basic Salary (Semi-Monthly)</span>
                 <span className="text-green-600 font-bold">{formatCurrency(periodSalary)}</span>
               </div>
-              
+
               {/* Additional Pay Section */}
               {(overloadPayDetails.length > 0 || overloadPay > 0) && (
                 <p className="text-sm font-semibold text-muted-foreground mt-2">Additional Pay:</p>
               )}
-              
+
               {/* Additional Pay Details */}
               {overloadPayDetails.length > 0 ? (
                 overloadPayDetails.map((detail: any, idx: number) => (
                   <div key={idx} className="flex justify-between py-2 border-b bg-emerald-50 dark:bg-emerald-950/20 px-2">
                     <span className="font-semibold">
-                      + {detail.type === 'POSITION_PAY' ? 'Position Pay' : 
-                         detail.type === 'BONUS' ? 'Bonus' : 
-                         detail.type === '13TH_MONTH' ? '13th Month Pay' : 
-                         detail.type === 'OVERTIME' ? 'Overtime' : 
-                         detail.type === 'OVERLOAD' ? 'OVERLOAD' :
-                         detail.type}
+                      + {detail.type === 'POSITION_PAY' ? 'Position Pay' :
+                        detail.type === 'BONUS' ? 'Bonus' :
+                          detail.type === '13TH_MONTH' ? '13th Month Pay' :
+                            detail.type === 'OVERTIME' ? 'Overtime' :
+                              detail.type === 'OVERLOAD' ? 'OVERLOAD' :
+                                detail.type}
                     </span>
                     <span className="text-emerald-600 font-bold">+{formatCurrency(Number(detail.amount))}</span>
                   </div>
@@ -246,79 +242,92 @@ export default function ArchivedPayrollDetailsDialog({
                   </div>
                 )
               )}
-              
+
               {/* GROSS PAY */}
               <div className="flex justify-between py-3 bg-blue-50 dark:bg-blue-950/20 px-2 rounded font-bold text-lg">
                 <span>GROSS PAY</span>
                 <span className="text-blue-600">{formatCurrency(grossPay)}</span>
               </div>
-              
+
               {/* Loan Payments */}
               {actualLoans.length > 0 && (
                 <>
                   <p className="text-sm font-semibold text-muted-foreground mt-2">Loan Payments:</p>
-                  {actualLoans.map((loan: any, idx: number) => (
-                    <div key={idx} className="border-b pl-4 py-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-sm">{loan.type}</span>
-                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(loan.amount)}</span>
+                  {actualLoans.map((loan: any, idx: number) => {
+                    // Clean up loan name - remove percentage details
+                    const loanName = (loan.type || 'Loan Payment').split('(')[0].trim();
+                    return (
+                      <div key={idx} className="border-b pl-4 py-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm">{loanName}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(loan.amount)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                          {loan.originalAmount && (
+                            <div>Total Amount: {formatCurrency(loan.originalAmount)}</div>
+                          )}
+                          {loan.remainingBalance > 0 && (
+                            <div>Remaining Balance: {formatCurrency(loan.remainingBalance)}</div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                        {loan.originalAmount && (
-                          <div>Total Amount: {formatCurrency(loan.originalAmount)}</div>
-                        )}
-                        {loan.remainingBalance > 0 && (
-                          <div>Remaining Balance: {formatCurrency(loan.remainingBalance)}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
-              
+
               {/* Deduction Payments */}
               {deductionPayments.length > 0 && (
                 <>
                   <p className="text-sm font-semibold text-muted-foreground mt-2">Deduction Payments:</p>
-                  {deductionPayments.map((deduction: any, idx: number) => (
-                    <div key={idx} className="border-b pl-4 py-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-sm">{deduction.type?.replace('[DEDUCTION] ', '') || deduction.type}</span>
-                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                  {deductionPayments.map((deduction: any, idx: number) => {
+                    // Clean up deduction name - remove [DEDUCTION] prefix and percentage details
+                    let deductionName = deduction.type || 'Deduction';
+                    deductionName = deductionName.replace(/^\[DEDUCTION\]\s*/i, '').split('(')[0].trim();
+                    return (
+                      <div key={idx} className="border-b pl-4 py-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm">{deductionName}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                          {deduction.originalAmount && (
+                            <div>Total Amount: {formatCurrency(deduction.originalAmount)}</div>
+                          )}
+                          {deduction.remainingBalance > 0 && (
+                            <div>Remaining Balance: {formatCurrency(deduction.remainingBalance)}</div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                        {deduction.originalAmount && (
-                          <div>Total Amount: {formatCurrency(deduction.originalAmount)}</div>
-                        )}
-                        {deduction.remainingBalance > 0 && (
-                          <div>Remaining Balance: {formatCurrency(deduction.remainingBalance)}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
-              
+
               {/* Mandatory Deduction Details */}
               {mandatoryDeductions.length > 0 && (
                 <>
                   <p className="text-sm font-semibold text-muted-foreground mt-2">Mandatory Deductions:</p>
-                  {mandatoryDeductions.map((deduction: any, idx: number) => (
-                    <div key={idx} className="border-b pl-4 py-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-sm">{deduction.type}</span>
-                        <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                  {mandatoryDeductions.map((deduction: any, idx: number) => {
+                    // Clean up mandatory deduction name - remove percentage details
+                    const deductionName = (deduction.type || 'Deduction').split('(')[0].trim();
+                    return (
+                      <div key={idx} className="border-b pl-4 py-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm">{deductionName}</span>
+                          <span className="text-sm text-red-600 font-semibold">-{formatCurrency(deduction.amount)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue
+                            ? `${deduction.percentageValue}% of salary`
+                            : 'Fixed amount'}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {deduction.calculationType === 'PERCENTAGE' && deduction.percentageValue 
-                          ? `${deduction.percentageValue}% of salary` 
-                          : 'Fixed amount'}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
-              
+
               {/* Attendance Deductions */}
               {attendanceDeductions.length > 0 && (
                 <>
@@ -331,7 +340,7 @@ export default function ArchivedPayrollDetailsDialog({
                   ))}
                 </>
               )}
-              
+
               {otherDeductions.length > 0 && (
                 <>
                   <p className="text-sm font-semibold text-muted-foreground mt-2">Other Deductions:</p>
@@ -343,14 +352,14 @@ export default function ArchivedPayrollDetailsDialog({
                   ))}
                 </>
               )}
-              
+
               {(mandatoryDeductions.length === 0 && otherDeductions.length === 0) && deductions > 0 && (
                 <div className="flex justify-between py-2 border-b bg-red-50 dark:bg-red-950/20 px-2">
                   <span className="font-semibold">- Total Deductions</span>
                   <span className="text-red-600 font-bold">-{formatCurrency(deductions)}</span>
                 </div>
               )}
-              
+
               {/* NET PAY */}
               <div className="flex justify-between py-3 bg-primary/10 px-2 rounded">
                 <span className="text-lg font-bold">NET PAY</span>

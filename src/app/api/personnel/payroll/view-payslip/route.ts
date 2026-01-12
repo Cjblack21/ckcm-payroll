@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -39,9 +39,9 @@ export async function POST(request: NextRequest) {
     // Parse the breakdown snapshot (already saved when admin released/archived)
     let snapshot = null
     try {
-      snapshot = payrollEntry.breakdownSnapshot ? 
-        (typeof payrollEntry.breakdownSnapshot === 'string' ? 
-          JSON.parse(payrollEntry.breakdownSnapshot) : 
+      snapshot = payrollEntry.breakdownSnapshot ?
+        (typeof payrollEntry.breakdownSnapshot === 'string' ?
+          JSON.parse(payrollEntry.breakdownSnapshot) :
           payrollEntry.breakdownSnapshot) : null
     } catch (e) {
       console.error('Failed to parse snapshot:', e)
@@ -178,9 +178,9 @@ export async function POST(request: NextRequest) {
   <div class="payslip">
     <div class="header">
       <div class="logo">C</div>
-      <div class="school-name">Christ the King College De Maranding</div>
-      <div class="school-address">Lala, Lanao Del Norte</div>
-      <div class="school-address">CKCM PMS (Payroll Management System)</div>
+      <div class="school-name">TUBOD BARANGAY POBLACION</div>
+      <div class="school-address">Tubod, Lanao del Norte</div>
+      <div class="school-address">POBLACION - PMS</div>
       <div class="title">PAYSLIP</div>
     </div>
 
@@ -209,11 +209,11 @@ export async function POST(request: NextRequest) {
     </div>
     ${overloadPayDetails.length > 0 ? overloadPayDetails.map((detail: any) => `
     <div class="amount-row">
-      <span>+ ${detail.type === 'POSITION_PAY' ? 'Position Pay' : 
-                 detail.type === 'BONUS' ? 'Bonus' : 
-                 detail.type === '13TH_MONTH' ? '13th Month Pay' : 
-                 detail.type === 'OVERTIME' ? 'Overtime' : 
-                 detail.type}:</span>
+      <span>+ ${detail.type === 'POSITION_PAY' ? 'Position Pay' :
+        detail.type === 'BONUS' ? 'Bonus' :
+          detail.type === '13TH_MONTH' ? '13th Month Pay' :
+            detail.type === 'OVERTIME' ? 'Overtime' :
+              detail.type}:</span>
       <span style="color: #2e7d32;">₱${Number(detail.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
     </div>
     `).join('') : (overloadPay > 0 ? `

@@ -8,7 +8,7 @@ export async function createUserAccount(data: {
   email: string
   name: string
   schoolId: string
-  personnelTypeId: string
+  personnelTypeId?: string
   department?: string
   image?: string
 }): Promise<{
@@ -35,13 +35,15 @@ export async function createUserAccount(data: {
       }
     }
 
-    // Verify personnel type exists and is active
-    const personnelType = await prisma.personnelType.findUnique({
-      where: { personnel_types_id: data.personnelTypeId }
-    })
+    // Verify personnel type exists if provided
+    if (data.personnelTypeId) {
+      const personnelType = await prisma.personnelType.findUnique({
+        where: { personnel_types_id: data.personnelTypeId }
+      })
 
-    if (!personnelType || !personnelType.isActive) {
-      return { success: false, error: 'Selected personnel type is not available' }
+      if (!personnelType || !personnelType.isActive) {
+        return { success: false, error: 'Selected personnel type is not available' }
+      }
     }
 
     // Create user account
@@ -52,7 +54,7 @@ export async function createUserAccount(data: {
         name: data.name,
         password: '', // No password needed for OAuth users
         role: Role.PERSONNEL,
-        personnel_types_id: data.personnelTypeId,
+        personnel_types_id: data.personnelTypeId || null,
         isActive: true
       }
     })

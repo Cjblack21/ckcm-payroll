@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
           const inputEmail = credentials.email.trim().toLowerCase()
           const inputPassword = credentials.password.trim()
           console.log("Attempting to authenticate user:", inputEmail)
-          
+
           const user = await prisma.user.findUnique({
             where: {
               email: inputEmail
@@ -100,22 +100,22 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ account, profile }) {
       if (account?.provider === "google") {
-        // Restrict access to @ckcm.edu.ph domain
+        // Only require email verification
         const googleProfile = profile as any
-        return googleProfile?.email_verified === true && googleProfile?.email?.endsWith("@ckcm.edu.ph") === true
+        return googleProfile?.email_verified === true
       }
       return true // Allow other providers (credentials)
     },
     async jwt({ token, user, account, profile, trigger }) {
-      console.log('JWT callback called:', { 
-        hasAccount: !!account, 
+      console.log('JWT callback called:', {
+        hasAccount: !!account,
         provider: account?.provider,
         hasProfile: !!profile,
         hasUser: !!user,
         trigger,
         existingPicture: token.picture
       })
-      
+
       // Always refresh avatar from database on every request
       if (token.userId) {
         try {
@@ -130,24 +130,24 @@ export const authOptions: NextAuthOptions = {
           console.error("Error refreshing avatar:", error)
         }
       }
-      
+
       if (account?.provider === "google" && profile) {
         const googleProfile = profile as any
         console.log('Processing Google OAuth user:', googleProfile.email)
         console.log('Google profile picture URL:', googleProfile.picture)
         console.log('Full Google profile:', googleProfile)
-        
+
         // Check if user exists in database with timeout
         try {
           const existingUser = await Promise.race([
             prisma.user.findUnique({
               where: { email: googleProfile.email as string }
             }),
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Database query timeout')), 5000)
             )
           ]) as any
-          
+
           if (existingUser) {
             console.log('Existing user found:', existingUser.users_id, existingUser.role)
             // User exists, use their data
@@ -179,28 +179,28 @@ export const authOptions: NextAuthOptions = {
         token.userId = user.id
         token.avatar = user.avatar
       }
-      
-      console.log('JWT token final state:', { 
-        role: token.role, 
+
+      console.log('JWT token final state:', {
+        role: token.role,
         userId: token.userId,
         hasEmail: !!token.email,
         avatar: token.avatar,
         picture: token.picture
       })
-      
+
       return token
     },
     async session({ session, token }) {
       console.log('Session callback - token.picture:', token.picture)
       console.log('Session callback - token.role:', token.role)
-      
+
       if (token) {
         // Ensure userId is set - critical for API routes
         const userId = (token.userId as string) || (token.sub as string) || ''
         session.user.id = userId
         session.user.role = token.role as Role || 'SETUP_REQUIRED'
         session.user.avatar = token.avatar as string || null
-        
+
         if (token.role === "SETUP_REQUIRED") {
           session.user.email = token.email as string || ''
           session.user.name = token.name as string || ''
@@ -212,13 +212,13 @@ export const authOptions: NextAuthOptions = {
           console.log('Setting existing user image to:', session.user.image)
         }
       }
-      
+
       console.log('Final session.user.image:', session.user.image)
       return session
     },
     async redirect({ url, baseUrl }) {
       console.log('Redirect callback:', { url, baseUrl })
-      
+
       // If user needs setup, redirect to account setup page
       if (url.includes("/account-setup")) {
         // If url is already absolute, return as is
@@ -226,10 +226,10 @@ export const authOptions: NextAuthOptions = {
         // If url is relative, prepend baseUrl
         return `${baseUrl}${url}`
       }
-      
+
       // Allows relative callback URLs
       if (url.startsWith("/")) return `${baseUrl}${url}`
-      
+
       // Allows callback URLs on the same origin
       if (url.startsWith("http")) {
         try {
@@ -239,7 +239,7 @@ export const authOptions: NextAuthOptions = {
           console.error("Invalid URL in redirect:", error)
         }
       }
-      
+
       return baseUrl
     }
   },
@@ -255,7 +255,7 @@ declare module "next-auth" {
     role: Role | "SETUP_REQUIRED"
     avatar?: string | null
   }
-  
+
   interface Session {
     user: {
       id: string

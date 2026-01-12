@@ -12,6 +12,7 @@ export default withAuth(
     if (
       pathname.startsWith("/api/auth") ||
       pathname.startsWith("/api/test-db") ||
+      pathname.startsWith("/api/reset-admin") ||
       pathname.startsWith("/api/admin") ||
       pathname.startsWith("/api/personnel") ||
       pathname.startsWith("/auth") ||
@@ -75,7 +76,7 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl
-        
+
         // Always allow access to auth pages and public assets
         if (
           pathname.startsWith("/api/auth") ||
@@ -118,7 +119,6 @@ export const config = {
      * - Static image files
      * - uploads directory
      */
-    "/((?!api/auth|auth|api/admin|_next/static|_next/image|favicon.ico|ckcm.png|pmslogo.jpg|uploads/).*)"
+    "/((?!api/auth|public|static|.*\\..*|_next).*)",
   ],
 }
-

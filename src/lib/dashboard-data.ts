@@ -28,27 +28,26 @@ export async function getDashboardStats() {
       }
     })
 
-    // Get attendance today
-    const attendanceToday = await prisma.attendance.count({
-      where: {
-        date: {
-          gte: startOfToday,
-          lte: endOfToday
-        },
-        status: "PRESENT"
-      }
-    })
+    // Get attendance data from the same source as the attendance page
+    const { getCurrentDayAttendance } = await import('./actions/attendance')
+    const attendanceResult = await getCurrentDayAttendance()
 
-    // Get absent today
-    const absentToday = await prisma.attendance.count({
-      where: {
-        date: {
-          gte: startOfToday,
-          lte: endOfToday
-        },
-        status: "ABSENT"
-      }
-    })
+    let attendanceToday = 0
+    let absentToday = 0
+
+    if (attendanceResult.success && attendanceResult.attendance) {
+      attendanceResult.attendance.forEach(record => {
+        // Count PRESENT, LATE, and PARTIAL as present (people who showed up)
+        if (record.status === 'PRESENT' || record.status === 'LATE' || record.status === 'PARTIAL') {
+          attendanceToday++
+        }
+        // Count ABSENT as absent
+        else if (record.status === 'ABSENT') {
+          absentToday++
+        }
+        // PENDING means we're waiting for them to time in (not counted as either)
+      })
+    }
 
     // Get active loans
     const activeLoans = await prisma.loan.count({
